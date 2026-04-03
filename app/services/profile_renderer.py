@@ -1,12 +1,9 @@
 """
-Profile Renderer — REVISED
-═══════════════════════════
-Changes:
-  - Removed hardcoded "PGCDF", "FinTech Professional", "Cohort 2026"
-  - Headline derived from actual enrolled courses
-  - Program derived from batch or first course
-  - Cohort derived from batch start date
-  - Passes student_data to template for course/quiz rendering
+Profile Renderer v4
+═══════════════════
+Passes ALL v4 data to the template: achievements, role matches,
+ATS score, education, work experience, GitHub profile.
+Template variables match the new profile_template.html exactly.
 """
 
 import os
@@ -25,7 +22,6 @@ _env = Environment(
 
 
 class ProfileRenderer:
-    """Renders student profile data into recruiter-ready HTML."""
 
     def render(
         self,
@@ -35,69 +31,78 @@ class ProfileRenderer:
         visibility: str = "public",
     ) -> str:
         personal = student_data.get("personal", {})
-        computed = student_data.get("computed", {})
-        courses = student_data.get("courses", [])
-        batch = student_data.get("batch_info", {})
-
-        # ── FIXED: Derive headline from REAL courses ──
-        course_names = [c.get("course_name", "") for c in courses if c.get("course_name")]
-        if course_names:
-            headline = " | ".join(course_names[:2]) + " Learner"
-        else:
-            headline = "Upskillize Learner"
-
-        # ── FIXED: Derive program from batch or actual course ──
-        if batch.get("batch_name"):
-            program_name = batch["batch_name"]
-        elif course_names:
-            program_name = course_names[0]
-        else:
-            program_name = "Upskillize Program"
-
-        # ── FIXED: Derive cohort from batch date ──
-        cohort = ""
-        if batch.get("start_date"):
-            cohort = str(batch["start_date"])[:4]
+        agent_base = os.environ.get("BASE_URL", "https://upskill25-ai-enhancer.hf.space")
 
         context = {
-            # Student info — all from real data
+            # Student info
             "student_name": (personal.get("full_name") or "Student").strip(),
             "student_email": personal.get("email", ""),
             "student_photo_url": personal.get("photo_url", ""),
-            "student_headline": headline,
-            "student_linkedin": personal.get("linkedin_url", ""),
-            "student_city": personal.get("city", ""),
-            "student_state": personal.get("state", ""),
-            "program_name": program_name,
-            "cohort": cohort,
+            "linkedin_url": personal.get("linkedin_url", ""),
+            "github_url": personal.get("github_url", ""),
+            "portfolio_url": personal.get("portfolio_url", ""),
 
-            # AI sections
-            "summary": profile_data.get("professional_summary", ""),
-            "skills": profile_data.get("skills_data", {}),
-            "performance": profile_data.get("performance_data", {}),
-            "journey": profile_data.get("journey_data", {}),
-            "personality": profile_data.get("personality_data", {}),
-            "case_studies": profile_data.get("case_studies_data", []),
-            "testgen": profile_data.get("testgen_data", {}),
-            "projects": profile_data.get("projects_data", []),
-            "certifications": profile_data.get("certifications_data", []),
+            # v4: Headline from role matcher (not course names)
+            "headline": profile_data.get("headline", "Financial Services Professional"),
+
+            # v4: Professional summary (AI-generated or template)
+            "professional_summary": profile_data.get("professional_summary", ""),
+
+            # v4: Skills (merged from LMS + resume + GitHub)
+            "skills_data": profile_data.get("skills_data", {}),
+
+            # v4: Performance metrics
+            "performance_data": profile_data.get("performance_data", {}),
+
+            # v4: Top achievements (reframed from real data)
+            "top_achievements": profile_data.get("top_achievements", []),
+
+            # v4: Case study highlights (reframed professionally)
+            "case_study_highlights": profile_data.get("case_study_highlights", []),
+
+            # v4: Test highlights (reframed professionally)
+            "test_highlights": profile_data.get("test_highlights", []),
+
+            # v4: Role matches (eligible job roles)
+            "role_matches": profile_data.get("role_matches", []),
+
+            # v4: ATS score data
+            "ats_data": profile_data.get("ats_data", {}),
             "ats_keywords": profile_data.get("ats_keywords", []),
 
-            # Quick metrics
-            "overall_score": computed.get("overall_score", 0),
-            "best_test": computed.get("best_test_score", 0),
-            "case_avg": computed.get("avg_case_study_score", 0),
-            "improvement": computed.get("improvement_pct", 0),
-            "total_hours": computed.get("total_hours", 0),
-            "consistency": computed.get("consistency_score", 85),
+            # v4: Personality from psychometric
+            "personality_data": profile_data.get("personality_data", {}),
 
-            # Raw student data for template (courses, quizzes etc.)
-            "student_data": student_data,
+            # v4: Statements (growth, consistency, engagement)
+            "growth_statement": profile_data.get("growth_statement", ""),
+            "consistency_statement": profile_data.get("consistency_statement", ""),
+            "engagement_statement": profile_data.get("engagement_statement", ""),
+
+            # v4: Education (from resume)
+            "education_data": profile_data.get("education_data", []),
+
+            # v4: Work experience (from resume)
+            "work_experience": profile_data.get("work_experience", []),
+
+            # v4: Projects (merged LMS + resume + GitHub)
+            "projects_data": profile_data.get("projects_data", []),
+
+            # v4: GitHub profile
+            "github_profile": profile_data.get("github_profile", {}),
+
+            # v4: Certifications (merged)
+            "certifications_data": profile_data.get("certifications_data", []),
+
+            # Courses (for the courses section if kept)
+            "courses": student_data.get("courses", []),
+
+            # Data sources used
+            "data_sources": profile_data.get("data_sources", ["lms"]),
 
             # Meta
             "slug": slug,
             "visibility": visibility,
-            "profile_url": f"https://upskillize.com/profile/{slug}",
+            "profile_url": f"{agent_base}/api/v1/profile/public/{slug}",
         }
 
         template = _env.get_template("profile_template.html")

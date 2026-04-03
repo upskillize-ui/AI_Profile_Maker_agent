@@ -83,7 +83,7 @@ async def generate_profile(
         }
 
     if not existing:
-        existing = StudentProfile(student_id=student_id, status=ProfileStatus.GENERATING)
+        existing = StudentProfile(student_id=student_id, status=ProfileStatus.GENERATING, visibility=VisibilityMode.PUBLIC)
         db.add(existing)
         db.flush()
     else:
@@ -108,7 +108,7 @@ async def generate_profile(
             student_data=student_data,
             profile_data=profile_data,
             slug=slug,
-            visibility=existing.visibility.value if existing.visibility else "private",
+            visibility=existing.visibility.value if existing.visibility else "public",
         )
 
         # ── FIXED: Derive headline and program from REAL data ──
@@ -117,22 +117,22 @@ async def generate_profile(
         existing.student_email = personal.get("email", "")
         photo = personal.get("photo_url", "") or ""
         existing.student_photo_url = photo[:255] if len(photo) > 255 else photo
-        existing.student_headline = _derive_headline(student_data)
+        existing.student_headline = profile_data.get("headline", "Financial Services Professional")
         existing.program_name = _derive_program(student_data)
-        existing.professional_summary = profile_data["professional_summary"]
-        existing.skills_data = profile_data["skills_data"]
-        existing.performance_data = profile_data["performance_data"]
-        existing.journey_data = profile_data["journey_data"]
-        existing.personality_data = profile_data["personality_data"]
-        existing.case_studies_data = profile_data["case_studies_data"]
-        existing.testgen_data = profile_data["testgen_data"]
-        existing.projects_data = profile_data["projects_data"]
-        existing.certifications_data = profile_data["certifications_data"]
-        existing.ats_keywords = profile_data["ats_keywords"]
+        existing.professional_summary = profile_data.get("professional_summary", "")
+        existing.skills_data = profile_data.get("skills_data", {})
+        existing.performance_data = profile_data.get("performance_data", {})
+        existing.journey_data = profile_data.get("journey_data", {})
+        existing.personality_data = profile_data.get("personality_data", {})
+        existing.case_studies_data = profile_data.get("case_studies_data", [])
+        existing.testgen_data = profile_data.get("testgen_data", {})
+        existing.projects_data = profile_data.get("projects_data", [])
+        existing.certifications_data = profile_data.get("certifications_data", [])
+        existing.ats_keywords = profile_data.get("ats_keywords", [])
         existing.rendered_html = html
         existing.status = ProfileStatus.COMPLETED
         existing.generation_time_seconds = round(time.time() - start, 2)
-        existing.ai_model_used = settings.AI_MODEL
+        existing.ai_model_used = profile_data.get("ai_model_used", "rule-based-v4")
 
         db.commit()
         db.refresh(existing)
