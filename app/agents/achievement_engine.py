@@ -47,13 +47,13 @@ def _hash_pick(name: str, items: list, offset: int = 0) -> str:
 class AchievementEngine:
     """Transforms raw student data into professional-grade achievements."""
 
-    def generate_all(self, student_data: Dict[str, Any]) -> Dict[str, Any]:
+    def generate_all(self, student_data: Dict[str, Any], role_matches: list = None) -> Dict[str, Any]:
         """Generate all achievement sections from real student data."""
         name = (student_data.get("personal", {}).get("full_name") or "Student").strip()
         computed = student_data.get("computed", {})
 
         return {
-            "headline": self._generate_headline(student_data),
+            "headline": self._generate_headline(student_data, role_matches),
             "top_achievements": self._top_achievements(student_data, name),
             "case_study_highlights": self._reframe_case_studies(student_data, name),
             "test_highlights": self._reframe_test_scores(student_data, name),
@@ -67,28 +67,63 @@ class AchievementEngine:
 
     # ─── Dynamic Headline ────────────────────────────────
 
-    def _generate_headline(self, d: Dict) -> str:
-        """Generate headline from actual enrolled courses — never hardcoded."""
+    def _generate_headline(self, d: Dict, role_matches: list = None) -> str:
+        """Generate headline from ELIGIBLE JOB ROLES — not course names.
+        
+        Shows what the student CAN BECOME, not what they're studying.
+        Looks like a LinkedIn headline, not an LMS report.
+        """
+        # If we have role matches, use top 2-3 role titles as headline
+        if role_matches and len(role_matches) > 0:
+            top_roles = [r["role_title"] for r in role_matches[:3]]
+            return " | ".join(top_roles)
+
+        # Fallback: derive eligible roles from course keywords
         courses = d.get("courses", [])
-        computed = d.get("computed", {})
         course_names = [c.get("course_name", "") for c in courses if c.get("course_name")]
 
         if not course_names:
-            return "Upskillize Learner"
+            return "Finance & Banking Professional"
 
-        # Derive domain
-        domain = self._derive_domain(course_names)
-        score = computed.get("overall_score", 0)
-        completed = computed.get("completed_courses", 0)
+        text = " ".join(course_names).lower()
 
-        if score >= 75 and completed >= 2:
-            return f"High-Performing {domain} Professional"
-        elif score >= 50:
-            return f"Emerging {domain} Professional"
-        elif completed >= 1:
-            return f"{domain} Graduate | Upskillize Certified"
-        else:
-            return f"Aspiring {domain} Professional"
+        # Map courses to professional role titles (not course names!)
+        roles = []
+        if "payment" in text or "card" in text or "upi" in text:
+            roles.extend(["Digital Payments Specialist", "Payment Operations Analyst"])
+        if "banking" in text or "bank" in text:
+            roles.extend(["Banking Operations Executive", "Branch Operations Analyst"])
+        if "credit" in text or "lending" in text:
+            roles.extend(["Credit Analyst", "Lending Operations Associate"])
+        if "risk" in text or "compliance" in text:
+            roles.extend(["Risk & Compliance Analyst", "Compliance Associate"])
+        if "fintech" in text:
+            roles.extend(["FinTech Product Analyst", "Digital Banking Associate"])
+        if "insurance" in text:
+            roles.extend(["Insurance Analyst", "Underwriting Associate"])
+        if "data" in text or "analytics" in text:
+            roles.extend(["Data Analyst", "Business Intelligence Analyst"])
+        if "investment" in text or "wealth" in text:
+            roles.extend(["Investment Analyst", "Wealth Management Associate"])
+        if "finance" in text:
+            roles.extend(["Financial Analyst", "Finance Executive"])
+        if "python" in text or "sql" in text:
+            roles.extend(["Data Analyst", "Technology Analyst"])
+
+        if not roles:
+            roles = ["Banking Professional", "Financial Services Analyst"]
+
+        # Pick top 2-3 unique roles
+        seen = set()
+        unique_roles = []
+        for r in roles:
+            if r not in seen:
+                seen.add(r)
+                unique_roles.append(r)
+            if len(unique_roles) >= 3:
+                break
+
+        return " | ".join(unique_roles)
 
     # ─── Top Achievements (best 3-5 across all categories) ───
 
@@ -122,7 +157,7 @@ class AchievementEngine:
             pct = float(best_test.get("percentage", 0) or 0)
             subject = best_test.get("subject", "Assessment")
             course = best_test.get("course_name", "")
-            context = f" in {course}" if course else ""
+            context = ""
 
             achievements.append({
                 "type": "test",
@@ -139,7 +174,7 @@ class AchievementEngine:
             achievements.append({
                 "type": "course_completion",
                 "score": len(completed_courses) * 25,
-                "statement": f"Successfully completed {len(completed_courses)} professional course{'s' if len(completed_courses) > 1 else ''} on Upskillize",
+                "statement": f"Successfully completed {len(completed_courses)} professional training course{'s' if len(completed_courses) > 1 else ''}",
                 "metric": str(len(completed_courses)),
                 "label": "Courses completed",
             })
@@ -212,8 +247,8 @@ class AchievementEngine:
             verb = _hash_pick(name, ACHIEVEMENT_VERBS, i + 10)
 
             parts = [f"{verb} '{title}'"]
-            if course:
-                parts.append(f"as part of {course}")
+            if False:  # Do not add course name to description
+                pass  # Do not mention course name
             if concepts and isinstance(concepts, list) and len(concepts) > 0:
                 parts.append(f"covering {', '.join(concepts[:3])}")
 
@@ -230,7 +265,7 @@ class AchievementEngine:
 
             highlights.append({
                 "title": title,
-                "course": course,
+                "course": "",  # Hidden from profile
                 "score_pct": pct,
                 "description": description,
                 "concepts": concepts[:5] if isinstance(concepts, list) else [],
@@ -260,7 +295,7 @@ class AchievementEngine:
             verb = _hash_pick(name, PERFORMANCE_VERBS, i + 20)
 
             desc = f"{verb} {subject}"
-            if course:
+            if False:  # Do not add course name to description
                 desc += f" ({course})"
             desc += f" with {pct}% score"
             if grade:
@@ -273,7 +308,7 @@ class AchievementEngine:
                 "score_pct": pct,
                 "description": desc,
                 "grade": grade,
-                "course": course,
+                "course": "",  # Hidden from profile
             })
 
         return highlights
@@ -305,7 +340,7 @@ class AchievementEngine:
             verb = _hash_pick(name, LEARNING_VERBS, i + 30)
 
             desc = f"{verb} '{title}'"
-            if course:
+            if False:  # Do not add course name to description
                 desc += f" in {course}"
             if pct > 0:
                 desc += f" — scored {pct}%"
@@ -316,7 +351,7 @@ class AchievementEngine:
                 "title": title,
                 "score_pct": pct,
                 "description": desc,
-                "course": course,
+                "course": "",  # Hidden from profile
             })
 
         return highlights

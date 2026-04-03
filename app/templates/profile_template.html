@@ -1,732 +1,248 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ student_name }} — Upskillize Profile</title>
-    <meta name="description" content="{{ summary[:160] }}">
-    <meta property="og:title" content="{{ student_name }} — FinTech Professional | Upskillize">
-    <meta property="og:description" content="{{ summary[:200] }}">
-    <meta property="og:url" content="{{ profile_url }}">
-    <meta property="og:type" content="profile">
-    <meta name="keywords" content="{{ ats_keywords | join(', ') }}">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ student_name or 'Student' }} — Professional Profile</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#FAFAF8;--w:#FFF;--t:#1a1a1a;--m:#6b7280;--lt:#f3f4f6;--a:#1E3A5F;--a2:#2563EB;--al:#EFF6FF;--g:#059669;--gl:#ECFDF5;--gb:#D1FAE5;--am:#D97706;--aml:#FFFBEB;--p:#7C3AED;--pl:#F5F3FF;--tl:#0D9488;--tlb:#F0FDFA;--b:#E5E7EB;--sh:0 1px 3px rgba(0,0,0,.06);--shl:0 10px 25px rgba(0,0,0,.06);--r:12px}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-height:1.6;-webkit-font-smoothing:antialiased}
+.c{max-width:900px;margin:0 auto;padding:24px 20px}
+.hero{background:var(--w);border:1px solid var(--b);border-radius:16px;padding:40px;margin-bottom:20px;box-shadow:var(--shl);position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--a),var(--a2),var(--tl))}
+.hg{display:grid;grid-template-columns:80px 1fr auto;gap:24px;align-items:center}
+.av{width:80px;height:80px;border-radius:50%;background:var(--a);color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;font-family:'DM Serif Display',serif}
+.av img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.hi h1{font-family:'DM Serif Display',serif;font-size:28px;letter-spacing:-.5px;margin-bottom:6px}
+.hi .hl{font-size:14px;color:var(--a2);font-weight:500;margin-bottom:8px}
+.hi .loc{font-size:13px;color:var(--m)}
+.hl2{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hl2 a{font-size:12px;color:var(--a2);text-decoration:none;padding:4px 12px;border:1px solid var(--a2);border-radius:20px;transition:all .2s}
+.hl2 a:hover{background:var(--a2);color:#fff}
+.ab{text-align:center;min-width:90px}
+.ab .sc{font-family:'DM Serif Display',serif;font-size:36px}
+.ab .lb{font-size:11px;color:var(--m);text-transform:uppercase;letter-spacing:1px;font-weight:600}
+.ms{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px}
+.mc{background:var(--w);border:1px solid var(--b);border-radius:var(--r);padding:16px 12px;text-align:center;box-shadow:var(--sh)}
+.mc .v{font-family:'DM Serif Display',serif;font-size:24px;color:var(--a)}
+.mc .l{font-size:11px;color:var(--m);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;font-weight:500}
+.mc.hl .v{color:var(--g)}
+.s{background:var(--w);border:1px solid var(--b);border-radius:var(--r);padding:28px;margin-bottom:20px;box-shadow:var(--sh)}
+.st{font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.st .ic{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.stx{font-size:15px;line-height:1.8;color:#374151}
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+.ach{display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--lt)}.ach:last-child{border-bottom:none;padding-bottom:0}.ach:first-child{padding-top:0}
+.abd{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;font-weight:700}
+.abd.g{background:linear-gradient(135deg,#FEF3C7,#FDE68A);color:#92400E}
+.abd.si{background:linear-gradient(135deg,#F3F4F6,#E5E7EB);color:#374151}
+.abd.br{background:linear-gradient(135deg,#FED7AA,#FDBA74);color:#9A3412}
+.ach .tt{font-size:14px;font-weight:600;margin-bottom:2px}.ach .ds{font-size:13px;color:var(--m);line-height:1.5}
+.ach .tg{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;background:var(--al);color:var(--a2);font-weight:500;margin-top:4px}
 
-    <style>
-        :root {
-            --bg-deep: #060912;
-            --bg-primary: #0B1120;
-            --bg-card: #111B2E;
-            --bg-elevated: #162038;
-            --bg-glass: rgba(17,27,46,0.7);
-            --border-subtle: rgba(255,255,255,0.04);
-            --border-glow: rgba(56,189,248,0.2);
-            --border-hover: rgba(56,189,248,0.4);
+.rc{border:1px solid var(--b);border-radius:10px;padding:16px;margin-bottom:12px}
+.rh{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.rt{font-size:15px;font-weight:600}
+.rcat{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
+.rcat.banking{background:#DBEAFE;color:#1E40AF}.rcat.fintech{background:#E0E7FF;color:#3730A3}.rcat.risk{background:#FEF3C7;color:#92400E}.rcat.technology{background:#D1FAE5;color:#065F46}.rcat.insurance{background:#FCE7F3;color:#9D174D}
+.mmb{height:8px;background:var(--lt);border-radius:4px;overflow:hidden;margin-bottom:8px}
+.mmb .f{height:100%;border-radius:4px}
+.mp{font-family:'DM Serif Display',serif;font-size:22px}
+.mk{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.mk span{font-size:11px;padding:2px 8px;border-radius:4px;background:var(--gl);color:var(--g);font-weight:500}
+.mk.mi span{background:var(--aml);color:var(--am)}
+.rr{font-size:12px;color:var(--m);margin-top:8px;font-style:italic}
 
-            --text-primary: #EFF6FF;
-            --text-secondary: #93A8C8;
-            --text-muted: #5A7194;
-            --text-dim: #3D5478;
+.si2{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.si2 .nm{font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb{height:6px;background:var(--lt);border-radius:3px;flex:1;max-width:120px;overflow:hidden}
+.sb .f{height:100%;border-radius:3px}
+.si2 .pc{font-size:12px;font-weight:600;min-width:36px;text-align:right}
+.sct{font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:600;color:var(--m);margin-bottom:10px;margin-top:16px}.sct:first-child{margin-top:0}
 
-            --cyan: #38BDF8;
-            --blue: #6C9FFF;
-            --emerald: #34D399;
-            --amber: #F59E0B;
-            --rose: #F472B6;
-            --violet: #A78BFA;
-            --red-alert: #EF4444;
+.cc{padding:16px;border:1px solid var(--b);border-radius:10px;margin-bottom:12px}
+.ch{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.ct2{font-size:14px;font-weight:600}
+.cs2{font-family:'DM Serif Display',serif;font-size:20px;color:var(--g)}
+.cd{font-size:13px;color:var(--m);line-height:1.6}
+.ccp{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.ccp span{font-size:11px;padding:2px 8px;border-radius:4px;background:var(--pl);color:var(--p);font-weight:500}
 
-            --glow-cyan: 0 0 30px rgba(56,189,248,0.15);
-            --glow-emerald: 0 0 30px rgba(52,211,153,0.12);
+.pg2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.tc{padding:16px;background:var(--lt);border-radius:10px}
+.tc .tl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--m);font-weight:600;margin-bottom:4px}
+.tc .tv{font-size:14px;font-weight:500}
 
-            --grad-hero: linear-gradient(135deg, #38BDF8 0%, #6C9FFF 50%, #A78BFA 100%);
-            --grad-warm: linear-gradient(135deg, #F59E0B, #F472B6);
-            --grad-cool: linear-gradient(135deg, #A78BFA, #6C9FFF);
-            --grad-nature: linear-gradient(135deg, #34D399, #38BDF8);
+.ti{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--lt);font-size:13px;color:#374151}
+.ti:last-child{border-bottom:none}
+.tic{width:24px;height:24px;border-radius:6px;background:var(--al);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;color:var(--a2)}
 
-            --r-sm: 8px; --r-md: 14px; --r-lg: 20px; --r-xl: 28px;
-            --font: 'Outfit', sans-serif;
-            --mono: 'Fira Code', monospace;
-        }
+.nd{background:linear-gradient(135deg,var(--al),#F0F9FF);border:1px solid #BFDBFE;border-radius:var(--r);padding:20px;margin-bottom:20px}
+.nd h3{font-size:15px;font-weight:600;color:var(--a);margin-bottom:8px}
+.nd p{font-size:13px;color:#374151;line-height:1.6}
+.na{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.na span{font-size:12px;padding:6px 14px;background:var(--w);border:1px solid var(--b);border-radius:8px;font-weight:500}
 
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+.tc2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.ft{text-align:center;padding:32px 0;color:var(--m);font-size:12px}
+.ft a{color:var(--a2);text-decoration:none}
+.ft .br2{font-family:'DM Serif Display',serif;font-size:16px;color:var(--a);margin-bottom:4px}
 
-        html { scroll-behavior: smooth; }
-
-        body {
-            font-family: var(--font);
-            background: var(--bg-deep);
-            color: var(--text-primary);
-            line-height: 1.6;
-            -webkit-font-smoothing: antialiased;
-            overflow-x: hidden;
-        }
-
-        /* ═══ AMBIENT BACKGROUND ═══ */
-        body::before {
-            content: '';
-            position: fixed;
-            top: -30%; left: -10%;
-            width: 600px; height: 600px;
-            background: radial-gradient(circle, rgba(56,189,248,0.04) 0%, transparent 70%);
-            border-radius: 50%;
-            pointer-events: none;
-            animation: floatOrb 20s ease-in-out infinite;
-        }
-        body::after {
-            content: '';
-            position: fixed;
-            bottom: -20%; right: -10%;
-            width: 500px; height: 500px;
-            background: radial-gradient(circle, rgba(167,139,250,0.03) 0%, transparent 70%);
-            border-radius: 50%;
-            pointer-events: none;
-            animation: floatOrb 25s ease-in-out infinite reverse;
-        }
-        @keyframes floatOrb {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33% { transform: translate(40px, -30px) scale(1.05); }
-            66% { transform: translate(-20px, 20px) scale(0.95); }
-        }
-
-        /* ═══ NOISE OVERLAY ═══ */
-        .noise {
-            position: fixed; inset: 0;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02'/%3E%3C/svg%3E");
-            pointer-events: none;
-            z-index: 9999;
-            opacity: 0.5;
-        }
-
-        /* ═══ CONTAINER ═══ */
-        .page { max-width: 880px; margin: 0 auto; padding: 32px 20px 100px; position: relative; z-index: 1; }
-
-        /* ═══ HERO ═══ */
-        .hero {
-            position: relative;
-            padding: 44px 40px 36px;
-            border-radius: var(--r-xl);
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
-            overflow: hidden;
-            margin-bottom: 20px;
-            animation: slideUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-        }
-        .hero-glow {
-            position: absolute; top: 0; left: 0; right: 0; height: 3px;
-            background: var(--grad-hero);
-            box-shadow: 0 0 20px rgba(56,189,248,0.3), 0 0 60px rgba(108,159,255,0.15);
-        }
-        .hero-mesh {
-            position: absolute; top: -100px; right: -60px;
-            width: 300px; height: 300px;
-            background: radial-gradient(circle at 30% 40%, rgba(56,189,248,0.06), transparent 60%),
-                        radial-gradient(circle at 70% 60%, rgba(167,139,250,0.04), transparent 60%);
-            border-radius: 50%;
-            filter: blur(40px);
-        }
-
-        .hero-row { display: flex; align-items: flex-start; gap: 24px; position: relative; z-index: 1; }
-
-        .avatar {
-            width: 82px; height: 82px; border-radius: 50%; flex-shrink: 0;
-            background: var(--grad-hero);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 30px; font-weight: 800; color: var(--bg-deep);
-            box-shadow: 0 0 0 3px var(--bg-card), 0 0 0 5px rgba(56,189,248,0.2), var(--glow-cyan);
-            animation: pulseGlow 3s ease-in-out infinite;
-        }
-        .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
-        @keyframes pulseGlow {
-            0%, 100% { box-shadow: 0 0 0 3px var(--bg-card), 0 0 0 5px rgba(56,189,248,0.2), 0 0 20px rgba(56,189,248,0.1); }
-            50% { box-shadow: 0 0 0 3px var(--bg-card), 0 0 0 6px rgba(56,189,248,0.3), 0 0 35px rgba(56,189,248,0.15); }
-        }
-
-        .hero-info h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; }
-        .hero-sub { color: var(--cyan); font-size: 14px; font-weight: 500; margin-top: 4px; }
-        .hero-prog { color: var(--text-muted); font-size: 12.5px; margin-top: 3px; }
-        .hero-prog b { color: var(--amber); font-weight: 600; }
-        .hero-tags { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
-        .hero-tag {
-            font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 4px;
-            padding: 3px 0;
-        }
-        .hero-tag a { color: var(--cyan); text-decoration: none; }
-
-        /* ═══ STATS STRIP ═══ */
-        .stats {
-            display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px;
-            margin-top: 28px; padding-top: 24px;
-            border-top: 1px solid var(--border-subtle);
-            position: relative; z-index: 1;
-        }
-        .st {
-            text-align: center; padding: 14px 4px; border-radius: var(--r-md);
-            background: var(--bg-elevated); border: 1px solid var(--border-subtle);
-            transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
-            cursor: default;
-        }
-        .st:hover { transform: translateY(-3px); border-color: var(--border-glow); box-shadow: var(--glow-cyan); }
-        .st-v {
-            font-family: var(--mono); font-size: 22px; font-weight: 700;
-            background: var(--grad-hero); -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        .st-l { font-size: 9.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; }
-
-        /* ═══ SECTIONS ═══ */
-        .s {
-            background: var(--bg-card); border: 1px solid var(--border-subtle);
-            border-radius: var(--r-lg); padding: 28px 32px; margin-bottom: 16px;
-            opacity: 0; transform: translateY(24px);
-            transition: opacity 0.6s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-            position: relative; overflow: hidden;
-        }
-        .s.visible { opacity: 1; transform: translateY(0); }
-        .s::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(56,189,248,0.1), transparent);
-        }
-
-        .sh { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-        .si {
-            width: 34px; height: 34px; border-radius: var(--r-sm);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 15px; flex-shrink: 0;
-        }
-        .st-title { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
-
-        /* ═══ SUMMARY ═══ */
-        .summary { font-size: 14.5px; line-height: 1.8; color: var(--text-secondary); }
-
-        /* ═══ SKILLS ═══ */
-        .sk-cat { margin-bottom: 20px; }
-        .sk-cat:last-child { margin-bottom: 0; }
-        .sk-label {
-            font-size: 10px; font-weight: 700; text-transform: uppercase;
-            letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 10px;
-        }
-        .sk {
-            display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
-            padding: 6px 0;
-        }
-        .sk-name { font-size: 12.5px; font-weight: 500; min-width: 170px; flex-shrink: 0; }
-        .sk-track { flex: 1; height: 6px; background: rgba(255,255,255,0.04); border-radius: 3px; overflow: hidden; }
-        .sk-fill {
-            height: 100%; border-radius: 3px; width: 0;
-            transition: width 1.4s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .sk-fill.t1 { background: var(--grad-hero); }
-        .sk-fill.t2 { background: var(--grad-cool); }
-        .sk-fill.t3 { background: var(--grad-warm); }
-        .sk-fill.t4 { background: var(--grad-nature); }
-        .sk-pct { font-family: var(--mono); font-size: 11px; color: var(--text-dim); min-width: 32px; text-align: right; }
-
-        /* ═══ CASE STUDY CARDS ═══ */
-        .cs {
-            padding: 18px 20px; border-radius: var(--r-md);
-            background: var(--bg-elevated); border: 1px solid var(--border-subtle);
-            margin-bottom: 10px; transition: border-color 0.25s, box-shadow 0.25s;
-        }
-        .cs:hover { border-color: var(--border-glow); box-shadow: var(--glow-cyan); }
-        .cs-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
-        .cs-title { font-size: 13.5px; font-weight: 600; }
-        .cs-score { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--emerald); }
-        .cs-fb { font-size: 12px; color: var(--text-dim); font-style: italic; margin-top: 6px; }
-        .cs-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
-        .cs-tag {
-            font-size: 10px; padding: 2px 9px; border-radius: 20px;
-            background: rgba(56,189,248,0.08); color: var(--cyan);
-            border: 1px solid rgba(56,189,248,0.12);
-        }
-
-        /* ═══ TESTGEN GRID ═══ */
-        .tg { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-        .tg-card {
-            padding: 14px 16px; border-radius: var(--r-md);
-            background: var(--bg-elevated); border: 1px solid var(--border-subtle);
-            transition: border-color 0.25s;
-        }
-        .tg-card:hover { border-color: var(--border-glow); }
-        .tg-subj { font-size: 12.5px; font-weight: 500; margin-bottom: 8px; }
-        .tg-bar { height: 5px; background: rgba(255,255,255,0.04); border-radius: 3px; overflow: hidden; margin-bottom: 5px; }
-        .tg-fill { height: 100%; border-radius: 3px; background: var(--grad-hero); transition: width 1s ease; }
-        .tg-val { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
-
-        /* ═══ PERSONALITY ═══ */
-        .p-badge {
-            display: inline-flex; align-items: center; gap: 8px;
-            padding: 8px 18px; border-radius: var(--r-xl);
-            background: rgba(167,139,250,0.08); border: 1px solid rgba(167,139,250,0.15);
-            color: var(--violet); font-weight: 600; font-size: 14px; margin-bottom: 14px;
-        }
-        .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .p-item {
-            padding: 14px 16px; border-radius: var(--r-md);
-            background: var(--bg-elevated); border: 1px solid var(--border-subtle);
-        }
-        .p-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 5px; }
-        .p-val { font-size: 13px; font-weight: 500; }
-
-        /* ═══ JOURNEY ═══ */
-        .j-row { display: flex; gap: 28px; flex-wrap: wrap; }
-        .j-stat { display: flex; align-items: baseline; gap: 5px; }
-        .j-v { font-family: var(--mono); font-size: 24px; font-weight: 700; color: var(--cyan); }
-        .j-u { font-size: 11px; color: var(--text-dim); }
-
-        /* ═══ INACTIVITY ALERT ═══ */
-        .inactivity {
-            background: linear-gradient(135deg, rgba(239,68,68,0.06), rgba(239,68,68,0.02));
-            border: 1px solid rgba(239,68,68,0.15);
-            border-radius: var(--r-lg); padding: 24px 28px; margin-bottom: 16px;
-            opacity: 0; transform: translateY(24px);
-            transition: opacity 0.6s, transform 0.6s;
-        }
-        .inactivity.visible { opacity: 1; transform: translateY(0); }
-        .inactivity .sh .si { background: rgba(239,68,68,0.1); }
-        .inactivity-bar-wrap {
-            height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px;
-            overflow: hidden; margin: 14px 0 10px;
-        }
-        .inactivity-bar {
-            height: 100%; border-radius: 4px;
-            background: linear-gradient(90deg, var(--emerald), var(--amber), var(--red-alert));
-            transition: width 1.5s ease;
-        }
-        .inactivity-labels {
-            display: flex; justify-content: space-between;
-            font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;
-        }
-        .inactivity-msg { font-size: 13px; color: var(--text-muted); margin-top: 12px; line-height: 1.6; }
-        .inactivity-stat {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 500;
-            margin-right: 8px; margin-top: 8px;
-        }
-        .inactivity-stat.warn { background: rgba(245,158,11,0.1); color: var(--amber); }
-        .inactivity-stat.danger { background: rgba(239,68,68,0.1); color: var(--red-alert); }
-        .inactivity-stat.ok { background: rgba(52,211,153,0.1); color: var(--emerald); }
-
-        /* ═══ CERTS ═══ */
-        .cert {
-            display: flex; align-items: center; gap: 14px;
-            padding: 12px 16px; border-radius: var(--r-md);
-            background: var(--bg-elevated); border: 1px solid var(--border-subtle);
-            margin-bottom: 8px;
-        }
-        .cert-ico {
-            width: 38px; height: 38px; border-radius: var(--r-sm);
-            background: rgba(245,158,11,0.08); display: flex; align-items: center;
-            justify-content: center; font-size: 16px; flex-shrink: 0;
-        }
-        .cert-n { font-size: 13px; font-weight: 500; }
-        .cert-d { font-size: 11px; color: var(--text-dim); }
-
-        /* ═══ PROJECTS ═══ */
-        .proj {
-            padding: 18px 20px; border-radius: var(--r-md);
-            background: var(--bg-elevated); border: 1px solid var(--border-subtle);
-            margin-bottom: 10px;
-        }
-        .proj-t { font-size: 13.5px; font-weight: 600; margin-bottom: 5px; }
-        .proj-d { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; }
-
-        /* ═══ FOOTER ═══ */
-        .foot {
-            text-align: center; padding: 40px 20px 20px; color: var(--text-dim); font-size: 11px;
-        }
-        .foot a { color: var(--cyan); text-decoration: none; }
-        .verified {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 500;
-            background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.15);
-            color: var(--emerald); margin-bottom: 10px;
-        }
-
-        /* ═══ ANIMATIONS ═══ */
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes countUp {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .st { animation: countUp 0.5s ease both; }
-        .st:nth-child(1) { animation-delay: 0.3s; }
-        .st:nth-child(2) { animation-delay: 0.38s; }
-        .st:nth-child(3) { animation-delay: 0.46s; }
-        .st:nth-child(4) { animation-delay: 0.54s; }
-        .st:nth-child(5) { animation-delay: 0.62s; }
-        .st:nth-child(6) { animation-delay: 0.70s; }
-
-        /* ═══ PRINT ═══ */
-        @media print {
-            body { background: #060912 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            .noise { display: none; }
-            .page { padding: 0; }
-            .hero, .s, .inactivity { break-inside: avoid; box-shadow: none; }
-            .sk-fill, .tg-fill, .inactivity-bar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-            :root {
-                --bg-deep: #060912; --bg-primary: #0B1120; --bg-card: #111B2E; --bg-elevated: #162038;
-                --text-primary: #EFF6FF; --text-secondary: #93A8C8; --text-muted: #5A7194; --text-dim: #3D5478;
-                --border-subtle: rgba(255,255,255,0.04);
-            }
-        }
-
-        /* ═══ RESPONSIVE ═══ */
-        @media (max-width: 640px) {
-            .page { padding: 12px 12px 60px; }
-            .hero { padding: 28px 18px 24px; }
-            .hero-row { flex-direction: column; align-items: center; text-align: center; }
-            .hero-info h1 { font-size: 21px; }
-            .hero-tags { justify-content: center; }
-            .stats { grid-template-columns: repeat(3, 1fr); }
-            .s { padding: 22px 18px; }
-            .sk-name { min-width: 120px; font-size: 11.5px; }
-            .p-grid { grid-template-columns: 1fr; }
-            .tg { grid-template-columns: 1fr 1fr; }
-        }
-    </style>
+@media print{body{background:#fff}.s,.hero,.mc{box-shadow:none;border:1px solid #ddd}.hero::before{display:none}}
+@media(max-width:768px){.hg{grid-template-columns:60px 1fr}.ab{position:absolute;top:16px;right:16px}.pg2,.tc2{grid-template-columns:1fr}.ms{grid-template-columns:repeat(3,1fr)}}
+</style>
 </head>
 <body>
+<div class="c">
 
-<div class="noise"></div>
-
-<div class="page">
-
-    <!-- ═══ HERO ═══ -->
-    <div class="hero">
-        <div class="hero-glow"></div>
-        <div class="hero-mesh"></div>
-        <div class="hero-row">
-            <div class="avatar">
-                {% if student_photo_url %}<img src="{{ student_photo_url }}" alt="{{ student_name }}">{% else %}{{ student_name[0] | upper }}{% endif %}
-            </div>
-            <div class="hero-info">
-                <h1>{{ student_name }}</h1>
-                <div class="hero-sub">{{ student_headline or 'FinTech Professional' }}</div>
-                <div class="hero-prog"><b>{{ program_name }}</b> — Upskillize{% if cohort %} | Cohort {{ cohort }}{% endif %}</div>
-                <div class="hero-tags">
-                    {% if student_city %}<span class="hero-tag">📍 {{ student_city }}{% if student_state %}, {{ student_state }}{% endif %}</span>{% endif %}
-                    {% if student_linkedin %}<span class="hero-tag"><a href="{{ student_linkedin }}">🔗 LinkedIn</a></span>{% endif %}
-                    
-                </div>
-            </div>
-        </div>
-
-        <div class="stats">
-            <div class="st"><div class="st-v">{{ overall_score }}%</div><div class="st-l">Overall</div></div>
-            <div class="st"><div class="st-v">{{ best_test }}</div><div class="st-l">Best Test</div></div>
-            <div class="st"><div class="st-v">{{ case_avg }}</div><div class="st-l">Case Avg</div></div>
-            <div class="st"><div class="st-v">+{{ improvement }}%</div><div class="st-l">Growth</div></div>
-            <div class="st"><div class="st-v">{{ total_hours }}h</div><div class="st-l">Hours</div></div>
-            <div class="st"><div class="st-v">{{ consistency }}%</div><div class="st-l">Consistency</div></div>
-        </div>
+<!-- HERO — shows name + eligible job roles, NOT course names -->
+<div class="hero">
+  <div class="hg">
+    <div class="av">{% if student_photo_url %}<img src="{{ student_photo_url }}" alt="">{% else %}{{ (student_name or 'S')[0] | upper }}{% endif %}</div>
+    <div class="hi">
+      <h1>{{ student_name or 'Student' }}</h1>
+      <div class="hl">{{ headline or 'Financial Services Professional' }}</div>
+      {% if student_email %}<div class="loc">{{ student_email }}</div>{% endif %}
+      <div class="hl2">
+        {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank">LinkedIn</a>{% endif %}
+        {% if github_url %}<a href="{{ github_url }}" target="_blank">GitHub</a>{% endif %}
+        {% if portfolio_url %}<a href="{{ portfolio_url }}" target="_blank">Portfolio</a>{% endif %}
+        <a href="{{ profile_url or '#' }}">Share Profile</a>
+      </div>
     </div>
-
-    <!-- ═══ INACTIVITY SECTION ═══ -->
-    {% set days_inactive = 0 %}
-    {% if journey and journey.get('active_days', 0) == 0 %}
-        {% set activity_level = 'danger' %}
-    {% elif overall_score < 20 %}
-        {% set activity_level = 'warn' %}
-    {% else %}
-        {% set activity_level = 'ok' %}
-    {% endif %}
-
-    {% if activity_level != 'ok' %}
-    <div class="inactivity" data-animate>
-        <div class="sh">
-            <div class="si" style="color:var(--red-alert);">⚠</div>
-            <div class="st-title">Activity Status</div>
-        </div>
-        <div class="inactivity-bar-wrap">
-            <div class="inactivity-bar" data-width="{{ [overall_score * 1.2, 100] | min | int }}"></div>
-        </div>
-        <div class="inactivity-labels">
-            <span>Inactive</span>
-            <span>Moderate</span>
-            <span>Highly Active</span>
-        </div>
-        <div class="inactivity-msg">
-            {% if activity_level == 'danger' %}
-                This student has limited platform activity. Encouraging engagement with course content, quizzes, and case studies will significantly improve their professional profile.
-            {% else %}
-                This student has moderate activity. Completing more assessments and case studies will strengthen their profile for recruiters.
-            {% endif %}
-        </div>
-        <div style="margin-top: 6px;">
-            {% if performance %}
-            <span class="inactivity-stat {{ 'ok' if performance.get('total_courses', 0) > 3 else 'warn' if performance.get('total_courses', 0) > 0 else 'danger' }}">
-                📚 {{ performance.get('total_courses', 0) }} courses enrolled
-            </span>
-            <span class="inactivity-stat {{ 'ok' if performance.get('total_quizzes', 0) > 5 else 'warn' if performance.get('total_quizzes', 0) > 0 else 'danger' }}">
-                📝 {{ performance.get('total_quizzes', 0) }} quizzes taken
-            </span>
-            <span class="inactivity-stat {{ 'ok' if performance.get('total_case_studies', 0) > 3 else 'warn' if performance.get('total_case_studies', 0) > 0 else 'danger' }}">
-                📋 {{ performance.get('total_case_studies', 0) }} case studies
-            </span>
-            {% endif %}
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ═══ SUMMARY ═══ -->
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(56,189,248,0.08);color:var(--cyan);">✦</div>
-            <div class="st-title">Professional Summary</div>
-        </div>
-        <p class="summary">{{ summary }}</p>
-    </div>
-
-    <!-- ═══ SKILLS ═══ -->
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(108,159,255,0.08);color:var(--blue);">⚡</div>
-            <div class="st-title">Key Skills & Competencies</div>
-        </div>
-
-        {% if skills.get('technical_skills') %}
-        <div class="sk-cat">
-            <div class="sk-label">Technical Skills</div>
-            {% for skill in skills.technical_skills %}
-            <div class="sk">
-                <span class="sk-name">{{ skill.name }}</span>
-                <div class="sk-track"><div class="sk-fill t1" data-width="{{ skill.score }}"></div></div>
-                <span class="sk-pct">{{ skill.score }}%</span>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-
-        {% if skills.get('tools') %}
-        <div class="sk-cat">
-            <div class="sk-label">Tools & Technologies</div>
-            {% for skill in skills.tools %}
-            <div class="sk">
-                <span class="sk-name">{{ skill.name }}</span>
-                <div class="sk-track"><div class="sk-fill t2" data-width="{{ skill.score }}"></div></div>
-                <span class="sk-pct">{{ skill.score }}%</span>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-
-        {% if skills.get('soft_skills') %}
-        <div class="sk-cat">
-            <div class="sk-label">Soft Skills</div>
-            {% for skill in skills.soft_skills %}
-            <div class="sk">
-                <span class="sk-name">{{ skill.name }}</span>
-                <div class="sk-track"><div class="sk-fill t3" data-width="{{ skill.score }}"></div></div>
-                <span class="sk-pct">{{ skill.score }}%</span>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-
-        {% if skills.get('domain_knowledge') %}
-        <div class="sk-cat">
-            <div class="sk-label">Domain Knowledge</div>
-            {% for skill in skills.domain_knowledge %}
-            <div class="sk">
-                <span class="sk-name">{{ skill.name }}</span>
-                <div class="sk-track"><div class="sk-fill t4" data-width="{{ skill.score }}"></div></div>
-                <span class="sk-pct">{{ skill.score }}%</span>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-    </div>
-
-    
-    <!-- ═══ COURSE ENROLLMENT (NEW) ═══ -->
-    {% if student_data and student_data.get('courses') %}
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(56,189,248,0.08);color:var(--cyan);">📚</div>
-            <div class="st-title">Course Enrollment</div>
-        </div>
-        {% for course in student_data.get('courses', []) %}
-        <div class="cs">
-            <div class="cs-top">
-                <span class="cs-title">{{ course.course_name }}</span>
-                <span class="cs-score">{{ course.progress_percentage or 0 }}%</span>
-            </div>
-            <div class="cs-tags">
-                {% if course.category %}<span class="cs-tag">{{ course.category }}</span>{% endif %}
-                {% if course.difficulty_level %}<span class="cs-tag">{{ course.difficulty_level }}</span>{% endif %}
-                {% if course.total_modules %}<span class="cs-tag">{{ course.total_modules }} modules</span>{% endif %}
-                {% if course.completion_status %}<span class="cs-tag">{{ course.completion_status }}</span>{% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- ═══ QUIZ PERFORMANCE (NEW) ═══ -->
-    {% if student_data and student_data.get('quiz_scores') %}
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(167,139,250,0.08);color:var(--violet);">📝</div>
-            <div class="st-title">Quiz Performance</div>
-        </div>
-        {% for q in student_data.get('quiz_scores', []) %}
-        <div class="cs">
-            <div class="cs-top">
-                <span class="cs-title">{{ q.quiz_title }}{% if q.course_name %} — {{ q.course_name }}{% endif %}</span>
-                <span class="cs-score" style="color: {{ 'var(--emerald)' if q.passed else 'var(--red-alert)' }}">
-                    {% if q.total_marks and q.total_marks > 0 %}{{ ((q.score or 0) / q.total_marks * 100) | round(0) | int }}%{% else %}{{ q.score or 0 }}{% endif %}
-                </span>
-            </div>
-            <div class="cs-tags">
-                <span class="cs-tag">Score: {{ q.score or 0 }}/{{ q.total_marks or '?' }}</span>
-                {% if q.passed is not none %}<span class="cs-tag">{{ 'Passed' if q.passed else 'Not Passed' }}</span>{% endif %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- ═══ CASE STUDIES ═══ -->
-    {% if case_studies %}
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(52,211,153,0.08);color:var(--emerald);">📋</div>
-            <div class="st-title">Top Case Study Achievements</div>
-        </div>
-        {% for c in case_studies %}
-        <div class="cs">
-            <div class="cs-top">
-                <span class="cs-title">{{ c.title }}</span>
-                <span class="cs-score">{{ c.score }}/{{ c.max_score }}</span>
-            </div>
-            {% if c.feedback_summary %}<div class="cs-fb">{{ c.feedback_summary }}</div>{% endif %}
-            {% if c.key_concepts %}
-            <div class="cs-tags">{% for k in c.key_concepts[:4] %}<span class="cs-tag">{{ k }}</span>{% endfor %}</div>
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- ═══ TESTGEN ═══ -->
-    {% if testgen and testgen.get('subject_strengths') %}
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(245,158,11,0.08);color:var(--amber);">📊</div>
-            <div class="st-title">Assessment Performance</div>
-        </div>
-        <div class="tg">
-            {% for subj in testgen.subject_strengths %}
-            <div class="tg-card">
-                <div class="tg-subj">{{ subj.subject }}</div>
-                <div class="tg-bar"><div class="tg-fill" data-width="{{ subj.avg_score }}"></div></div>
-                <div class="tg-val">{{ subj.avg_score }}% avg</div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ═══ PERSONALITY ═══ -->
-    {% if personality %}
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(167,139,250,0.08);color:var(--violet);">🧠</div>
-            <div class="st-title">Personality & Work Style</div>
-        </div>
-        <div class="p-badge">🎯 {{ personality.personality_type }}</div>
-        <div class="p-grid">
-            <div class="p-item"><div class="p-label">Key Traits</div><div class="p-val">{{ personality.traits }}</div></div>
-            <div class="p-item"><div class="p-label">Work Style</div><div class="p-val">{{ personality.work_style }}</div></div>
-            <div class="p-item"><div class="p-label">Communication</div><div class="p-val">{{ personality.communication }}</div></div>
-            <div class="p-item"><div class="p-label">Leadership</div><div class="p-val">{{ personality.leadership }}</div></div>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ═══ JOURNEY ═══ -->
-    {% if journey %}
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(56,189,248,0.08);color:var(--cyan);">🚀</div>
-            <div class="st-title">Learning Journey</div>
-        </div>
-        <div class="j-row">
-            <div class="j-stat"><span class="j-v">{{ journey.total_hours }}</span><span class="j-u">hours</span></div>
-            <div class="j-stat"><span class="j-v">{{ journey.courses_completed }}</span><span class="j-u">courses</span></div>
-            <div class="j-stat"><span class="j-v">{{ journey.active_days }}</span><span class="j-u">active days</span></div>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- ═══ PROJECTS ═══ -->
-    {% if projects %}
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(244,114,182,0.08);color:var(--rose);">🛠</div>
-            <div class="st-title">Project Showcase</div>
-        </div>
-        {% for p in projects %}
-        <div class="proj">
-            <div class="proj-t">{{ p.title }}</div>
-            <p class="proj-d">{{ p.description }}</p>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- ═══ CERTIFICATIONS ═══ -->
-    {% if certifications %}
-    <div class="s" data-animate>
-        <div class="sh">
-            <div class="si" style="background:rgba(245,158,11,0.08);color:var(--amber);">🏅</div>
-            <div class="st-title">Certifications</div>
-        </div>
-        {% for c in certifications %}
-        <div class="cert">
-            <div class="cert-ico">📜</div>
-            <div><div class="cert-n">{{ c.name }}</div><div class="cert-d">{{ c.issued_at }}</div></div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- ═══ FOOTER ═══ -->
-    <div class="foot">
-        
-        <a href="{{ profile_url }}">{{ profile_url }}</a><br>
-        <span style="margin-top:6px;display:inline-block;">AI-generated profile from LMS activity</span><br>
-        <span>© 2026 <a href="https://upskillize.com">Upskillize</a> — Bridging Academia and Industry</span>
-    </div>
-
+    {% if ats_data %}<div class="ab"><div class="sc" style="color:{% if ats_data.total_score >= 70 %}var(--g){% elif ats_data.total_score >= 40 %}var(--am){% else %}var(--m){% endif %}">{{ ats_data.total_score }}</div><div class="lb">ATS Score</div></div>{% endif %}
+  </div>
 </div>
 
-<!-- ═══ SCROLL ANIMATIONS + BAR FILLS ═══ -->
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const io = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('visible');
-                const bars = entry.target.querySelectorAll('[data-width]');
-                bars.forEach((bar, i) => {
-                    setTimeout(() => { bar.style.width = bar.dataset.width + '%'; }, i * 80);
-                });
-                io.unobserve(entry.target);
-            }
-        });
-    }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+<!-- METRICS — show only meaningful numbers -->
+<div class="ms">
+  {% if performance_data and performance_data.overall_score > 0 %}
+  <div class="mc {% if performance_data.overall_score > 60 %}hl{% endif %}"><div class="v">{{ "%.1f"|format(performance_data.overall_score) }}%</div><div class="l">Overall Score</div></div>
+  {% endif %}
+  <div class="mc"><div class="v">{{ (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) + (performance_data.total_case_studies or 0) if performance_data else 0 }}</div><div class="l">Assessments</div></div>
+  {% if performance_data and performance_data.best_test_score > 0 %}
+  <div class="mc hl"><div class="v">{{ "%.0f"|format(performance_data.best_test_score) }}%</div><div class="l">Best Score</div></div>
+  {% endif %}
+  {% if performance_data and performance_data.total_hours > 0 %}
+  <div class="mc"><div class="v">{{ "%.1f"|format(performance_data.total_hours) }}h</div><div class="l">Learning</div></div>
+  {% endif %}
+  {% if performance_data and performance_data.improvement_pct > 0 %}
+  <div class="mc hl"><div class="v">+{{ "%.1f"|format(performance_data.improvement_pct) }}%</div><div class="l">Growth</div></div>
+  {% endif %}
+  {% if performance_data and performance_data.consistency_score and performance_data.consistency_score > 0 and (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) > 2 %}
+  <div class="mc"><div class="v">{{ "%.0f"|format(performance_data.consistency_score) }}%</div><div class="l">Consistency</div></div>
+  {% endif %}
+</div>
 
-    document.querySelectorAll('[data-animate]').forEach(el => io.observe(el));
-});
-</script>
+<!-- SUMMARY -->
+<div class="s"><div class="st"><span class="ic" style="background:var(--al);color:var(--a2)">✦</span> Professional Summary</div>
+<p class="stx">{{ professional_summary or 'Professional summary will appear once profile data is available.' }}</p>
+{% if growth_statement %}<p class="stx" style="margin-top:12px;color:var(--g);font-style:italic">{{ growth_statement }}</p>{% endif %}
+</div>
 
+<!-- ACHIEVEMENTS -->
+{% if top_achievements and top_achievements|length > 0 %}
+<div class="s"><div class="st"><span class="ic" style="background:#FEF3C7;color:#92400E">★</span> Key Achievements</div>
+{% for ach in top_achievements %}
+<div class="ach"><div class="abd {% if loop.index <= 1 %}g{% elif loop.index <= 2 %}si{% else %}br{% endif %}">{{ ach.metric }}</div><div><div class="tt">{{ ach.label }}</div><div class="ds">{{ ach.statement }}</div><span class="tg">{{ ach.type | replace('_', ' ') | title }}</span></div></div>
+{% endfor %}
+</div>
+{% endif %}
+
+<!-- ROLE MATCHES — the centerpiece for recruiters -->
+{% if role_matches and role_matches|length > 0 %}
+<div class="s"><div class="st"><span class="ic" style="background:var(--gl);color:var(--g)">◎</span> Eligible Job Roles</div>
+{% for role in role_matches[:3] %}
+<div class="rc">
+<div class="rh"><div><div class="rt">{{ role.role_title }}</div></div><div style="display:flex;align-items:center;gap:10px"><span class="rcat {{ role.category|lower }}">{{ role.category }}</span><span class="mp" style="color:{% if role.match_percentage >= 70 %}var(--g){% elif role.match_percentage >= 40 %}var(--am){% else %}var(--m){% endif %}">{{ role.match_percentage }}%</span></div></div>
+<div class="mmb"><div class="f" style="width:{{ role.match_percentage }}%;background:{% if role.match_percentage >= 70 %}var(--g){% elif role.match_percentage >= 40 %}var(--a2){% else %}var(--m){% endif %}"></div></div>
+<div class="mk">{% for kw in role.matching_keywords[:6] %}<span>✓ {{ kw }}</span>{% endfor %}</div>
+{% if role.missing_keywords %}<div class="mk mi" style="margin-top:4px">{% for kw in role.missing_keywords[:3] %}<span>+ {{ kw }}</span>{% endfor %}</div>{% endif %}
+{% if role.recommendation %}<div class="rr">💡 {{ role.recommendation }}</div>{% endif %}
+</div>
+{% endfor %}
+</div>
+{% endif %}
+
+<div class="tc2">
+<!-- SKILLS -->
+<div class="s"><div class="st"><span class="ic" style="background:var(--pl);color:var(--p)">⚡</span> Skills</div>
+{% if skills_data %}
+{% for cat_name, cat_key, color in [('Technical', 'technical_skills', 'var(--a2)'), ('Soft Skills', 'soft_skills', 'var(--tl)'), ('Domain', 'domain_knowledge', 'var(--p)')] %}
+{% set items = skills_data.get(cat_key, []) if skills_data is mapping else [] %}
+{% if items %}<div class="sct">{{ cat_name }}</div>
+{% for sk in items[:6] %}<div class="si2"><span class="nm">{{ sk.name }}</span><div class="sb"><div class="f" style="width:{{ sk.score }}%;background:{{ color }}"></div></div><span class="pc" style="color:{{ color }}">{{ sk.score }}%</span></div>{% endfor %}
+{% endif %}{% endfor %}
+{% endif %}
+</div>
+
+<div>
+<!-- PERSONALITY -->
+{% if personality_data and personality_data.personality_type %}
+<div class="s"><div class="st"><span class="ic" style="background:var(--tlb);color:var(--tl)">🧠</span> Work Profile</div>
+<div style="text-align:center;padding:12px 0"><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--a)">{{ personality_data.personality_type }}</div></div>
+<div class="pg2">
+{% if personality_data.traits %}<div class="tc"><div class="tl">Traits</div><div class="tv">{{ personality_data.traits }}</div></div>{% endif %}
+{% if personality_data.work_style %}<div class="tc"><div class="tl">Work Style</div><div class="tv">{{ personality_data.work_style }}</div></div>{% endif %}
+{% if personality_data.communication %}<div class="tc"><div class="tl">Communication</div><div class="tv">{{ personality_data.communication }}</div></div>{% endif %}
+{% if personality_data.leadership %}<div class="tc"><div class="tl">Team Role</div><div class="tv">{{ personality_data.leadership }}</div></div>{% endif %}
+</div></div>
+{% endif %}
+
+<!-- IMPROVEMENT TIPS -->
+{% if ats_data and ats_data.improvement_tips %}
+<div class="s"><div class="st"><span class="ic" style="background:var(--aml);color:var(--am)">📈</span> Growth Areas</div>
+{% for tip in ats_data.improvement_tips %}<div class="ti"><div class="tic">→</div><div>{{ tip }}</div></div>{% endfor %}
+</div>
+{% endif %}
+</div>
+</div>
+
+<!-- CASE STUDIES — reframed as professional analysis, not LMS assignments -->
+{% if case_study_highlights and case_study_highlights|length > 0 %}
+<div class="s"><div class="st"><span class="ic" style="background:var(--pl);color:var(--p)">📋</span> Analytical Work</div>
+{% for cs in case_study_highlights %}
+<div class="cc"><div class="ch"><div class="ct2">{{ cs.title }}</div><div class="cs2">{{ cs.score_pct }}%</div></div>
+<div class="cd">{{ cs.description }}</div>
+{% if cs.concepts %}<div class="ccp">{% for co in cs.concepts %}<span>{{ co }}</span>{% endfor %}</div>{% endif %}
+</div>
+{% endfor %}
+</div>
+{% endif %}
+
+<!-- TEST PERFORMANCE — shown as domain expertise, not "test scores" -->
+{% if test_highlights and test_highlights|length > 0 %}
+<div class="s"><div class="st"><span class="ic" style="background:var(--gl);color:var(--g)">📝</span> Domain Assessment Results</div>
+{% for t in test_highlights %}
+<div class="cc"><div class="ch"><div class="ct2">{{ t.subject }}</div><div class="cs2">{{ t.score_pct }}%</div></div>
+<div class="cd">{{ t.description }}</div></div>
+{% endfor %}
+</div>
+{% endif %}
+
+<!-- INDUSTRY KEYWORDS -->
+{% if ats_keywords and ats_keywords|length > 0 %}
+<div class="s"><div class="st"><span class="ic" style="background:var(--gl);color:var(--g)">🏷</span> Industry Keywords</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">{% for kw in ats_keywords %}<span style="font-size:12px;padding:4px 12px;border-radius:6px;background:var(--lt);border:1px solid var(--b);font-weight:500">{{ kw }}</span>{% endfor %}</div>
+</div>
+{% endif %}
+
+<!-- BOOST NUDGE — only for low activity -->
+{% if performance_data and (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) + (performance_data.total_case_studies or 0) == 0 %}
+<div class="nd"><h3>🚀 Build Your Profile Strength</h3><p>Complete assessments and case studies to unlock achievements, boost your ATS score, and get matched with specific job roles in BFSI and FinTech.</p>
+<div class="na"><span>📝 Take assessments</span><span>📋 Submit case studies</span><span>💬 Participate in discussions</span></div></div>
+{% endif %}
+
+<!-- FOOTER — branded but independent -->
+<div class="ft">
+  <div class="br2">Professional Profile</div>
+  <p>AI-powered profile from verified assessment data</p>
+  <p style="margin-top:8px"><a href="{{ profile_url or '#' }}">{{ profile_url or '' }}</a></p>
+  <p style="margin-top:4px;font-size:11px;color:#9ca3af">Powered by Upskillize · © 2026</p>
+</div>
+
+</div>
 </body>
 </html>

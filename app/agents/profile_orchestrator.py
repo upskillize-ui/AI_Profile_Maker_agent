@@ -47,10 +47,12 @@ class ProfileOrchestrator:
             skills = {"technical_skills": [], "tools": [], "soft_skills": [],
                        "domain_knowledge": [], "ats_keywords": []}
 
-        # Synchronous: achievement engine + role matcher (instant, rule-based)
-        achievements = self.achievement_engine.generate_all(student_data)
+        # Synchronous: role matcher first (needed for headline)
         role_matches = self.role_matcher.match_roles(student_data)
         ats_data = self.role_matcher.calculate_ats_score(student_data)
+
+        # Achievement engine (uses role matches for headline)
+        achievements = self.achievement_engine.generate_all(student_data, role_matches)
 
         return {
             # AI-generated
@@ -60,7 +62,7 @@ class ProfileOrchestrator:
             "skills_data": skills,
 
             # Achievements (rule-based, from REAL data)
-            "headline": achievements.get("headline", "Upskillize Learner"),
+            "headline": achievements.get("headline", "Finance & Banking Professional"),
             "top_achievements": achievements.get("top_achievements", []),
             "case_study_highlights": achievements.get("case_study_highlights", []),
             "test_highlights": achievements.get("test_highlights", []),
@@ -233,5 +235,5 @@ class ProfileOrchestrator:
         courses = d.get("courses", [])
         course_names = [c.get("course_name", "") for c in courses if c.get("course_name")]
         if course_names:
-            return f"{name} is building professional expertise through {', '.join(course_names[:2])} on Upskillize. Developing industry-relevant skills through structured coursework and assessments."
-        return f"{name} is registered on Upskillize and building their professional profile."
+            return f"{name} is building professional expertise in {', '.join(course_names[:2])}. Developing industry-relevant skills through structured coursework and assessments."
+        return f"{name} is a finance and banking professional building their career profile."
