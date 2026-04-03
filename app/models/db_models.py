@@ -64,7 +64,7 @@ class StudentProfile(Base):
     rendered_html = Column(Text)
 
     # Visibility
-    visibility = Column(SQLEnum(VisibilityMode), default=VisibilityMode.PRIVATE)
+    visibility = Column(SQLEnum(VisibilityMode), default=VisibilityMode.PUBLIC)
     status = Column(SQLEnum(ProfileStatus), default=ProfileStatus.PENDING)
 
     # Metadata
