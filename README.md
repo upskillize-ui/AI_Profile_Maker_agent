@@ -1,4 +1,4 @@
-﻿---
+---
 title: Ai Enhancer
 emoji: 🚀
 colorFrom: blue
