@@ -141,6 +141,66 @@ ROLE_DATABASE = {
         "education": ["B.Tech", "BCA", "MCA", "B.Sc CS"],
         "min_score": 45,
     },
+    "Python Developer": {
+        "category": "Technology",
+        "keywords": {
+            "python", "django", "flask", "fastapi", "SQL", "database",
+            "API", "REST", "git", "docker", "cloud", "agile",
+            "backend", "web development", "testing", "linux",
+        },
+        "education": ["B.Tech", "BCA", "MCA", "B.Sc CS"],
+        "min_score": 35,
+    },
+    "Frontend Developer": {
+        "category": "Technology",
+        "keywords": {
+            "javascript", "react", "html", "css", "typescript",
+            "responsive design", "web development", "figma", "git",
+            "API", "REST", "node.js", "tailwind", "bootstrap",
+        },
+        "education": ["B.Tech", "BCA", "MCA", "B.Sc CS"],
+        "min_score": 35,
+    },
+    "Software Engineer": {
+        "category": "Technology",
+        "keywords": {
+            "python", "javascript", "java", "SQL", "git", "docker",
+            "agile", "API", "REST", "database", "cloud", "CI/CD",
+            "testing", "linux", "web development", "data structures",
+        },
+        "education": ["B.Tech", "BCA", "MCA", "B.Sc CS"],
+        "min_score": 40,
+    },
+    "Data Analyst": {
+        "category": "Technology",
+        "keywords": {
+            "python", "SQL", "excel", "data analytics", "pandas", "numpy",
+            "power bi", "tableau", "statistics", "data visualization",
+            "machine learning", "reporting", "ETL", "database",
+        },
+        "education": ["B.Tech", "B.Sc", "MCA", "Statistics", "Mathematics"],
+        "min_score": 35,
+    },
+    "Junior DevOps Engineer": {
+        "category": "Technology",
+        "keywords": {
+            "docker", "linux", "git", "CI/CD", "cloud", "aws", "azure",
+            "kubernetes", "python", "shell", "automation", "monitoring",
+            "nginx", "jenkins",
+        },
+        "education": ["B.Tech", "BCA", "MCA"],
+        "min_score": 40,
+    },
+    "QA / Test Engineer": {
+        "category": "Technology",
+        "keywords": {
+            "testing", "python", "selenium", "automation", "API",
+            "SQL", "git", "agile", "test cases", "bug tracking",
+            "quality assurance", "regression",
+        },
+        "education": ["B.Tech", "BCA", "MCA"],
+        "min_score": 35,
+    },
 }
 
 # ═══════════════════════════════════════════════
@@ -298,6 +358,38 @@ class RoleMatcher:
         for quiz in d.get("quiz_scores", []):
             title = (quiz.get("quiz_title") or "").lower()
             keywords.update(word for word in title.split() if len(word) > 3)
+
+        # From resume skills (highest priority — student's own claim)
+        all_skills = d.get("all_skills", {})
+        for skill in all_skills.get("technical_skills", []):
+            name = skill.get("name", "").lower() if isinstance(skill, dict) else str(skill).lower()
+            if name and len(name) > 2:
+                keywords.add(name)
+
+        for tool in all_skills.get("tools", []):
+            name = tool.get("name", "").lower() if isinstance(tool, dict) else str(tool).lower()
+            if name and len(name) > 2:
+                keywords.add(name)
+
+        for skill in all_skills.get("soft_skills", []):
+            name = skill.get("name", "").lower() if isinstance(skill, dict) else str(skill).lower()
+            if name and len(name) > 2:
+                keywords.add(name)
+
+        # From GitHub languages
+        github = d.get("github_profile", {})
+        for lang in github.get("languages", {}).keys():
+            keywords.add(lang.lower())
+
+        # From work experience keywords
+        for exp in d.get("work_experience", []):
+            title = (exp.get("title") or "").lower()
+            keywords.update(word for word in title.split() if len(word) > 3)
+
+        # From education
+        for edu in d.get("education", []):
+            degree = (edu.get("degree") or "").lower()
+            keywords.update(word for word in degree.split() if len(word) > 3)
 
         # Universal soft skills (derived from activity)
         computed = d.get("computed", {})
