@@ -1,168 +1,143 @@
 """
-Skills Agent — REVISED
-═══════════════════════
-Changes:
-  - Removed fake fallback data ("PGCDF - FinTech, Banking & AI", "Digital Lending, Blockchain, Credit Risk")
-  - When no data exists, returns empty skills — not invented ones
-  - AI prompt strictly uses only real course/score data
-  - Skills only generated for courses student actually enrolled in
+Skills Agent v3 — 100% Rule-Based
+No AI/LLM dependencies. Skills derived from course data using keyword mapping.
 """
 
-from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-from app.config import get_settings
 import json
 import logging
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
+
+SKILL_MAP = {
+    "banking": ["Banking Operations", "Financial Products", "Banking Fundamentals"],
+    "finance": ["Financial Analysis", "Financial Services", "Corporate Finance"],
+    "fintech": ["FinTech Solutions", "Digital Banking", "Payment Technologies"],
+    "payment": ["Payment Systems", "Transaction Processing", "UPI & Digital Payments"],
+    "digital": ["Digital Transformation", "Digital Banking"],
+    "blockchain": ["Blockchain Technology", "Distributed Ledger"],
+    "ai": ["Artificial Intelligence", "Machine Learning Basics"],
+    "data": ["Data Analytics", "Data-Driven Decision Making"],
+    "risk": ["Risk Management", "Risk Assessment", "Credit Risk"],
+    "compliance": ["Regulatory Compliance", "KYC/AML"],
+    "lending": ["Digital Lending", "Loan Processing", "Credit Assessment"],
+    "insurance": ["InsurTech", "Insurance Products"],
+    "investment": ["Investment Analysis", "Portfolio Basics"],
+    "credit": ["Credit Analysis", "Credit Scoring"],
+    "upi": ["UPI & Payments", "Digital Payment Infrastructure"],
+    "card": ["Card Processing", "Card Networks"],
+    "wealth": ["Wealth Management", "Financial Planning"],
+    "management": ["Project Management", "Business Management"],
+}
+
+ATS_KEYWORD_MAP = {
+    "banking": "Banking", "finance": "Financial Services", "fintech": "FinTech",
+    "payment": "Payments", "digital": "Digital Transformation", "blockchain": "Blockchain",
+    "ai": "Artificial Intelligence", "data": "Data Analytics", "risk": "Risk Management",
+    "compliance": "Regulatory Compliance", "lending": "Digital Lending",
+    "insurance": "InsurTech", "investment": "Investment Analysis", "credit": "Credit Analysis",
+    "upi": "UPI & Payments",
+}
 
 
 class SkillsAgent:
 
-    def __init__(self):
-        s = get_settings()
-        self.llm = ChatAnthropic(
-            model=s.AI_MODEL, api_key=s.ANTHROPIC_API_KEY,
-            max_tokens=2048, temperature=0.3,
-        )
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a skills analyst for Upskillize, an EdTech platform.
-Given a student's ACTUAL course enrollments, test scores, and case study results,
-map their achievements to industry-standard skill names.
-
-STRICT RULES:
-- ONLY generate skills that are directly supported by the student's ACTUAL data.
-- If the student has NO courses, NO tests, NO case studies — return empty arrays.
-- Do NOT invent skills the student hasn't demonstrated.
-- Do NOT assume "FinTech" or "Blockchain" skills unless the student's courses cover those topics.
-- If a student is enrolled in "Banking Foundation" only, skills should be banking-related only.
-- Calculate confidence scores (0-100) based on evidence strength.
-- Only include skills with confidence >= 40 (lower threshold for early-stage learners).
-
-Return ONLY valid JSON:
-{{
-  "technical_skills": [{{"name": "Banking Fundamentals", "score": 65, "evidence": "Enrolled in Banking Foundation"}}],
-  "tools": [],
-  "soft_skills": [{{"name": "Self-Directed Learning", "score": 70, "evidence": "Active enrollment"}}],
-  "domain_knowledge": [{{"name": "Banking Operations", "score": 55, "evidence": "Course: Banking Foundation"}}],
-  "ats_keywords": ["Banking", "Financial Services"]
-}}"""),
-            ("human", """Student data (use ONLY this — do not invent):
-ENROLLED COURSES: {courses}
-TEST SCORES BY SUBJECT: {subject_scores}
-CASE STUDY TOPICS: {case_topics}
-TOTAL QUIZZES COMPLETED: {quizzes}
-TOTAL ASSIGNMENTS: {assignments}
-PERSONALITY TRAITS: {traits}
-
-Generate skills mapping based on ONLY the above data:"""),
-        ])
-        self.chain = self.prompt | self.llm | JsonOutputParser()
-
     async def generate(self, student_data: dict) -> dict:
         computed = student_data.get("computed", {})
-        personality = student_data.get("personality", {})
-
-        # ── FIXED: Use actual course names, not fake fallbacks ──
-        courses = ", ".join(
-            c.get("course_name", "") for c in student_data.get("courses", []) if c.get("course_name")
-        )
-        if not courses:
-            courses = "No courses enrolled yet"
-
-        case_topics = ", ".join(
-            c.get("topic") or c.get("title", "")
-            for c in student_data.get("case_studies", [])[:10]
-            if c.get("topic") or c.get("title")
-        )
-        if not case_topics:
-            case_topics = "No case studies submitted yet"
-
-        total_quizzes = computed.get("total_quizzes", 0)
-
-        try:
-            result = await self.chain.ainvoke({
-                "courses": courses,
-                "subject_scores": json.dumps(computed.get("subject_averages", {})),
-                "case_topics": case_topics,
-                "quizzes": f"{total_quizzes} completed",
-                "assignments": f"{computed.get('total_assignments', 0)} completed",
-                "traits": personality.get("traits_json", ""),
-            })
-            if "ats_keywords" not in result:
-                result["ats_keywords"] = self._extract_keywords(student_data)
-            return result
-        except Exception as e:
-            logger.error(f"Skills generation failed: {e}")
-            return self._fallback(student_data, computed)
-
-    def _extract_keywords(self, student_data: dict) -> list:
-        """Extract ATS keywords from ACTUAL course names only."""
-        keywords = set()
-        for course in student_data.get("courses", []):
-            name = (course.get("course_name") or "").lower()
-            # Map course name words to industry keywords
-            keyword_map = {
-                "banking": "Banking",
-                "finance": "Financial Services",
-                "fintech": "FinTech",
-                "payment": "Payments",
-                "digital": "Digital Transformation",
-                "blockchain": "Blockchain",
-                "ai": "Artificial Intelligence",
-                "data": "Data Analytics",
-                "risk": "Risk Management",
-                "compliance": "Regulatory Compliance",
-                "lending": "Digital Lending",
-                "insurance": "InsurTech",
-                "investment": "Investment Analysis",
-                "credit": "Credit Analysis",
-                "upi": "UPI & Payments",
-            }
-            for key, value in keyword_map.items():
-                if key in name:
-                    keywords.add(value)
-
-        # If no courses, return empty — don't invent
-        return list(keywords) if keywords else []
-
-    def _fallback(self, student_data: dict, computed: dict) -> dict:
-        """Fallback: derive skills from ACTUAL data only. No invented skills."""
-        top = computed.get("top_subjects", [])
         courses = student_data.get("courses", [])
 
-        # Technical skills from actual test subjects
-        technical = [
-            {"name": s[0], "score": int(s[1]), "evidence": f"Test avg: {s[1]}%"}
-            for s in top[:4]
-        ]
+        if not courses:
+            return {"technical_skills": [], "tools": [], "soft_skills": [], "domain_knowledge": [], "ats_keywords": []}
 
-        # Domain knowledge from actual enrolled courses
-        domain = []
-        for course in courses[:4]:
-            cname = course.get("course_name", "")
-            if cname:
-                progress = course.get("progress_percentage", 0) or 0
-                domain.append({
-                    "name": cname,
-                    "score": max(40, int(progress * 0.8)) if progress > 0 else 40,
-                    "evidence": f"Enrolled, {progress}% complete" if progress > 0 else "Currently enrolled",
-                })
-
-        # Soft skills — only if there's actual activity
-        soft = []
-        if computed.get("total_quizzes", 0) > 0 or computed.get("total_case_studies", 0) > 0:
-            soft.append({
-                "name": "Self-Directed Learning",
-                "score": 65,
-                "evidence": "Active assessment participation",
-            })
+        technical_skills = self._derive_technical_skills(courses, computed)
+        domain_knowledge = self._derive_domain_knowledge(courses)
+        soft_skills = self._derive_soft_skills(computed, student_data)
+        ats_keywords = self._extract_keywords(courses)
 
         return {
-            "technical_skills": technical,
+            "technical_skills": technical_skills[:10],
             "tools": [],
-            "soft_skills": soft,
-            "domain_knowledge": domain,
-            "ats_keywords": self._extract_keywords(student_data),
+            "soft_skills": soft_skills,
+            "domain_knowledge": domain_knowledge[:6],
+            "ats_keywords": ats_keywords,
         }
+
+    def _derive_technical_skills(self, courses, computed):
+        skills = {}
+        total_quizzes = computed.get("total_quizzes", 0)
+        total_cases = computed.get("total_case_studies", 0)
+        total_assignments = computed.get("total_assignments", 0)
+
+        for course in courses:
+            cname = (course.get("course_name") or "").lower()
+            progress = course.get("progress_percentage", 0) or 0
+            completed = course.get("completed_at") is not None
+
+            for keyword, skill_names in SKILL_MAP.items():
+                if keyword in cname:
+                    for skill_name in skill_names:
+                        if skill_name not in skills:
+                            base = progress * 0.4
+                            test_bonus = computed.get("avg_test_score", 0) * 0.3
+                            activity = min(30, total_quizzes * 2 + total_cases * 5 + total_assignments * 3)
+                            completion = 15 if completed else 0
+                            final_score = max(40, min(95, int(base + test_bonus + activity + completion)))
+
+                            skills[skill_name] = {
+                                "name": skill_name,
+                                "score": final_score,
+                                "evidence": f"Course: {course.get('course_name', '')}, {progress}% complete",
+                            }
+
+        for subj_name, subj_score in computed.get("top_subjects", [])[:4]:
+            if subj_name not in skills:
+                skills[subj_name] = {"name": subj_name, "score": int(subj_score), "evidence": f"Test avg: {subj_score}%"}
+
+        return sorted(skills.values(), key=lambda x: x["score"], reverse=True)
+
+    def _derive_domain_knowledge(self, courses):
+        domain, seen = [], set()
+        for course in courses:
+            cname = course.get("course_name", "")
+            if cname and cname not in seen:
+                seen.add(cname)
+                progress = course.get("progress_percentage", 0) or 0
+                score = max(40, int(progress * 0.8)) if progress > 0 else 40
+                domain.append({"name": cname, "score": score, "evidence": f"{progress}% complete" if progress > 0 else "Currently enrolled"})
+        return domain
+
+    def _derive_soft_skills(self, computed, student_data):
+        soft = []
+        total_quizzes = computed.get("total_quizzes", 0)
+        total_cases = computed.get("total_case_studies", 0)
+        total_assignments = computed.get("total_assignments", 0)
+        total_activity = total_quizzes + total_cases + total_assignments
+
+        if total_activity == 0:
+            return []
+
+        if total_activity >= 3:
+            soft.append({"name": "Self-Directed Learning", "score": min(90, 50 + total_activity * 3), "evidence": f"{total_activity} assessments completed"})
+
+        consistency = computed.get("consistency_score", 0)
+        if consistency > 60:
+            soft.append({"name": "Consistency", "score": int(consistency), "evidence": f"Score consistency: {consistency}%"})
+
+        if total_cases > 0:
+            case_score = computed.get("avg_case_study_score", 50)
+            soft.append({"name": "Problem Solving", "score": min(90, int(case_score) + total_cases * 5), "evidence": f"{total_cases} case studies"})
+
+        improvement = computed.get("improvement_pct", 0)
+        if improvement > 5:
+            soft.append({"name": "Growth Mindset", "score": min(90, 50 + int(improvement)), "evidence": f"{improvement}% improvement"})
+
+        return soft
+
+    def _extract_keywords(self, courses):
+        keywords = set()
+        for course in courses:
+            name = (course.get("course_name") or "").lower()
+            for key, value in ATS_KEYWORD_MAP.items():
+                if key in name:
+                    keywords.add(value)
+        return list(keywords) if keywords else []

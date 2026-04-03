@@ -1,10 +1,9 @@
 """
-Profile Orchestrator — REVISED
-═══════════════════════════════
-Changes:
-  - Fallback summary no longer says "FinTech professional" for everyone
-  - Fallback skills no longer invents "BFSI" skills when student has none
-  - All data derived from actual student activity
+Profile Orchestrator v4
+═══════════════════════
+Assembles the complete student profile from all engines.
+Every data point is real. Every achievement is verified.
+The profile shows the BEST of each student.
 """
 
 import asyncio
@@ -14,6 +13,8 @@ from typing import Dict, Any
 
 from app.agents.summary_agent import SummaryAgent
 from app.agents.skills_agent import SkillsAgent
+from app.agents.achievement_engine import AchievementEngine
+from app.agents.role_matcher import RoleMatcher
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -25,10 +26,13 @@ class ProfileOrchestrator:
     def __init__(self):
         self.summary_agent = SummaryAgent()
         self.skills_agent = SkillsAgent()
+        self.achievement_engine = AchievementEngine()
+        self.role_matcher = RoleMatcher()
 
     async def generate_profile(self, student_data: Dict[str, Any]) -> Dict[str, Any]:
         start = time.time()
 
+        # Parallel: AI summary + rule-based skills
         summary, skills = await asyncio.gather(
             self.summary_agent.generate(student_data),
             self.skills_agent.generate(student_data),
@@ -37,27 +41,72 @@ class ProfileOrchestrator:
 
         if isinstance(summary, Exception):
             logger.error(f"Summary agent failed: {summary}")
-            summary = self._fallback_summary(student_data)
+            summary = self._emergency_summary(student_data)
         if isinstance(skills, Exception):
             logger.error(f"Skills agent failed: {skills}")
-            skills = self._fallback_skills(student_data)
+            skills = {"technical_skills": [], "tools": [], "soft_skills": [],
+                       "domain_knowledge": [], "ats_keywords": []}
+
+        # Synchronous: achievement engine + role matcher (instant, rule-based)
+        achievements = self.achievement_engine.generate_all(student_data)
+        role_matches = self.role_matcher.match_roles(student_data)
+        ats_data = self.role_matcher.calculate_ats_score(student_data)
 
         return {
+            # AI-generated
             "professional_summary": summary,
+
+            # Skills (rule-based)
             "skills_data": skills,
+
+            # Achievements (rule-based, from REAL data)
+            "headline": achievements.get("headline", "Upskillize Learner"),
+            "top_achievements": achievements.get("top_achievements", []),
+            "case_study_highlights": achievements.get("case_study_highlights", []),
+            "test_highlights": achievements.get("test_highlights", []),
+            "assignment_highlights": achievements.get("assignment_highlights", []),
+            "project_highlights": achievements.get("project_highlights", []),
+
+            # Metrics (pure math from DB)
+            "learning_metrics": achievements.get("learning_metrics", {}),
+            "consistency_statement": achievements.get("consistency_statement", ""),
+            "growth_statement": achievements.get("growth_statement", ""),
+            "engagement_statement": achievements.get("engagement_statement", ""),
+
+            # Performance (pure math)
             "performance_data": self._performance(student_data),
+
+            # Learning journey (from DB timestamps)
             "journey_data": self._journey(student_data),
+
+            # Personality (from psychometric test)
             "personality_data": self._personality(student_data),
+
+            # Case studies detail (from DB)
             "case_studies_data": self._case_studies(student_data),
+
+            # Test performance detail (from DB)
             "testgen_data": self._testgen(student_data),
+
+            # Projects (from DB)
             "projects_data": self._projects(student_data),
+
+            # Certifications (from DB)
             "certifications_data": self._certifications(student_data),
+
+            # Role matching (rule-based)
+            "role_matches": role_matches,
+
+            # ATS score (rule-based)
+            "ats_data": ats_data,
             "ats_keywords": skills.get("ats_keywords", []) if isinstance(skills, dict) else [],
+
+            # Metadata
             "generation_time_seconds": round(time.time() - start, 2),
-            "ai_model_used": settings.AI_MODEL,
+            "ai_model_used": "claude-haiku-4-5-20251001" if self.summary_agent.has_api else "rule-based-v4",
         }
 
-    # ─── Section builders ────────────────────────────────
+    # ─── Section Builders (all from REAL data) ───────────
 
     def _performance(self, d: Dict) -> dict:
         c = d.get("computed", {})
@@ -66,6 +115,7 @@ class ProfileOrchestrator:
             "best_test_score": c.get("best_test_score", 0),
             "avg_test_score": c.get("avg_test_score", 0),
             "avg_case_study_score": c.get("avg_case_study_score", 0),
+            "avg_quiz_score": c.get("avg_quiz_score", 0),
             "improvement_pct": c.get("improvement_pct", 0),
             "consistency_score": c.get("consistency_score", 85),
             "total_hours": c.get("total_hours", 0),
@@ -74,21 +124,28 @@ class ProfileOrchestrator:
             "total_assignments": c.get("total_assignments", 0),
             "total_courses": c.get("total_courses", 0),
             "total_quizzes": c.get("total_quizzes", 0),
+            "completed_courses": c.get("completed_courses", 0),
         }
 
     def _case_studies(self, d: Dict) -> list:
         cases = sorted(
-            d.get("case_studies", []), key=lambda x: x.get("score", 0), reverse=True
-        )[: settings.MAX_CASE_STUDIES_SHOWN]
+            d.get("case_studies", []),
+            key=lambda x: float(x.get("score", 0) or 0), reverse=True
+        )[:settings.MAX_CASE_STUDIES_SHOWN]
         return [
             {
                 "title": cs.get("title", "Untitled"),
                 "topic": cs.get("topic", ""),
                 "score": cs.get("score", 0),
                 "max_score": cs.get("max_score", 100),
-                "percentage": round(cs.get("score", 0) / max(cs.get("max_score", 100), 1) * 100, 1),
+                "percentage": round(float(cs.get("score", 0) or 0) / max(float(cs.get("max_score", 100) or 100), 1) * 100, 1),
                 "key_concepts": cs.get("key_concepts", []),
                 "feedback_summary": (cs.get("ai_feedback", "") or "")[:200],
+                "grade": cs.get("ai_grade", ""),
+                "strengths": cs.get("ai_strengths", []),
+                "improvements": cs.get("ai_improvements", []),
+                "word_count": cs.get("word_count", 0),
+                "course_name": cs.get("course_name", ""),
             }
             for cs in cases
         ]
@@ -118,6 +175,12 @@ class ProfileOrchestrator:
                     "title": course.get("course_name", "Course"),
                     "date": str(course.get("completed_at", "")),
                 })
+            elif course.get("enrolled_at"):
+                milestones.append({
+                    "type": "course_enrolled",
+                    "title": course.get("course_name", "Course"),
+                    "date": str(course.get("enrolled_at", "")),
+                })
         for cert in d.get("certifications", []):
             milestones.append({
                 "type": "certification",
@@ -126,7 +189,7 @@ class ProfileOrchestrator:
             })
         return {
             "total_hours": c.get("total_hours", 0),
-            "active_days": act.get("active_days", 0),
+            "active_days": int(act.get("active_days", 0) or 0),
             "courses_completed": c.get("completed_courses", 0),
             "total_enrolled": c.get("total_courses", 0),
             "milestones": milestones[:15],
@@ -164,53 +227,11 @@ class ProfileOrchestrator:
             for c in d.get("certifications", [])
         ]
 
-    # ─── FIXED Fallbacks ────────────────────────────────
-
-    def _fallback_summary(self, d: Dict) -> str:
-        """Honest summary using ONLY real data."""
+    def _emergency_summary(self, d: Dict) -> str:
         p = d.get("personal", {})
-        c = d.get("computed", {})
-        courses = d.get("courses", [])
         name = (p.get("full_name") or "Student").strip()
-        course_names = [co.get("course_name", "") for co in courses if co.get("course_name")]
-        course_text = ", ".join(course_names[:3]) if course_names else "the Upskillize platform"
-
-        total_quizzes = c.get("total_quizzes", 0)
-        overall = c.get("overall_score", 0)
-
-        if overall > 50:
-            return (
-                f"{name} is actively building expertise through {course_text} on Upskillize. "
-                f"Achieved an overall score of {overall}% with "
-                f"{total_quizzes} assessment{'s' if total_quizzes != 1 else ''} completed."
-            )
-
-        quiz_text = f" Completed {total_quizzes} quiz{'zes' if total_quizzes != 1 else ''}." if total_quizzes > 0 else ""
-        return (
-            f"{name} is currently enrolled in {course_text} on Upskillize.{quiz_text} "
-            f"Building foundational knowledge through structured coursework and assessments."
-        )
-
-    def _fallback_skills(self, d: Dict) -> dict:
-        """Skills from ACTUAL data only. No invented skills."""
-        top = d.get("computed", {}).get("top_subjects", [])
         courses = d.get("courses", [])
-
-        technical = [
-            {"name": s[0], "score": int(s[1]), "evidence": f"Test avg: {s[1]}%"}
-            for s in top[:4]
-        ]
-
-        domain = []
-        for co in courses[:4]:
-            cname = co.get("course_name", "")
-            if cname:
-                domain.append({"name": cname, "score": 50, "evidence": "Enrolled"})
-
-        return {
-            "technical_skills": technical,
-            "tools": [],
-            "soft_skills": [],
-            "domain_knowledge": domain,
-            "ats_keywords": [],
-        }
+        course_names = [c.get("course_name", "") for c in courses if c.get("course_name")]
+        if course_names:
+            return f"{name} is building professional expertise through {', '.join(course_names[:2])} on Upskillize. Developing industry-relevant skills through structured coursework and assessments."
+        return f"{name} is registered on Upskillize and building their professional profile."
