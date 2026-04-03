@@ -1,10 +1,11 @@
 """
-Data Collector Service — REVISED
-═════════════════════════════════
-Changes:
-  - Fixed _get_personality(): was always returning 'default', now reads real data
-  - Added _derive_personality(): derives traits from actual quiz/course behavior
-  - Removed hardcoded "Analytical Strategist" as universal default
+Data Collector Service — v4
+═══════════════════════════
+Changes from v3:
+  - Fetches linkedin, github from students table
+  - Fetches resume_text if column exists
+  - _get_projects and _get_certifications (graceful if tables don't exist)
+  - Fixed _get_personality(): derives from real behavior
 """
 
 from sqlalchemy.orm import Session
@@ -42,7 +43,6 @@ class DataCollector:
         self.db = db
 
     async def collect_all(self, student_id: int) -> Dict[str, Any]:
-        # student_id = users.id. But enrollments/quizzes use students.id
         sid_row = self.db.execute(
             text("SELECT id FROM students WHERE user_id = :uid LIMIT 1"),
             {"uid": student_id},
@@ -79,8 +79,8 @@ class DataCollector:
             "case_studies": case_studies,
             "assignments": assignments,
             "quiz_scores": quiz_scores,
-            "projects": [],
-            "certifications": [],
+            "projects": self._get_projects(stu_id),
+            "certifications": self._get_certifications(stu_id),
             "personality": personality,
             "platform_activity": platform_activity,
             "forum_activity": forum_activity,
@@ -89,7 +89,7 @@ class DataCollector:
         }
         return clean_data(result)
 
-    # ─── Personal Info ───────────────────────────────────
+    # ─── Personal Info (v4: fetches linkedin, github) ────
 
     def _get_personal_info(self, student_id: int) -> Dict[str, Any]:
         try:
@@ -99,7 +99,9 @@ class DataCollector:
                         u.id, u.full_name, u.email, u.phone,
                         u.profile_photo AS photo_url,
                         s.city, s.state, s.country,
-                        s.date_of_birth, s.enrollment_number, s.batch_id
+                        s.date_of_birth, s.enrollment_number, s.batch_id,
+                        s.linkedin AS linkedin_url,
+                        s.github AS github_url
                     FROM users u
                     LEFT JOIN students s ON s.user_id = u.id
                     WHERE u.id = :sid
@@ -115,6 +117,30 @@ class DataCollector:
             parts = (d.get("full_name") or "Student").split(" ", 1)
             d["first_name"] = parts[0]
             d["last_name"] = parts[1] if len(parts) > 1 else ""
+
+            # Try fetching resume_text if column exists
+            try:
+                resume_row = self.db.execute(
+                    text("SELECT resume_text FROM students WHERE user_id = :sid LIMIT 1"),
+                    {"sid": student_id},
+                ).mappings().first()
+                if resume_row and resume_row.get("resume_text"):
+                    d["resume_text"] = resume_row["resume_text"]
+            except Exception:
+                pass  # resume_text column doesn't exist, that's fine
+
+            # Try fetching extra profile fields if they exist
+            for col in ["about_me", "headline", "education", "degree", "university"]:
+                try:
+                    extra = self.db.execute(
+                        text(f"SELECT {col} FROM students WHERE user_id = :sid LIMIT 1"),
+                        {"sid": student_id},
+                    ).mappings().first()
+                    if extra and extra.get(col):
+                        d[col] = extra[col]
+                except Exception:
+                    pass  # column doesn't exist
+
             return clean_data(d)
         except Exception as e:
             logger.warning(f"personal_info failed (student {student_id}): {e}")
@@ -243,17 +269,50 @@ class DataCollector:
             logger.warning(f"quiz_scores failed: {e}")
             return []
 
+    # ─── Projects (v4: from DB if table exists) ──────────
+
+    def _get_projects(self, student_id: int) -> list:
+        try:
+            rows = self.db.execute(
+                text("""
+                    SELECT title, description, technologies_used, mentor_feedback,
+                           github_url, demo_url, submitted_at
+                    FROM student_projects
+                    WHERE student_id = :sid
+                    ORDER BY submitted_at DESC
+                """),
+                {"sid": student_id},
+            ).mappings().all()
+            return clean_data([dict(r) for r in rows])
+        except Exception as e:
+            logger.info(f"projects table not found or empty: {e}")
+            return []
+
+    # ─── Certifications (v4: from DB if table exists) ────
+
+    def _get_certifications(self, student_id: int) -> list:
+        try:
+            rows = self.db.execute(
+                text("""
+                    SELECT certificate_name, course_name, issued_at,
+                           verification_url, certificate_url
+                    FROM certificates
+                    WHERE student_id = :sid
+                    ORDER BY issued_at DESC
+                """),
+                {"sid": student_id},
+            ).mappings().all()
+            return clean_data([dict(r) for r in rows])
+        except Exception as e:
+            logger.info(f"certificates table not found or empty: {e}")
+            return []
+
     # ─── Personality — FIXED ─────────────────────────────
-    # OLD CODE: Always returned hardcoded "default" string
-    # NEW CODE: Tries to read real psycho_result, falls back to behavior-derived traits
 
     def _get_personality(self, student_id: int) -> Dict[str, Any]:
         try:
-            # First: check if users table has psycho_result column with real data
             row = self.db.execute(
-                text("""
-                    SELECT psycho_result FROM users WHERE id = :sid LIMIT 1
-                """),
+                text("SELECT psycho_result FROM users WHERE id = :sid LIMIT 1"),
                 {"sid": student_id},
             ).mappings().first()
 
@@ -272,16 +331,13 @@ class DataCollector:
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            # Column doesn't exist or has no real data — derive from behavior
             return self._derive_personality(student_id)
 
         except Exception as e:
-            # psycho_result column might not exist at all
             logger.info(f"psycho_result not available, deriving personality: {e}")
             return self._derive_personality(student_id)
 
     def _derive_personality(self, student_id: int) -> dict:
-        """Derive personality traits from ACTUAL student behavior on the platform."""
         try:
             quiz_row = self.db.execute(
                 text("SELECT COUNT(*) AS cnt FROM quiz_attempts WHERE student_id = :sid"),
@@ -302,29 +358,22 @@ class DataCollector:
             quizzes = int(quiz_row["cnt"]) if quiz_row else 0
             courses = int(course_row["cnt"]) if course_row else 0
             cases = int(case_row["cnt"]) if case_row else 0
-
             total_activity = quizzes + cases
 
-            # Derive personality type from actual engagement level
             if total_activity >= 15:
-                ptype = "Strategic Achiever"
-                traits = "High-performer, Assessment-driven, Detail-oriented"
+                ptype, traits = "Strategic Achiever", "High-performer, Assessment-driven, Detail-oriented"
                 work_style = "Structured and goal-oriented"
             elif total_activity >= 8:
-                ptype = "Analytical Strategist"
-                traits = "Methodical, Self-motivated, Consistent"
+                ptype, traits = "Analytical Strategist", "Methodical, Self-motivated, Consistent"
                 work_style = "Structured and methodical"
             elif total_activity >= 3:
-                ptype = "Active Learner"
-                traits = "Curious, Engaged, Growing"
+                ptype, traits = "Active Learner", "Curious, Engaged, Growing"
                 work_style = "Self-paced with regular engagement"
             elif total_activity >= 1:
-                ptype = "Curious Explorer"
-                traits = "Self-initiated, Building foundations"
+                ptype, traits = "Curious Explorer", "Self-initiated, Building foundations"
                 work_style = "Self-paced learning"
             else:
-                ptype = "Getting Started"
-                traits = "Enrolled and ready to learn"
+                ptype, traits = "Getting Started", "Enrolled and ready to learn"
                 work_style = "Self-paced"
 
             return {
@@ -336,13 +385,8 @@ class DataCollector:
             }
         except Exception as e:
             logger.warning(f"derive_personality failed: {e}")
-            return {
-                "personality_type": "",
-                "traits_json": "",
-                "work_style": "",
-                "communication_profile": "",
-                "leadership_indicators": "",
-            }
+            return {"personality_type": "", "traits_json": "", "work_style": "",
+                    "communication_profile": "", "leadership_indicators": ""}
 
     # ─── Platform Activity ───────────────────────────────
 
@@ -378,17 +422,14 @@ class DataCollector:
                 text("SELECT COUNT(*) AS cnt FROM forum_threads WHERE author_id = :sid"),
                 {"sid": student_id},
             ).mappings().first()
-
             replies = self.db.execute(
                 text("SELECT COUNT(*) AS cnt FROM forum_replies WHERE author_id = :sid"),
                 {"sid": student_id},
             ).mappings().first()
-
             answers = self.db.execute(
                 text("SELECT COUNT(*) AS cnt FROM forum_replies WHERE author_id = :sid AND is_answer = 1"),
                 {"sid": student_id},
             ).mappings().first()
-
             return {
                 "threads_created": int(threads["cnt"]) if threads else 0,
                 "replies_given": int(replies["cnt"]) if replies else 0,
@@ -417,7 +458,7 @@ class DataCollector:
             logger.warning(f"batch_info failed: {e}")
             return {}
 
-    # ─── Computed Metrics (unchanged) ────────────────────
+    # ─── Computed Metrics ────────────────────────────────
 
     def _compute_metrics(self, **data) -> Dict[str, Any]:
         test_scores = data.get("test_scores", [])
