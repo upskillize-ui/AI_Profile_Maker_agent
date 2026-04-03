@@ -1,0 +1,56 @@
+# ═══════════════════════════════════════════════
+# SECURITY: Block ALL secrets and sensitive files
+# ═══════════════════════════════════════════════
+
+# Environment files (NEVER commit these)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup folders (often contain .env with real secrets!)
+*-backup/
+*_backup/
+*.bak
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Database
+*.sqlite3
+*.db
+
+# Keys and certificates
+*.pem
+*.key
+*.crt
+*.p12
+
+# HuggingFace
+.huggingface/
