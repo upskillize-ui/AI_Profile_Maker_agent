@@ -1,9 +1,9 @@
 """
-Profile Orchestrator v4
-═══════════════════════
-Assembles the complete student profile from all engines.
-Every data point is real. Every achievement is verified.
-The profile shows the BEST of each student.
+Profile Orchestrator v4 — FIXED
+════════════════════════════════
+- Handles resume_url (downloads PDF) AND resume_text
+- Fetches GitHub data in parallel
+- Merges all sources before generating
 """
 
 import asyncio
@@ -15,6 +15,9 @@ from app.agents.summary_agent import SummaryAgent
 from app.agents.skills_agent import SkillsAgent
 from app.agents.achievement_engine import AchievementEngine
 from app.agents.role_matcher import RoleMatcher
+from app.services.resume_parser import ResumeParser
+from app.services.github_fetcher import GitHubFetcher
+from app.services.data_merger import DataMerger
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -28,87 +31,199 @@ class ProfileOrchestrator:
         self.skills_agent = SkillsAgent()
         self.achievement_engine = AchievementEngine()
         self.role_matcher = RoleMatcher()
+        self.resume_parser = ResumeParser()
+        self.github_fetcher = GitHubFetcher()
+        self.data_merger = DataMerger()
 
     async def generate_profile(self, student_data: Dict[str, Any]) -> Dict[str, Any]:
         start = time.time()
+        personal = student_data.get("personal", {})
 
-        # Parallel: AI summary + rule-based skills
+        # ── Step 1: Get resume text (from DB text or download from URL) ──
+        resume_text = personal.get("resume_text") or ""
+
+        if not resume_text and personal.get("resume_url"):
+            resume_text = await self._download_resume(personal["resume_url"])
+
+        # Also check if student filled skills/bio in LMS profile directly
+        lms_skills_text = personal.get("key_skills") or personal.get("skills") or ""
+        lms_bio = personal.get("about_me") or ""
+        if lms_skills_text and not resume_text:
+            # Use LMS profile fields as mini-resume
+            resume_text = f"""
+Name: {personal.get('full_name', '')}
+Headline: {personal.get('current_designation', '')}
+Skills: {lms_skills_text}
+Bio: {lms_bio}
+Education: {personal.get('education_level', '')} {personal.get('field_of_study', '')} from {personal.get('institution', '')} ({personal.get('graduation_year', '')})
+Experience: {personal.get('work_experience_years', '')} years at {personal.get('current_employer', '')}
+"""
+
+        github_url = personal.get("github_url") or ""
+
+        # ── Step 2: Fetch external data (parallel) ──
+        resume_data, github_data = {}, {}
+        try:
+            tasks = []
+            if resume_text:
+                tasks.append(("resume", self.resume_parser.parse(resume_text)))
+            if github_url:
+                tasks.append(("github", self.github_fetcher.fetch(github_url)))
+
+            if tasks:
+                results = await asyncio.gather(
+                    *[t[1] for t in tasks],
+                    return_exceptions=True,
+                )
+                for i, (name, _) in enumerate(tasks):
+                    if isinstance(results[i], Exception):
+                        logger.warning(f"{name} fetch failed: {results[i]}")
+                    elif name == "resume":
+                        resume_data = results[i]
+                    elif name == "github":
+                        github_data = results[i]
+        except Exception as e:
+            logger.warning(f"External data fetch failed: {e}")
+
+        # ── Step 3: Merge all data sources ──
+        merged_data = self.data_merger.merge(student_data, resume_data, github_data)
+
+        # ── Step 4: Generate AI summary + rule-based skills (parallel) ──
         summary, skills = await asyncio.gather(
-            self.summary_agent.generate(student_data),
-            self.skills_agent.generate(student_data),
+            self.summary_agent.generate(merged_data),
+            self.skills_agent.generate(merged_data),
             return_exceptions=True,
         )
 
         if isinstance(summary, Exception):
             logger.error(f"Summary agent failed: {summary}")
-            summary = self._emergency_summary(student_data)
+            summary = self._emergency_summary(merged_data)
         if isinstance(skills, Exception):
             logger.error(f"Skills agent failed: {skills}")
             skills = {"technical_skills": [], "tools": [], "soft_skills": [],
                        "domain_knowledge": [], "ats_keywords": []}
 
-        # Synchronous: role matcher first (needed for headline)
-        role_matches = self.role_matcher.match_roles(student_data)
-        ats_data = self.role_matcher.calculate_ats_score(student_data)
+        # ── Step 5: Merge AI skills with multi-source skills ──
+        all_skills = merged_data.get("all_skills", {})
+        if all_skills:
+            combined_technical = self._combine_skill_lists(
+                skills.get("technical_skills", []),
+                all_skills.get("technical_skills", [])
+            )
+            combined_soft = self._combine_skill_lists(
+                skills.get("soft_skills", []),
+                all_skills.get("soft_skills", [])
+            )
+            skills["technical_skills"] = combined_technical[:12]
+            skills["soft_skills"] = combined_soft[:6]
+            if all_skills.get("tools"):
+                skills["tools"] = all_skills["tools"][:6]
 
-        # Achievement engine (uses role matches for headline)
-        achievements = self.achievement_engine.generate_all(student_data, role_matches)
+        # ── Step 6: Role matching + ATS ──
+        role_matches = self.role_matcher.match_roles(merged_data)
+        ats_data = self.role_matcher.calculate_ats_score(merged_data)
+
+        # ── Step 7: Achievement engine ──
+        achievements = self.achievement_engine.generate_all(merged_data, role_matches)
 
         return {
-            # AI-generated
             "professional_summary": summary,
-
-            # Skills (rule-based)
             "skills_data": skills,
-
-            # Achievements (rule-based, from REAL data)
-            "headline": achievements.get("headline", "Finance & Banking Professional"),
+            "headline": achievements.get("headline", "Financial Services Professional"),
             "top_achievements": achievements.get("top_achievements", []),
             "case_study_highlights": achievements.get("case_study_highlights", []),
             "test_highlights": achievements.get("test_highlights", []),
             "assignment_highlights": achievements.get("assignment_highlights", []),
             "project_highlights": achievements.get("project_highlights", []),
-
-            # Metrics (pure math from DB)
             "learning_metrics": achievements.get("learning_metrics", {}),
             "consistency_statement": achievements.get("consistency_statement", ""),
             "growth_statement": achievements.get("growth_statement", ""),
             "engagement_statement": achievements.get("engagement_statement", ""),
-
-            # Performance (pure math)
-            "performance_data": self._performance(student_data),
-
-            # Learning journey (from DB timestamps)
-            "journey_data": self._journey(student_data),
-
-            # Personality (from psychometric test)
-            "personality_data": self._personality(student_data),
-
-            # Case studies detail (from DB)
-            "case_studies_data": self._case_studies(student_data),
-
-            # Test performance detail (from DB)
-            "testgen_data": self._testgen(student_data),
-
-            # Projects (from DB)
-            "projects_data": self._projects(student_data),
-
-            # Certifications (from DB)
-            "certifications_data": self._certifications(student_data),
-
-            # Role matching (rule-based)
+            "performance_data": self._performance(merged_data),
+            "education_data": merged_data.get("education", []),
+            "work_experience": merged_data.get("work_experience", []),
+            "journey_data": self._journey(merged_data),
+            "personality_data": self._personality(merged_data),
+            "case_studies_data": self._case_studies(merged_data),
+            "testgen_data": self._testgen(merged_data),
+            "projects_data": merged_data.get("projects", [])[:5],
+            "github_profile": merged_data.get("github_profile", {}),
+            "certifications_data": merged_data.get("certifications", []),
             "role_matches": role_matches,
-
-            # ATS score (rule-based)
             "ats_data": ats_data,
             "ats_keywords": skills.get("ats_keywords", []) if isinstance(skills, dict) else [],
-
-            # Metadata
+            "data_sources": merged_data.get("data_sources", ["lms"]),
             "generation_time_seconds": round(time.time() - start, 2),
             "ai_model_used": "claude-haiku-4-5-20251001" if self.summary_agent.has_api else "rule-based-v4",
         }
 
-    # ─── Section Builders (all from REAL data) ───────────
+    async def _download_resume(self, url: str) -> str:
+        """Download resume PDF from URL and extract text."""
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    logger.warning(f"Resume download failed: HTTP {resp.status_code}")
+                    return ""
+
+                # Save to temp file and extract text
+                import tempfile
+                import os
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+                    f.write(resp.content)
+                    tmp_path = f.name
+
+                try:
+                    # Try PyPDF2 first
+                    try:
+                        from PyPDF2 import PdfReader
+                        reader = PdfReader(tmp_path)
+                        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+                        if text.strip():
+                            logger.info(f"Resume extracted: {len(text)} chars via PyPDF2")
+                            return text
+                    except ImportError:
+                        pass
+
+                    # Try pdfplumber
+                    try:
+                        import pdfplumber
+                        with pdfplumber.open(tmp_path) as pdf:
+                            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+                            if text.strip():
+                                logger.info(f"Resume extracted: {len(text)} chars via pdfplumber")
+                                return text
+                    except ImportError:
+                        pass
+
+                    # Try pdfminer
+                    try:
+                        from pdfminer.high_level import extract_text as pdfminer_extract
+                        text = pdfminer_extract(tmp_path)
+                        if text.strip():
+                            logger.info(f"Resume extracted: {len(text)} chars via pdfminer")
+                            return text
+                    except ImportError:
+                        pass
+
+                    logger.warning("No PDF extraction library available (install PyPDF2, pdfplumber, or pdfminer)")
+                    return ""
+                finally:
+                    os.unlink(tmp_path)
+
+        except Exception as e:
+            logger.warning(f"Resume download/extract failed: {e}")
+            return ""
+
+    def _combine_skill_lists(self, list_a: list, list_b: list) -> list:
+        combined = {}
+        for skill in list_a + list_b:
+            key = skill.get("name", "").lower()
+            if key:
+                if key not in combined or skill.get("score", 0) > combined[key].get("score", 0):
+                    combined[key] = skill
+        return sorted(combined.values(), key=lambda x: x.get("score", 0), reverse=True)
 
     def _performance(self, d: Dict) -> dict:
         c = d.get("computed", {})
@@ -130,110 +245,38 @@ class ProfileOrchestrator:
         }
 
     def _case_studies(self, d: Dict) -> list:
-        cases = sorted(
-            d.get("case_studies", []),
-            key=lambda x: float(x.get("score", 0) or 0), reverse=True
-        )[:settings.MAX_CASE_STUDIES_SHOWN]
-        return [
-            {
-                "title": cs.get("title", "Untitled"),
-                "topic": cs.get("topic", ""),
-                "score": cs.get("score", 0),
-                "max_score": cs.get("max_score", 100),
-                "percentage": round(float(cs.get("score", 0) or 0) / max(float(cs.get("max_score", 100) or 100), 1) * 100, 1),
-                "key_concepts": cs.get("key_concepts", []),
-                "feedback_summary": (cs.get("ai_feedback", "") or "")[:200],
-                "grade": cs.get("ai_grade", ""),
-                "strengths": cs.get("ai_strengths", []),
-                "improvements": cs.get("ai_improvements", []),
-                "word_count": cs.get("word_count", 0),
-                "course_name": cs.get("course_name", ""),
-            }
-            for cs in cases
-        ]
+        cases = sorted(d.get("case_studies", []), key=lambda x: float(x.get("score", 0) or 0), reverse=True)[:settings.MAX_CASE_STUDIES_SHOWN]
+        return [{"title": cs.get("title", ""), "score": cs.get("score", 0), "max_score": cs.get("max_score", 100),
+                 "percentage": round(float(cs.get("score", 0) or 0) / max(float(cs.get("max_score", 100) or 100), 1) * 100, 1),
+                 "key_concepts": cs.get("key_concepts", []), "grade": cs.get("ai_grade", ""),
+                 "feedback_summary": (cs.get("ai_feedback", "") or "")[:200]} for cs in cases]
 
     def _testgen(self, d: Dict) -> dict:
         c = d.get("computed", {})
-        return {
-            "best_score": c.get("best_test_score", 0),
-            "avg_score": c.get("avg_test_score", 0),
-            "total_tests": c.get("total_tests", 0),
-            "subject_strengths": [
-                {"subject": s[0], "avg_score": s[1]}
-                for s in c.get("top_subjects", [])[:6]
-            ],
-            "improvement_pct": c.get("improvement_pct", 0),
-            "consistency_score": c.get("consistency_score", 85),
-        }
+        return {"best_score": c.get("best_test_score", 0), "avg_score": c.get("avg_test_score", 0),
+                "total_tests": c.get("total_tests", 0),
+                "subject_strengths": [{"subject": s[0], "avg_score": s[1]} for s in c.get("top_subjects", [])[:6]]}
 
     def _journey(self, d: Dict) -> dict:
         c = d.get("computed", {})
-        act = d.get("platform_activity", {})
         milestones = []
         for course in d.get("courses", []):
             if course.get("completed_at"):
-                milestones.append({
-                    "type": "course_completed",
-                    "title": course.get("course_name", "Course"),
-                    "date": str(course.get("completed_at", "")),
-                })
-            elif course.get("enrolled_at"):
-                milestones.append({
-                    "type": "course_enrolled",
-                    "title": course.get("course_name", "Course"),
-                    "date": str(course.get("enrolled_at", "")),
-                })
+                milestones.append({"type": "course_completed", "title": course.get("course_name", ""), "date": str(course.get("completed_at", ""))})
         for cert in d.get("certifications", []):
-            milestones.append({
-                "type": "certification",
-                "title": cert.get("certificate_name", "Certificate"),
-                "date": str(cert.get("issued_at", "")),
-            })
-        return {
-            "total_hours": c.get("total_hours", 0),
-            "active_days": int(act.get("active_days", 0) or 0),
-            "courses_completed": c.get("completed_courses", 0),
-            "total_enrolled": c.get("total_courses", 0),
-            "milestones": milestones[:15],
-        }
+            milestones.append({"type": "certification", "title": cert.get("certificate_name", ""), "date": str(cert.get("issued_at", ""))})
+        return {"total_hours": c.get("total_hours", 0), "active_days": int(d.get("platform_activity", {}).get("active_days", 0) or 0),
+                "courses_completed": c.get("completed_courses", 0), "total_enrolled": c.get("total_courses", 0), "milestones": milestones[:15]}
 
     def _personality(self, d: Dict) -> dict:
         p = d.get("personality", {})
-        return {
-            "personality_type": p.get("personality_type", ""),
-            "traits": p.get("traits_json", ""),
-            "work_style": p.get("work_style", ""),
-            "communication": p.get("communication_profile", ""),
-            "leadership": p.get("leadership_indicators", ""),
-        }
-
-    def _projects(self, d: Dict) -> list:
-        return [
-            {
-                "title": p.get("title", "Project"),
-                "description": p.get("description", ""),
-                "technologies": p.get("technologies_used", []),
-                "mentor_feedback": p.get("mentor_feedback", ""),
-            }
-            for p in d.get("projects", [])[:5]
-        ]
-
-    def _certifications(self, d: Dict) -> list:
-        return [
-            {
-                "name": c.get("certificate_name", "Certificate"),
-                "course_name": c.get("course_name", ""),
-                "issued_at": str(c.get("issued_at", "")),
-                "verification_url": c.get("verification_url", ""),
-            }
-            for c in d.get("certifications", [])
-        ]
+        return {"personality_type": p.get("personality_type", ""), "traits": p.get("traits_json", ""),
+                "work_style": p.get("work_style", ""), "communication": p.get("communication_profile", ""),
+                "leadership": p.get("leadership_indicators", "")}
 
     def _emergency_summary(self, d: Dict) -> str:
-        p = d.get("personal", {})
-        name = (p.get("full_name") or "Student").strip()
-        courses = d.get("courses", [])
-        course_names = [c.get("course_name", "") for c in courses if c.get("course_name")]
-        if course_names:
-            return f"{name} is building professional expertise in {', '.join(course_names[:2])}. Developing industry-relevant skills through structured coursework and assessments."
-        return f"{name} is a finance and banking professional building their career profile."
+        name = (d.get("personal", {}).get("full_name") or "Student").strip()
+        headline = d.get("personal", {}).get("current_designation", "")
+        if headline:
+            return f"{name} — {headline}. Building professional expertise through structured learning and hands-on projects."
+        return f"{name} is building their professional profile through verified coursework and assessments."

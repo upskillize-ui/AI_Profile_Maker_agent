@@ -15,5 +15,6 @@ python-slugify>=8.0.4
 python-multipart>=0.0.20
 python-dotenv>=1.0.1
 httpx>=0.28.1
+PyPDF2>=3.0.0
 weasyprint>=63.1
 PyJWT>=2.8.0

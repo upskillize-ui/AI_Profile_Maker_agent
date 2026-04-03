@@ -1,11 +1,8 @@
 """
-Data Collector Service — v4
-═══════════════════════════
-Changes from v3:
-  - Fetches linkedin, github from students table
-  - Fetches resume_text if column exists
-  - _get_projects and _get_certifications (graceful if tables don't exist)
-  - Fixed _get_personality(): derives from real behavior
+Data Collector Service — v4 FIXED
+═════════════════════════════════
+- linkedin, github, resume_url are on USERS table (not students)
+- Tries each extra column individually — never crashes
 """
 
 from sqlalchemy.orm import Session
@@ -20,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 def clean_data(obj):
-    """Recursively convert Decimal, date, datetime to JSON-safe types."""
     if isinstance(obj, Decimal):
         return float(obj)
     if isinstance(obj, datetime):
@@ -37,7 +33,6 @@ def clean_data(obj):
 
 
 class DataCollector:
-    """Collects and aggregates all student data from the LMS database."""
 
     def __init__(self, db: Session):
         self.db = db
@@ -89,9 +84,10 @@ class DataCollector:
         }
         return clean_data(result)
 
-    # ─── Personal Info (v4: fetches linkedin, github) ────
+    # ─── Personal Info ───────────────────────────────────
 
     def _get_personal_info(self, student_id: int) -> Dict[str, Any]:
+        # Basic query that always works
         try:
             row = self.db.execute(
                 text("""
@@ -99,9 +95,7 @@ class DataCollector:
                         u.id, u.full_name, u.email, u.phone,
                         u.profile_photo AS photo_url,
                         s.city, s.state, s.country,
-                        s.date_of_birth, s.enrollment_number, s.batch_id,
-                        s.linkedin AS linkedin_url,
-                        s.github AS github_url
+                        s.date_of_birth, s.enrollment_number, s.batch_id
                     FROM users u
                     LEFT JOIN students s ON s.user_id = u.id
                     WHERE u.id = :sid
@@ -117,34 +111,45 @@ class DataCollector:
             parts = (d.get("full_name") or "Student").split(" ", 1)
             d["first_name"] = parts[0]
             d["last_name"] = parts[1] if len(parts) > 1 else ""
+        except Exception as e:
+            logger.warning(f"personal_info basic query failed: {e}")
+            return {"first_name": "Student", "last_name": "", "email": ""}
 
-            # Try fetching resume_text if column exists
+        # All extra columns are on the USERS table (not students!)
+        users_columns = {
+            "linkedin": "linkedin_url",
+            "github": "github_url",
+            "portfolio": "portfolio_url",
+            "twitter": "twitter_url",
+            "resume_url": "resume_url",
+            "resume_name": "resume_name",
+            "bio": "about_me",
+            "skills": "skills",
+            "certifications": "certifications",
+            "education_level": "education_level",
+            "institution": "institution",
+            "graduation_year": "graduation_year",
+            "field_of_study": "field_of_study",
+            "work_experience_years": "work_experience_years",
+            "current_employer": "current_employer",
+            "current_designation": "current_designation",
+            "key_skills": "key_skills",
+            "career_goals": "career_goals",
+            "preferred_role": "preferred_role",
+        }
+
+        for db_col, key_name in users_columns.items():
             try:
-                resume_row = self.db.execute(
-                    text("SELECT resume_text FROM students WHERE user_id = :sid LIMIT 1"),
+                extra_row = self.db.execute(
+                    text(f"SELECT {db_col} FROM users WHERE id = :sid LIMIT 1"),
                     {"sid": student_id},
                 ).mappings().first()
-                if resume_row and resume_row.get("resume_text"):
-                    d["resume_text"] = resume_row["resume_text"]
+                if extra_row and extra_row.get(db_col):
+                    d[key_name] = extra_row[db_col]
             except Exception:
-                pass  # resume_text column doesn't exist, that's fine
+                pass  # Column doesn't exist — skip silently
 
-            # Try fetching extra profile fields if they exist
-            for col in ["about_me", "headline", "education", "degree", "university"]:
-                try:
-                    extra = self.db.execute(
-                        text(f"SELECT {col} FROM students WHERE user_id = :sid LIMIT 1"),
-                        {"sid": student_id},
-                    ).mappings().first()
-                    if extra and extra.get(col):
-                        d[col] = extra[col]
-                except Exception:
-                    pass  # column doesn't exist
-
-            return clean_data(d)
-        except Exception as e:
-            logger.warning(f"personal_info failed (student {student_id}): {e}")
-            return {"first_name": "Student", "last_name": "", "email": ""}
+        return clean_data(d)
 
     # ─── Courses & Enrollments ───────────────────────────
 
@@ -269,7 +274,7 @@ class DataCollector:
             logger.warning(f"quiz_scores failed: {e}")
             return []
 
-    # ─── Projects (v4: from DB if table exists) ──────────
+    # ─── Projects ────────────────────────────────────────
 
     def _get_projects(self, student_id: int) -> list:
         try:
@@ -288,7 +293,7 @@ class DataCollector:
             logger.info(f"projects table not found or empty: {e}")
             return []
 
-    # ─── Certifications (v4: from DB if table exists) ────
+    # ─── Certifications ──────────────────────────────────
 
     def _get_certifications(self, student_id: int) -> list:
         try:
@@ -307,7 +312,7 @@ class DataCollector:
             logger.info(f"certificates table not found or empty: {e}")
             return []
 
-    # ─── Personality — FIXED ─────────────────────────────
+    # ─── Personality ─────────────────────────────────────
 
     def _get_personality(self, student_id: int) -> Dict[str, Any]:
         try:
@@ -330,11 +335,9 @@ class DataCollector:
                         }
                 except (json.JSONDecodeError, TypeError):
                     pass
-
             return self._derive_personality(student_id)
-
         except Exception as e:
-            logger.info(f"psycho_result not available, deriving personality: {e}")
+            logger.info(f"psycho_result not available: {e}")
             return self._derive_personality(student_id)
 
     def _derive_personality(self, student_id: int) -> dict:
@@ -343,12 +346,6 @@ class DataCollector:
                 text("SELECT COUNT(*) AS cnt FROM quiz_attempts WHERE student_id = :sid"),
                 {"sid": student_id},
             ).mappings().first()
-
-            course_row = self.db.execute(
-                text("SELECT COUNT(*) AS cnt FROM enrollments WHERE student_id = :sid"),
-                {"sid": student_id},
-            ).mappings().first()
-
             case_row = self.db.execute(
                 text("""SELECT COUNT(*) AS cnt FROM case_study_submissions
                         WHERE student_id = :sid AND status IN ('graded','mentor_reviewed')"""),
@@ -356,30 +353,27 @@ class DataCollector:
             ).mappings().first()
 
             quizzes = int(quiz_row["cnt"]) if quiz_row else 0
-            courses = int(course_row["cnt"]) if course_row else 0
             cases = int(case_row["cnt"]) if case_row else 0
-            total_activity = quizzes + cases
+            total = quizzes + cases
 
-            if total_activity >= 15:
+            if total >= 15:
                 ptype, traits = "Strategic Achiever", "High-performer, Assessment-driven, Detail-oriented"
-                work_style = "Structured and goal-oriented"
-            elif total_activity >= 8:
+                ws = "Structured and goal-oriented"
+            elif total >= 8:
                 ptype, traits = "Analytical Strategist", "Methodical, Self-motivated, Consistent"
-                work_style = "Structured and methodical"
-            elif total_activity >= 3:
+                ws = "Structured and methodical"
+            elif total >= 3:
                 ptype, traits = "Active Learner", "Curious, Engaged, Growing"
-                work_style = "Self-paced with regular engagement"
-            elif total_activity >= 1:
+                ws = "Self-paced with regular engagement"
+            elif total >= 1:
                 ptype, traits = "Curious Explorer", "Self-initiated, Building foundations"
-                work_style = "Self-paced learning"
+                ws = "Self-paced learning"
             else:
                 ptype, traits = "Getting Started", "Enrolled and ready to learn"
-                work_style = "Self-paced"
+                ws = "Self-paced"
 
             return {
-                "personality_type": ptype,
-                "traits_json": traits,
-                "work_style": work_style,
+                "personality_type": ptype, "traits_json": traits, "work_style": ws,
                 "communication_profile": "Clear and concise",
                 "leadership_indicators": "Collaborative" if cases >= 2 else "Individual contributor",
             }
@@ -405,10 +399,8 @@ class DataCollector:
                 """),
                 {"sid": student_id},
             ).mappings().first()
-
             d = dict(row) if row else {}
-            total_seconds = d.get("total_watch_seconds", 0) or 0
-            d["total_minutes"] = round(float(total_seconds) / 60, 1)
+            d["total_minutes"] = round(float(d.get("total_watch_seconds", 0) or 0) / 60, 1)
             return clean_data(d)
         except Exception as e:
             logger.warning(f"platform_activity failed: {e}")
@@ -509,13 +501,10 @@ class DataCollector:
             improvement = round(second_half - first_half, 1)
 
         completed_courses = [c for c in courses if c.get("completion_status") == "completed"]
-
         overall = round(
             (avg_test * 0.30) + (avg_case * 0.30) + (avg_quiz * 0.15) +
-            (min(len(completed_courses), 10) * 2.5),
-            1,
+            (min(len(completed_courses), 10) * 2.5), 1,
         )
-
         total_hours = round(float(activity.get("total_minutes", 0)) / 60, 1)
 
         if len(all_pcts) > 2:
@@ -527,21 +516,14 @@ class DataCollector:
 
         return {
             "overall_score": min(overall, 100),
-            "best_test_score": best_test,
-            "avg_test_score": avg_test,
-            "total_tests": len(test_scores),
-            "total_case_studies": len(case_studies),
-            "avg_case_study_score": avg_case,
-            "best_case_study_score": best_case,
-            "total_assignments": len(assignments),
-            "total_quizzes": len(quiz_scores),
-            "avg_quiz_score": avg_quiz,
-            "total_courses": len(courses),
+            "best_test_score": best_test, "avg_test_score": avg_test,
+            "total_tests": len(test_scores), "total_case_studies": len(case_studies),
+            "avg_case_study_score": avg_case, "best_case_study_score": best_case,
+            "total_assignments": len(assignments), "total_quizzes": len(quiz_scores),
+            "avg_quiz_score": avg_quiz, "total_courses": len(courses),
             "completed_courses": len(completed_courses),
-            "subject_averages": subj_avgs,
-            "top_subjects": top_subjects,
-            "improvement_pct": improvement,
-            "total_hours": total_hours,
+            "subject_averages": subj_avgs, "top_subjects": top_subjects,
+            "improvement_pct": improvement, "total_hours": total_hours,
             "active_days": int(activity.get("active_days", 0) or 0),
             "lessons_watched": int(activity.get("lessons_watched", 0) or 0),
             "consistency_score": consistency,
