@@ -1,10 +1,8 @@
 """
-Data Collector Service — v5 FIXED
+Data Collector Service — v4 FIXED
 ═════════════════════════════════
 - linkedin, github, resume_url are on USERS table (not students)
 - Tries each extra column individually — never crashes
-- NEW: Extracts structured education & work from LMS profile fields
-- NEW: Returns lms_education and lms_work_experience as structured data
 """
 
 from sqlalchemy.orm import Session
@@ -68,10 +66,6 @@ class DataCollector:
             forum_activity=forum_activity,
         )
 
-        # ── NEW: Extract structured education & work from LMS fields ──
-        lms_education = self._build_lms_education(personal)
-        lms_work_experience = self._build_lms_work_experience(personal)
-
         result = {
             "student_id": student_id,
             "personal": personal,
@@ -87,54 +81,13 @@ class DataCollector:
             "forum_activity": forum_activity,
             "batch_info": batch_info,
             "computed": computed,
-            "lms_education": lms_education,
-            "lms_work_experience": lms_work_experience,
         }
         return clean_data(result)
-
-    # ─── NEW: Build structured education from LMS profile fields ──
-
-    def _build_lms_education(self, personal: Dict) -> List[Dict]:
-        """Convert LMS profile fields into structured education entries."""
-        education = []
-        edu_level = personal.get("education_level", "") or ""
-        institution = personal.get("institution", "") or ""
-        grad_year = personal.get("graduation_year", "") or ""
-        field = personal.get("field_of_study", "") or ""
-
-        if edu_level or institution:
-            education.append({
-                "degree": edu_level or "Degree",
-                "institution": institution,
-                "year": str(grad_year) if grad_year else "",
-                "field_of_study": field,
-                "percentage": "",
-                "source": "lms_profile",
-            })
-        return education
-
-    # ─── NEW: Build structured work experience from LMS profile fields ──
-
-    def _build_lms_work_experience(self, personal: Dict) -> List[Dict]:
-        """Convert LMS profile fields into structured work experience entries."""
-        work = []
-        employer = personal.get("current_employer", "") or ""
-        designation = personal.get("current_designation", "") or ""
-        years = personal.get("work_experience_years", "") or ""
-
-        if employer or designation:
-            work.append({
-                "title": designation or "Professional",
-                "company": employer,
-                "duration": f"{years} years" if years else "",
-                "description": "",
-                "source": "lms_profile",
-            })
-        return work
 
     # ─── Personal Info ───────────────────────────────────
 
     def _get_personal_info(self, student_id: int) -> Dict[str, Any]:
+        # Basic query that always works
         try:
             row = self.db.execute(
                 text("""
@@ -162,6 +115,7 @@ class DataCollector:
             logger.warning(f"personal_info basic query failed: {e}")
             return {"first_name": "Student", "last_name": "", "email": ""}
 
+        # All extra columns are on the USERS table (not students!)
         users_columns = {
             "linkedin": "linkedin_url",
             "github": "github_url",
@@ -193,7 +147,7 @@ class DataCollector:
                 if extra_row and extra_row.get(db_col):
                     d[key_name] = extra_row[db_col]
             except Exception:
-                pass
+                pass  # Column doesn't exist — skip silently
 
         return clean_data(d)
 
@@ -221,6 +175,8 @@ class DataCollector:
             logger.warning(f"courses failed: {e}")
             return []
 
+    # ─── Exam/Test Scores ────────────────────────────────
+
     def _get_test_scores(self, student_id: int) -> List[Dict]:
         try:
             rows = self.db.execute(
@@ -242,6 +198,8 @@ class DataCollector:
         except Exception as e:
             logger.warning(f"test_scores failed: {e}")
             return []
+
+    # ─── Case Studies ────────────────────────────────────
 
     def _get_case_studies(self, student_id: int) -> List[Dict]:
         try:
@@ -269,6 +227,8 @@ class DataCollector:
             logger.warning(f"case_studies failed: {e}")
             return []
 
+    # ─── Assignments ─────────────────────────────────────
+
     def _get_assignments(self, student_id: int) -> List[Dict]:
         try:
             rows = self.db.execute(
@@ -291,6 +251,8 @@ class DataCollector:
             logger.warning(f"assignments failed: {e}")
             return []
 
+    # ─── Quiz Scores ─────────────────────────────────────
+
     def _get_quiz_scores(self, student_id: int) -> List[Dict]:
         try:
             rows = self.db.execute(
@@ -312,6 +274,8 @@ class DataCollector:
             logger.warning(f"quiz_scores failed: {e}")
             return []
 
+    # ─── Projects ────────────────────────────────────────
+
     def _get_projects(self, student_id: int) -> list:
         try:
             rows = self.db.execute(
@@ -329,6 +293,8 @@ class DataCollector:
             logger.info(f"projects table not found or empty: {e}")
             return []
 
+    # ─── Certifications ──────────────────────────────────
+
     def _get_certifications(self, student_id: int) -> list:
         try:
             rows = self.db.execute(
@@ -345,6 +311,8 @@ class DataCollector:
         except Exception as e:
             logger.info(f"certificates table not found or empty: {e}")
             return []
+
+    # ─── Personality ─────────────────────────────────────
 
     def _get_personality(self, student_id: int) -> Dict[str, Any]:
         try:
@@ -414,6 +382,8 @@ class DataCollector:
             return {"personality_type": "", "traits_json": "", "work_style": "",
                     "communication_profile": "", "leadership_indicators": ""}
 
+    # ─── Platform Activity ───────────────────────────────
+
     def _get_platform_activity(self, student_id: int) -> Dict[str, Any]:
         try:
             row = self.db.execute(
@@ -435,6 +405,8 @@ class DataCollector:
         except Exception as e:
             logger.warning(f"platform_activity failed: {e}")
             return {"total_minutes": 0, "active_days": 0, "lessons_watched": 0}
+
+    # ─── Forum Activity ──────────────────────────────────
 
     def _get_forum_activity(self, student_id: int) -> Dict[str, Any]:
         try:
@@ -459,6 +431,8 @@ class DataCollector:
             logger.warning(f"forum_activity failed: {e}")
             return {"threads_created": 0, "replies_given": 0, "answers_accepted": 0}
 
+    # ─── Batch Info ──────────────────────────────────────
+
     def _get_batch_info(self, student_id: int) -> Dict[str, Any]:
         try:
             row = self.db.execute(
@@ -475,6 +449,8 @@ class DataCollector:
         except Exception as e:
             logger.warning(f"batch_info failed: {e}")
             return {}
+
+    # ─── Computed Metrics ────────────────────────────────
 
     def _compute_metrics(self, **data) -> Dict[str, Any]:
         test_scores = data.get("test_scores", [])

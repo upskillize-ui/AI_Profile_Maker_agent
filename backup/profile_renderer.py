@@ -1,8 +1,8 @@
 """
-Profile Renderer v5
+Profile Renderer v4
 ═══════════════════
-Passes ALL v5 data to the template: achievements, role matches,
-ATS score, education, work experience, GitHub profile, LinkedIn.
+Passes ALL v4 data to the template: achievements, role matches,
+ATS score, education, work experience, GitHub profile.
 Template variables match the new profile_template.html exactly.
 """
 
@@ -33,73 +33,67 @@ class ProfileRenderer:
         personal = student_data.get("personal", {})
         agent_base = os.environ.get("BASE_URL", "https://upskill25-ai-enhancer.hf.space")
 
-        # Build location string
-        location_parts = [personal.get("city", ""), personal.get("state", ""), personal.get("country", "")]
-        location = ", ".join([p for p in location_parts if p])
-
         context = {
             # Student info
             "student_name": (personal.get("full_name") or "Student").strip(),
             "student_email": personal.get("email", ""),
             "student_photo_url": personal.get("photo_url", ""),
-            "student_phone": personal.get("phone", ""),
-            "student_location": location,
             "linkedin_url": personal.get("linkedin_url", ""),
             "github_url": personal.get("github_url", ""),
             "portfolio_url": personal.get("portfolio_url", ""),
 
-            # v5: Headline from LinkedIn/resume/role matcher
-            "headline": profile_data.get("headline", "Professional"),
+            # v4: Headline from role matcher (not course names)
+            "headline": profile_data.get("headline", "Financial Services Professional"),
 
-            # v5: Professional summary (AI-generated or template)
+            # v4: Professional summary (AI-generated or template)
             "professional_summary": profile_data.get("professional_summary", ""),
 
-            # v5: Skills (merged from LMS + resume + GitHub + LinkedIn)
+            # v4: Skills (merged from LMS + resume + GitHub)
             "skills_data": profile_data.get("skills_data", {}),
 
-            # v5: Performance metrics
+            # v4: Performance metrics
             "performance_data": profile_data.get("performance_data", {}),
 
-            # v5: Top achievements
+            # v4: Top achievements (reframed from real data)
             "top_achievements": profile_data.get("top_achievements", []),
 
-            # v5: Case study highlights
+            # v4: Case study highlights (reframed professionally)
             "case_study_highlights": profile_data.get("case_study_highlights", []),
 
-            # v5: Test highlights
+            # v4: Test highlights (reframed professionally)
             "test_highlights": profile_data.get("test_highlights", []),
 
-            # v5: Role matches
+            # v4: Role matches (eligible job roles)
             "role_matches": profile_data.get("role_matches", []),
 
-            # v5: ATS score data
+            # v4: ATS score data
             "ats_data": profile_data.get("ats_data", {}),
             "ats_keywords": profile_data.get("ats_keywords", []),
 
-            # v5: Personality
+            # v4: Personality from psychometric
             "personality_data": profile_data.get("personality_data", {}),
 
-            # v5: Statements
+            # v4: Statements (growth, consistency, engagement)
             "growth_statement": profile_data.get("growth_statement", ""),
             "consistency_statement": profile_data.get("consistency_statement", ""),
             "engagement_statement": profile_data.get("engagement_statement", ""),
 
-            # v5: Education (from resume > LinkedIn > LMS fields)
+            # v4: Education (from resume)
             "education_data": profile_data.get("education_data", []),
 
-            # v5: Work experience (from resume > LinkedIn > LMS fields)
+            # v4: Work experience (from resume)
             "work_experience": profile_data.get("work_experience", []),
 
-            # v5: Projects (merged LMS + resume + GitHub)
+            # v4: Projects (merged LMS + resume + GitHub)
             "projects_data": profile_data.get("projects_data", []),
 
-            # v5: GitHub profile
+            # v4: GitHub profile
             "github_profile": profile_data.get("github_profile", {}),
 
-            # v5: Certifications (merged)
+            # v4: Certifications (merged)
             "certifications_data": profile_data.get("certifications_data", []),
 
-            # Courses
+            # Courses (for the courses section if kept)
             "courses": student_data.get("courses", []),
 
             # Data sources used

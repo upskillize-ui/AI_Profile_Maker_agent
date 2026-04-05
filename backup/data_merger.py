@@ -1,15 +1,10 @@
 """
-Data Merger v5
+Data Merger v4
 ══════════════
-Merges data from ALL sources into one unified student profile.
-Priority for skills: Resume > LinkedIn > GitHub > LMS
-Priority for scores: LMS (verified) > everything else
-Priority for education/work: Resume > LinkedIn > LMS profile fields
-
-NEW in v5:
-- Merges LinkedIn data (headline, summary, experience, education, skills)
-- Uses LMS profile fields as structured education/work fallback
-- Never leaves education or work_experience empty if data exists anywhere
+Merges data from all sources into one unified student profile.
+Priority: Resume > GitHub > LMS (for skills/experience)
+Priority: LMS > Resume (for verified scores/assessments)
+Deduplicates skills and takes highest confidence score.
 """
 
 import logging
@@ -20,20 +15,12 @@ logger = logging.getLogger(__name__)
 
 class DataMerger:
 
-    def merge(
-        self,
-        lms_data: Dict,
-        resume_data: Dict = None,
-        github_data: Dict = None,
-        linkedin_data: Dict = None,
-    ) -> Dict[str, Any]:
+    def merge(self, lms_data: Dict, resume_data: Dict = None, github_data: Dict = None) -> Dict[str, Any]:
         """Merge all sources into unified student profile."""
         if not resume_data:
             resume_data = {}
         if not github_data:
             github_data = {}
-        if not linkedin_data:
-            linkedin_data = {}
 
         merged = dict(lms_data)  # Start with LMS as base
 
@@ -54,14 +41,6 @@ class DataMerger:
         if resume_data.get("summary"):
             personal["resume_summary"] = resume_data["summary"]
 
-        # ── Enrich from LinkedIn ──
-        if linkedin_data.get("headline") and not personal.get("resume_headline"):
-            personal["linkedin_headline"] = linkedin_data["headline"]
-        if linkedin_data.get("summary"):
-            personal["linkedin_summary"] = linkedin_data["summary"]
-        if linkedin_data.get("profile_url") and not personal.get("linkedin_url"):
-            personal["linkedin_url"] = linkedin_data["profile_url"]
-
         # GitHub avatar as fallback photo
         if github_data.get("avatar_url") and not personal.get("photo_url"):
             personal["photo_url"] = github_data["avatar_url"]
@@ -70,52 +49,11 @@ class DataMerger:
 
         merged["personal"] = personal
 
-        # ══════════════════════════════════════════════════
-        # EDUCATION — cascading: Resume > LinkedIn > LMS fields
-        # ══════════════════════════════════════════════════
-        education = resume_data.get("education", [])
+        # ── Education (from resume — LMS doesn't have this) ──
+        merged["education"] = resume_data.get("education", [])
 
-        # If resume had no education, try LinkedIn
-        if not education and linkedin_data.get("education"):
-            education = []
-            for edu in linkedin_data["education"]:
-                education.append({
-                    "degree": edu.get("degree", ""),
-                    "institution": edu.get("institution", ""),
-                    "year": edu.get("year", ""),
-                    "field_of_study": edu.get("field_of_study", ""),
-                    "percentage": "",
-                    "source": "linkedin",
-                })
-
-        # If still no education, use LMS profile fields
-        if not education:
-            education = lms_data.get("lms_education", [])
-
-        merged["education"] = education
-
-        # ══════════════════════════════════════════════════
-        # WORK EXPERIENCE — cascading: Resume > LinkedIn > LMS fields
-        # ══════════════════════════════════════════════════
-        work_experience = resume_data.get("work_experience", [])
-
-        # If resume had no work experience, try LinkedIn
-        if not work_experience and linkedin_data.get("experience"):
-            work_experience = []
-            for exp in linkedin_data["experience"]:
-                work_experience.append({
-                    "title": exp.get("title", ""),
-                    "company": exp.get("company", ""),
-                    "duration": exp.get("duration", ""),
-                    "description": exp.get("description", ""),
-                    "source": "linkedin",
-                })
-
-        # If still no work experience, use LMS profile fields
-        if not work_experience:
-            work_experience = lms_data.get("lms_work_experience", [])
-
-        merged["work_experience"] = work_experience
+        # ── Work Experience (from resume — LMS doesn't have this) ──
+        merged["work_experience"] = resume_data.get("work_experience", [])
 
         # ── Projects (merge LMS + resume + GitHub) ──
         projects = list(merged.get("projects", []))
@@ -143,7 +81,7 @@ class DataMerger:
 
         merged["projects"] = self._dedupe_projects(projects)
 
-        # ── Certifications (merge LMS + resume + LinkedIn) ──
+        # ── Certifications (merge LMS + resume) ──
         certs = list(merged.get("certifications", []))
         for c in resume_data.get("certifications", []):
             certs.append({
@@ -152,13 +90,6 @@ class DataMerger:
                 "issued_at": c.get("year", ""),
                 "source": "resume",
             })
-        for c in linkedin_data.get("certifications", []):
-            certs.append({
-                "certificate_name": c.get("name", "") or c.get("certificate_name", ""),
-                "course_name": c.get("issuer", "") or c.get("course_name", ""),
-                "issued_at": c.get("year", "") or c.get("issued_at", ""),
-                "source": "linkedin",
-            })
         merged["certifications"] = self._dedupe_certs(certs)
 
         # ── All skills from all sources ──
@@ -166,8 +97,6 @@ class DataMerger:
             lms_skills=merged.get("computed", {}),
             resume_skills=resume_data,
             github_skills=github_data.get("technical_skills", []),
-            linkedin_skills=linkedin_data.get("skills", []),
-            personal=personal,
         )
 
         # ── GitHub profile data ──
@@ -188,30 +117,12 @@ class DataMerger:
             sources.append("resume")
         if github_data.get("_source") and github_data["_source"] != "empty":
             sources.append("github")
-        if linkedin_data.get("_source") and linkedin_data["_source"] not in ("empty", "linkedin_url_only"):
-            sources.append("linkedin")
-        # Also track if LMS profile fields contributed
-        if lms_data.get("lms_education") or lms_data.get("lms_work_experience"):
-            if "lms_profile" not in sources:
-                sources.append("lms_profile")
         merged["data_sources"] = sources
 
         return merged
 
-    def _merge_skills(
-        self,
-        lms_skills: Dict,
-        resume_skills: Dict,
-        github_skills: list,
-        linkedin_skills: list = None,
-        personal: Dict = None,
-    ) -> Dict[str, List]:
+    def _merge_skills(self, lms_skills: Dict, resume_skills: Dict, github_skills: List) -> Dict[str, List]:
         """Merge skills from all sources, deduplicate, keep highest score."""
-        if linkedin_skills is None:
-            linkedin_skills = []
-        if personal is None:
-            personal = {}
-
         all_technical = {}
         all_tools = {}
         all_soft = {}
@@ -248,40 +159,6 @@ class DataMerger:
                     "source": "resume",
                 }
 
-        # From LinkedIn skills
-        for skill in linkedin_skills:
-            name = skill if isinstance(skill, str) else skill.get("name", "")
-            if name:
-                key = name.lower()
-                if key in all_technical:
-                    # Boost — confirmed on both resume and LinkedIn
-                    all_technical[key]["score"] = min(90, all_technical[key]["score"] + 10)
-                    all_technical[key]["evidence"] += " + LinkedIn"
-                else:
-                    all_technical[key] = {
-                        "name": name,
-                        "score": 60,
-                        "evidence": "Listed on LinkedIn",
-                        "source": "linkedin",
-                    }
-
-        # From LMS profile key_skills field
-        lms_key_skills = personal.get("key_skills", "") or personal.get("skills", "") or ""
-        if lms_key_skills:
-            skill_list = [s.strip() for s in lms_key_skills.replace(";", ",").split(",") if s.strip()]
-            for name in skill_list:
-                key = name.lower()
-                if key in all_technical:
-                    all_technical[key]["score"] = min(90, all_technical[key]["score"] + 5)
-                    all_technical[key]["evidence"] += " + LMS profile"
-                else:
-                    all_technical[key] = {
-                        "name": name,
-                        "score": 55,
-                        "evidence": "Listed on LMS profile",
-                        "source": "lms_profile",
-                    }
-
         # From GitHub (real evidence)
         for skill in github_skills:
             if isinstance(skill, dict):
@@ -289,6 +166,7 @@ class DataMerger:
                 key = name.lower()
                 score = skill.get("score", 60)
                 if key in all_technical:
+                    # Boost score — skill confirmed by both resume AND GitHub
                     all_technical[key]["score"] = min(95, max(all_technical[key]["score"], score) + 10)
                     all_technical[key]["evidence"] += " + Verified on GitHub"
                 else:
@@ -321,6 +199,7 @@ class DataMerger:
         }
 
     def _dedupe_projects(self, projects: List[Dict]) -> List[Dict]:
+        """Deduplicate projects by title similarity."""
         seen = set()
         unique = []
         for p in projects:
@@ -331,6 +210,7 @@ class DataMerger:
         return unique[:8]
 
     def _dedupe_certs(self, certs: List[Dict]) -> List[Dict]:
+        """Deduplicate certifications."""
         seen = set()
         unique = []
         for c in certs:

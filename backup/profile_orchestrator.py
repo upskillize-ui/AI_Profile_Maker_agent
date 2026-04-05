@@ -1,11 +1,9 @@
 """
-Profile Orchestrator v5 — FIXED
+Profile Orchestrator v4 — FIXED
 ════════════════════════════════
 - Handles resume_url (downloads PDF) AND resume_text
 - Fetches GitHub data in parallel
-- NEW: Fetches LinkedIn data in parallel
-- NEW: Uses LMS profile fields as structured education/work fallback
-- Merges ALL sources before generating
+- Merges all sources before generating
 """
 
 import asyncio
@@ -19,7 +17,6 @@ from app.agents.achievement_engine import AchievementEngine
 from app.agents.role_matcher import RoleMatcher
 from app.services.resume_parser import ResumeParser
 from app.services.github_fetcher import GitHubFetcher
-from app.services.linkedin_fetcher import LinkedInFetcher
 from app.services.data_merger import DataMerger
 from app.config import get_settings
 
@@ -36,7 +33,6 @@ class ProfileOrchestrator:
         self.role_matcher = RoleMatcher()
         self.resume_parser = ResumeParser()
         self.github_fetcher = GitHubFetcher()
-        self.linkedin_fetcher = LinkedInFetcher()
         self.data_merger = DataMerger()
 
     async def generate_profile(self, student_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -64,18 +60,15 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
 """
 
         github_url = personal.get("github_url") or ""
-        linkedin_url = personal.get("linkedin_url") or ""
 
         # ── Step 2: Fetch external data (parallel) ──
-        resume_data, github_data, linkedin_data = {}, {}, {}
+        resume_data, github_data = {}, {}
         try:
             tasks = []
             if resume_text:
                 tasks.append(("resume", self.resume_parser.parse(resume_text)))
             if github_url:
                 tasks.append(("github", self.github_fetcher.fetch(github_url)))
-            if linkedin_url:
-                tasks.append(("linkedin", self.linkedin_fetcher.fetch(linkedin_url)))
 
             if tasks:
                 results = await asyncio.gather(
@@ -89,15 +82,11 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
                         resume_data = results[i]
                     elif name == "github":
                         github_data = results[i]
-                    elif name == "linkedin":
-                        linkedin_data = results[i]
         except Exception as e:
             logger.warning(f"External data fetch failed: {e}")
 
-        # ── Step 3: Merge all data sources (now includes LinkedIn) ──
-        merged_data = self.data_merger.merge(
-            student_data, resume_data, github_data, linkedin_data
-        )
+        # ── Step 3: Merge all data sources ──
+        merged_data = self.data_merger.merge(student_data, resume_data, github_data)
 
         # ── Step 4: Generate AI summary + rule-based skills (parallel) ──
         summary, skills = await asyncio.gather(
@@ -137,13 +126,10 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
         # ── Step 7: Achievement engine ──
         achievements = self.achievement_engine.generate_all(merged_data, role_matches)
 
-        # ── Step 8: Build headline from LinkedIn/resume/role matches ──
-        headline = self._build_headline(personal, achievements, linkedin_data, resume_data)
-
         return {
             "professional_summary": summary,
             "skills_data": skills,
-            "headline": headline,
+            "headline": achievements.get("headline", "Financial Services Professional"),
             "top_achievements": achievements.get("top_achievements", []),
             "case_study_highlights": achievements.get("case_study_highlights", []),
             "test_highlights": achievements.get("test_highlights", []),
@@ -168,39 +154,8 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
             "ats_keywords": skills.get("ats_keywords", []) if isinstance(skills, dict) else [],
             "data_sources": merged_data.get("data_sources", ["lms"]),
             "generation_time_seconds": round(time.time() - start, 2),
-            "ai_model_used": "claude-haiku-4-5-20251001" if self.summary_agent.has_api else "rule-based-v5",
+            "ai_model_used": "claude-haiku-4-5-20251001" if self.summary_agent.has_api else "rule-based-v4",
         }
-
-    def _build_headline(self, personal, achievements, linkedin_data, resume_data):
-        """Build headline from best available source.
-        Priority: LinkedIn headline > Resume headline > Achievement engine > Generic
-        """
-        # 1. LinkedIn headline (e.g. "Aspiring Business Analyst | B.Com...")
-        li_headline = (linkedin_data or {}).get("headline", "")
-        if li_headline and len(li_headline) > 10:
-            return li_headline
-
-        # 2. Resume headline
-        resume_headline = personal.get("resume_headline", "")
-        if resume_headline and len(resume_headline) > 10:
-            return resume_headline
-
-        # 3. LMS designation + education
-        designation = personal.get("current_designation", "")
-        edu = personal.get("education_level", "")
-        if designation:
-            parts = [designation]
-            if edu:
-                parts.append(edu)
-            return " | ".join(parts)
-
-        # 4. Achievement engine headline
-        ach_headline = achievements.get("headline", "")
-        if ach_headline and "Financial Services" not in ach_headline:
-            return ach_headline
-
-        # 5. Fallback
-        return ach_headline or "Professional"
 
     async def _download_resume(self, url: str) -> str:
         """Download resume PDF from URL and extract text."""
@@ -212,6 +167,7 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
                     logger.warning(f"Resume download failed: HTTP {resp.status_code}")
                     return ""
 
+                # Save to temp file and extract text
                 import tempfile
                 import os
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
@@ -219,6 +175,7 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
                     tmp_path = f.name
 
                 try:
+                    # Try PyPDF2 first
                     try:
                         from PyPDF2 import PdfReader
                         reader = PdfReader(tmp_path)
@@ -229,6 +186,7 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
                     except ImportError:
                         pass
 
+                    # Try pdfplumber
                     try:
                         import pdfplumber
                         with pdfplumber.open(tmp_path) as pdf:
@@ -239,6 +197,7 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
                     except ImportError:
                         pass
 
+                    # Try pdfminer
                     try:
                         from pdfminer.high_level import extract_text as pdfminer_extract
                         text = pdfminer_extract(tmp_path)
@@ -248,7 +207,7 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
                     except ImportError:
                         pass
 
-                    logger.warning("No PDF extraction library available")
+                    logger.warning("No PDF extraction library available (install PyPDF2, pdfplumber, or pdfminer)")
                     return ""
                 finally:
                     os.unlink(tmp_path)
@@ -317,31 +276,7 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
 
     def _emergency_summary(self, d: Dict) -> str:
         name = (d.get("personal", {}).get("full_name") or "Student").strip()
-        # Try to use LinkedIn/resume headline for emergency summary
-        personal = d.get("personal", {})
-        headline = personal.get("linkedin_headline", "") or personal.get("resume_headline", "") or personal.get("current_designation", "")
-
-        edu = d.get("education", [])
-        edu_str = ""
-        if edu:
-            degree = edu[0].get("degree", "")
-            inst = edu[0].get("institution", "")
-            if degree and inst:
-                edu_str = f", a {degree} graduate from {inst}"
-            elif degree:
-                edu_str = f", a {degree} graduate"
-
-        work = d.get("work_experience", [])
-        work_str = ""
-        if work:
-            title = work[0].get("title", "")
-            company = work[0].get("company", "")
-            if title and company:
-                work_str = f" with experience as {title} at {company}"
-            elif title:
-                work_str = f" with experience as {title}"
-
+        headline = d.get("personal", {}).get("current_designation", "")
         if headline:
-            return f"{name}{edu_str}{work_str}. {headline}. Building professional expertise through structured learning and hands-on projects."
-
-        return f"{name}{edu_str}{work_str}. Building professional expertise through verified coursework, assessments, and hands-on projects."
+            return f"{name} — {headline}. Building professional expertise through structured learning and hands-on projects."
+        return f"{name} is building their professional profile through verified coursework and assessments."

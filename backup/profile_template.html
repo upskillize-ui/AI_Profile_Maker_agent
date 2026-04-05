@@ -46,7 +46,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
 .rh{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .rt{font-size:15px;font-weight:600}
 .rcat{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600}
-.rcat.banking{background:#DBEAFE;color:#1E40AF}.rcat.fintech{background:#E0E7FF;color:#3730A3}.rcat.risk{background:#FEF3C7;color:#92400E}.rcat.technology{background:#D1FAE5;color:#065F46}.rcat.insurance{background:#FCE7F3;color:#9D174D}.rcat.analytics{background:#EDE9FE;color:#5B21B6}.rcat.design{background:#FCE7F3;color:#9D174D}
+.rcat.banking{background:#DBEAFE;color:#1E40AF}.rcat.fintech{background:#E0E7FF;color:#3730A3}.rcat.risk{background:#FEF3C7;color:#92400E}.rcat.technology{background:#D1FAE5;color:#065F46}.rcat.insurance{background:#FCE7F3;color:#9D174D}
 .mmb{height:8px;background:var(--lt);border-radius:4px;overflow:hidden;margin-bottom:8px}
 .mmb .f{height:100%;border-radius:4px}
 .mp{font-family:'DM Serif Display',serif;font-size:22px}
@@ -79,41 +79,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
 .ti:last-child{border-bottom:none}
 .tic{width:24px;height:24px;border-radius:6px;background:var(--al);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;color:var(--a2)}
 
-/* Education & Work cards */
-.edu-card,.work-card{padding:16px;border-left:3px solid var(--a2);background:var(--lt);border-radius:0 10px 10px 0;margin-bottom:12px}
-.edu-card:last-child,.work-card:last-child{margin-bottom:0}
-.edu-card .edu-degree,.work-card .work-title{font-size:15px;font-weight:600;color:var(--t);margin-bottom:2px}
-.edu-card .edu-inst,.work-card .work-company{font-size:14px;color:var(--a2);font-weight:500;margin-bottom:2px}
-.edu-card .edu-meta,.work-card .work-meta{font-size:12px;color:var(--m);display:flex;gap:12px;flex-wrap:wrap;margin-top:4px}
-.work-card .work-desc{font-size:13px;color:#374151;margin-top:8px;line-height:1.6}
-.work-card{border-left-color:var(--g)}
-
-/* Project cards */
-.proj-card{padding:16px;border:1px solid var(--b);border-radius:10px;margin-bottom:12px}
-.proj-card .proj-title{font-size:14px;font-weight:600;margin-bottom:4px}
-.proj-card .proj-desc{font-size:13px;color:var(--m);line-height:1.5;margin-bottom:8px}
-.proj-card .proj-tech{display:flex;flex-wrap:wrap;gap:4px}
-.proj-card .proj-tech span{font-size:11px;padding:2px 8px;border-radius:4px;background:var(--al);color:var(--a2);font-weight:500}
-.proj-card .proj-source{font-size:11px;color:var(--m);margin-top:6px;font-style:italic}
-.proj-card .proj-links{margin-top:8px;display:flex;gap:8px}
-.proj-card .proj-links a{font-size:12px;color:var(--a2);text-decoration:none;font-weight:500}
-
-/* Cert cards */
-.cert-card{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--lt)}
-.cert-card:last-child{border-bottom:none}
-.cert-badge{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--al),#DBEAFE);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
-.cert-name{font-size:14px;font-weight:600;margin-bottom:2px}
-.cert-issuer{font-size:12px;color:var(--m)}
-
-/* Data source badges */
-.ds-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;justify-content:center}
-.ds-badges span{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500}
-.ds-badges .ds-lms{background:#DBEAFE;color:#1E40AF}
-.ds-badges .ds-resume{background:#D1FAE5;color:#065F46}
-.ds-badges .ds-github{background:#F3F4F6;color:#374151}
-.ds-badges .ds-linkedin{background:#DBEAFE;color:#1D4ED8}
-.ds-badges .ds-lms_profile{background:#EDE9FE;color:#5B21B6}
-
 .nd{background:linear-gradient(135deg,var(--al),#F0F9FF);border:1px solid #BFDBFE;border-radius:var(--r);padding:20px;margin-bottom:20px}
 .nd h3{font-size:15px;font-weight:600;color:var(--a);margin-bottom:8px}
 .nd p{font-size:13px;color:#374151;line-height:1.6}
@@ -132,14 +97,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
 <body>
 <div class="c">
 
-<!-- HERO -->
+<!-- HERO — shows name + eligible job roles, NOT course names -->
 <div class="hero">
   <div class="hg">
     <div class="av">{% if student_photo_url %}<img src="{{ student_photo_url }}" alt="">{% else %}{{ (student_name or 'S')[0] | upper }}{% endif %}</div>
     <div class="hi">
       <h1>{{ student_name or 'Student' }}</h1>
-      <div class="hl">{{ headline or 'Professional' }}</div>
-      {% if student_email %}<div class="loc">{{ student_email }}{% if student_location %} · {{ student_location }}{% endif %}</div>{% endif %}
+      <div class="hl">{{ headline or 'Financial Services Professional' }}</div>
+      {% if student_email %}<div class="loc">{{ student_email }}</div>{% endif %}
       <div class="hl2">
         {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank">LinkedIn</a>{% endif %}
         {% if github_url %}<a href="{{ github_url }}" target="_blank">GitHub</a>{% endif %}
@@ -147,76 +112,35 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
         <a href="{{ profile_url or '#' }}">Share Profile</a>
       </div>
     </div>
-    {% if ats_data and ats_data.total_score and ats_data.total_score > 0 %}<div class="ab"><div class="sc" style="color:{% if ats_data.total_score >= 70 %}var(--g){% elif ats_data.total_score >= 40 %}var(--am){% else %}var(--m){% endif %}">{{ ats_data.total_score }}</div><div class="lb">ATS Score</div></div>{% endif %}
+    {% if ats_data %}<div class="ab"><div class="sc" style="color:{% if ats_data.total_score >= 70 %}var(--g){% elif ats_data.total_score >= 40 %}var(--am){% else %}var(--m){% endif %}">{{ ats_data.total_score }}</div><div class="lb">ATS Score</div></div>{% endif %}
   </div>
 </div>
 
-<!-- METRICS — only show if there are actual scores -->
-{% set total_assessments = (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) + (performance_data.total_case_studies or 0) %}
-{% if total_assessments > 0 %}
+<!-- METRICS — show only meaningful numbers -->
 <div class="ms">
-  {% if performance_data and performance_data.overall_score and performance_data.overall_score > 0 %}
-  <div class="mc hl"><div class="v">{{ "%.0f"|format(performance_data.overall_score) }}%</div><div class="l">Overall</div></div>
+  {% if performance_data and performance_data.overall_score > 0 %}
+  <div class="mc {% if performance_data.overall_score > 60 %}hl{% endif %}"><div class="v">{{ "%.1f"|format(performance_data.overall_score) }}%</div><div class="l">Overall Score</div></div>
   {% endif %}
-  {% if performance_data and performance_data.best_test_score and performance_data.best_test_score > 0 %}
-  <div class="mc"><div class="v">{{ "%.0f"|format(performance_data.best_test_score) }}%</div><div class="l">Best Score</div></div>
+  <div class="mc"><div class="v">{{ (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) + (performance_data.total_case_studies or 0) if performance_data else 0 }}</div><div class="l">Assessments</div></div>
+  {% if performance_data and performance_data.best_test_score > 0 %}
+  <div class="mc hl"><div class="v">{{ "%.0f"|format(performance_data.best_test_score) }}%</div><div class="l">Best Score</div></div>
   {% endif %}
-  {% if performance_data and performance_data.completed_courses and performance_data.completed_courses > 0 %}
-  <div class="mc"><div class="v">{{ performance_data.completed_courses }}</div><div class="l">Certified</div></div>
+  {% if performance_data and performance_data.total_hours > 0 %}
+  <div class="mc"><div class="v">{{ "%.1f"|format(performance_data.total_hours) }}h</div><div class="l">Learning</div></div>
   {% endif %}
-  {% if performance_data and performance_data.total_hours and performance_data.total_hours > 0 %}
-  <div class="mc"><div class="v">{{ "%.0f"|format(performance_data.total_hours) }}h</div><div class="l">Training</div></div>
+  {% if performance_data and performance_data.improvement_pct > 0 %}
+  <div class="mc hl"><div class="v">+{{ "%.1f"|format(performance_data.improvement_pct) }}%</div><div class="l">Growth</div></div>
   {% endif %}
-  {% if total_assessments > 0 %}
-  <div class="mc"><div class="v">{{ total_assessments }}</div><div class="l">Assessments</div></div>
-  {% endif %}
-  {% if performance_data and performance_data.consistency_score and performance_data.consistency_score > 0 and total_assessments > 2 %}
+  {% if performance_data and performance_data.consistency_score and performance_data.consistency_score > 0 and (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) > 2 %}
   <div class="mc"><div class="v">{{ "%.0f"|format(performance_data.consistency_score) }}%</div><div class="l">Consistency</div></div>
   {% endif %}
 </div>
-{% endif %}
 
 <!-- SUMMARY -->
 <div class="s"><div class="st"><span class="ic" style="background:var(--al);color:var(--a2)">✦</span> Professional Summary</div>
 <p class="stx">{{ professional_summary or 'Professional summary will appear once profile data is available.' }}</p>
 {% if growth_statement %}<p class="stx" style="margin-top:12px;color:var(--g);font-style:italic">{{ growth_statement }}</p>{% endif %}
 </div>
-
-<!-- ═══════════════════════════════════════════ -->
-<!-- EDUCATION — from resume > LinkedIn > LMS    -->
-<!-- ═══════════════════════════════════════════ -->
-{% if education_data and education_data|length > 0 %}
-<div class="s"><div class="st"><span class="ic" style="background:var(--al);color:var(--a2)">🎓</span> Education</div>
-{% for edu in education_data %}
-<div class="edu-card">
-  <div class="edu-degree">{{ edu.degree }}{% if edu.field_of_study %} — {{ edu.field_of_study }}{% endif %}</div>
-  {% if edu.institution %}<div class="edu-inst">{{ edu.institution }}</div>{% endif %}
-  <div class="edu-meta">
-    {% if edu.year %}<span>📅 {{ edu.year }}</span>{% endif %}
-    {% if edu.percentage %}<span>📊 {{ edu.percentage }}</span>{% endif %}
-  </div>
-</div>
-{% endfor %}
-</div>
-{% endif %}
-
-<!-- ═══════════════════════════════════════════ -->
-<!-- WORK EXPERIENCE — from resume > LinkedIn > LMS -->
-<!-- ═══════════════════════════════════════════ -->
-{% if work_experience and work_experience|length > 0 %}
-<div class="s"><div class="st"><span class="ic" style="background:var(--gl);color:var(--g)">💼</span> Work Experience</div>
-{% for job in work_experience %}
-<div class="work-card">
-  <div class="work-title">{{ job.title }}</div>
-  {% if job.company %}<div class="work-company">{{ job.company }}</div>{% endif %}
-  <div class="edu-meta">
-    {% if job.duration %}<span>📅 {{ job.duration }}</span>{% endif %}
-  </div>
-  {% if job.description %}<div class="work-desc">{{ job.description }}</div>{% endif %}
-</div>
-{% endfor %}
-</div>
-{% endif %}
 
 <!-- ACHIEVEMENTS -->
 {% if top_achievements and top_achievements|length > 0 %}
@@ -227,7 +151,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
 </div>
 {% endif %}
 
-<!-- ROLE MATCHES -->
+<!-- ROLE MATCHES — the centerpiece for recruiters -->
 {% if role_matches and role_matches|length > 0 %}
 <div class="s"><div class="st"><span class="ic" style="background:var(--gl);color:var(--g)">◎</span> Eligible Job Roles</div>
 {% for role in role_matches[:3] %}
@@ -246,7 +170,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
 <!-- SKILLS -->
 <div class="s"><div class="st"><span class="ic" style="background:var(--pl);color:var(--p)">⚡</span> Skills</div>
 {% if skills_data %}
-{% for cat_name, cat_key, color in [('Technical', 'technical_skills', 'var(--a2)'), ('Soft Skills', 'soft_skills', 'var(--tl)'), ('Tools', 'tools', 'var(--am)'), ('Domain', 'domain_knowledge', 'var(--p)')] %}
+{% for cat_name, cat_key, color in [('Technical', 'technical_skills', 'var(--a2)'), ('Soft Skills', 'soft_skills', 'var(--tl)'), ('Domain', 'domain_knowledge', 'var(--p)')] %}
 {% set items = skills_data.get(cat_key, []) if skills_data is mapping else [] %}
 {% if items %}<div class="sct">{{ cat_name }}</div>
 {% for sk in items[:6] %}<div class="si2"><span class="nm">{{ sk.name }}</span><div class="sb"><div class="f" style="width:{{ sk.score }}%;background:{{ color }}"></div></div><span class="pc" style="color:{{ color }}">{{ sk.score }}%</span></div>{% endfor %}
@@ -276,7 +200,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
 </div>
 </div>
 
-<!-- CASE STUDIES -->
+<!-- CASE STUDIES — reframed as professional analysis, not LMS assignments -->
 {% if case_study_highlights and case_study_highlights|length > 0 %}
 <div class="s"><div class="st"><span class="ic" style="background:var(--pl);color:var(--p)">📋</span> Analytical Work</div>
 {% for cs in case_study_highlights %}
@@ -288,75 +212,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
 </div>
 {% endif %}
 
-<!-- TEST PERFORMANCE -->
+<!-- TEST PERFORMANCE — shown as domain expertise, not "test scores" -->
 {% if test_highlights and test_highlights|length > 0 %}
 <div class="s"><div class="st"><span class="ic" style="background:var(--gl);color:var(--g)">📝</span> Domain Assessment Results</div>
 {% for t in test_highlights %}
 <div class="cc"><div class="ch"><div class="ct2">{{ t.subject }}</div><div class="cs2">{{ t.score_pct }}%</div></div>
 <div class="cd">{{ t.description }}</div></div>
 {% endfor %}
-</div>
-{% endif %}
-
-<!-- ═══════════════════════════════════════════ -->
-<!-- PROJECTS — from LMS + resume + GitHub       -->
-<!-- ═══════════════════════════════════════════ -->
-{% if projects_data and projects_data|length > 0 %}
-<div class="s"><div class="st"><span class="ic" style="background:var(--al);color:var(--a2)">🚀</span> Projects</div>
-{% for proj in projects_data %}
-<div class="proj-card">
-  <div class="proj-title">{{ proj.title }}</div>
-  {% if proj.description %}<div class="proj-desc">{{ proj.description[:250] }}</div>{% endif %}
-  {% set techs = proj.technologies_used %}
-  {% if techs %}
-  <div class="proj-tech">
-    {% if techs is string %}
-      {% for t in techs.split(',') %}<span>{{ t.strip() }}</span>{% endfor %}
-    {% elif techs is iterable %}
-      {% for t in techs %}<span>{{ t }}</span>{% endfor %}
-    {% endif %}
-  </div>
-  {% endif %}
-  <div class="proj-links">
-    {% if proj.github_url %}<a href="{{ proj.github_url }}" target="_blank">GitHub →</a>{% endif %}
-    {% if proj.demo_url %}<a href="{{ proj.demo_url }}" target="_blank">Demo →</a>{% endif %}
-  </div>
-  {% if proj.source and proj.source != 'lms' %}<div class="proj-source">via {{ proj.source | title }}</div>{% endif %}
-</div>
-{% endfor %}
-</div>
-{% endif %}
-
-<!-- ═══════════════════════════════════════════ -->
-<!-- CERTIFICATIONS — from LMS + resume + LinkedIn -->
-<!-- ═══════════════════════════════════════════ -->
-{% if certifications_data and certifications_data|length > 0 %}
-<div class="s"><div class="st"><span class="ic" style="background:var(--aml);color:var(--am)">🏆</span> Certifications</div>
-{% for cert in certifications_data %}
-<div class="cert-card">
-  <div class="cert-badge">📜</div>
-  <div>
-    <div class="cert-name">{{ cert.certificate_name or cert.name or 'Certificate' }}</div>
-    <div class="cert-issuer">
-      {% if cert.course_name %}{{ cert.course_name }}{% endif %}
-      {% if cert.issued_at %} · {{ cert.issued_at }}{% endif %}
-    </div>
-  </div>
-</div>
-{% endfor %}
-</div>
-{% endif %}
-
-<!-- GITHUB PROFILE -->
-{% if github_profile and github_profile.username %}
-<div class="s"><div class="st"><span class="ic" style="background:var(--lt);color:#374151">💻</span> GitHub</div>
-<div style="display:flex;gap:20px;align-items:center;margin-bottom:16px">
-  <div style="font-size:14px;font-weight:600"><a href="https://github.com/{{ github_profile.username }}" target="_blank" style="color:var(--a2);text-decoration:none">@{{ github_profile.username }}</a></div>
-  <div style="font-size:12px;color:var(--m)">{{ github_profile.public_repos }} repos · {{ github_profile.followers }} followers</div>
-</div>
-{% if github_profile.languages %}
-<div style="display:flex;flex-wrap:wrap;gap:6px">{% for lang, pct in github_profile.languages.items() %}{% if loop.index <= 8 %}<span style="font-size:12px;padding:4px 10px;border-radius:6px;background:var(--lt);border:1px solid var(--b);font-weight:500">{{ lang }} {{ pct }}%</span>{% endif %}{% endfor %}</div>
-{% endif %}
 </div>
 {% endif %}
 
@@ -367,26 +229,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
 </div>
 {% endif %}
 
-<!-- BOOST NUDGE — only for zero activity AND no background data -->
-{% if total_assessments == 0 and (not education_data or education_data|length == 0) and (not work_experience or work_experience|length == 0) %}
-<div class="nd"><h3>🚀 Build Your Profile Strength</h3><p>Complete assessments and case studies to unlock achievements, boost your ATS score, and get matched with specific job roles. Upload your resume and add your LinkedIn URL to enrich your profile with education and work experience.</p>
-<div class="na"><span>📄 Upload resume</span><span>💼 Add LinkedIn</span><span>📝 Take assessments</span><span>📋 Submit case studies</span></div></div>
+<!-- BOOST NUDGE — only for low activity -->
+{% if performance_data and (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) + (performance_data.total_case_studies or 0) == 0 %}
+<div class="nd"><h3>🚀 Build Your Profile Strength</h3><p>Complete assessments and case studies to unlock achievements, boost your ATS score, and get matched with specific job roles in BFSI and FinTech.</p>
+<div class="na"><span>📝 Take assessments</span><span>📋 Submit case studies</span><span>💬 Participate in discussions</span></div></div>
 {% endif %}
 
-<!-- FOOTER -->
+<!-- FOOTER — branded but independent -->
 <div class="ft">
   <div class="br2">Professional Profile</div>
   <p>AI-powered profile from verified assessment data</p>
-  <!-- Data source badges -->
-  {% if data_sources %}
-  <div class="ds-badges">
-    {% for src in data_sources %}
-    <span class="ds-{{ src }}">
-      {% if src == 'lms' %}📚 LMS Data{% elif src == 'resume' %}📄 Resume{% elif src == 'github' %}💻 GitHub{% elif src == 'linkedin' %}💼 LinkedIn{% elif src == 'lms_profile' %}👤 Profile{% else %}{{ src }}{% endif %}
-    </span>
-    {% endfor %}
-  </div>
-  {% endif %}
   <p style="margin-top:8px"><a href="{{ profile_url or '#' }}">{{ profile_url or '' }}</a></p>
   <p style="margin-top:4px;font-size:11px;color:#9ca3af">Powered by Upskillize · © 2026</p>
 </div>
