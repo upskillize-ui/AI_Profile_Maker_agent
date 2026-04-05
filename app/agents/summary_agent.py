@@ -111,28 +111,28 @@ Traits: {personality.get('traits_json', '')}
 Career Goals: {personal.get('career_goals', '')}
 Preferred Role: {personal.get('preferred_role', '')}"""
 
-        prompt = f"""Write a 4-5 sentence professional summary for a candidate profile. Recruiters and HR managers will read this.
+        prompt = f"""Write a professional summary for a candidate profile as 4-5 bullet points. Recruiters and HR managers will read this.
 
 CRITICAL FORMAT RULES:
-- Output ONLY the summary paragraph. No headings, no titles, no "# Professional Summary:", no prefixes.
-- Start DIRECTLY with the candidate's first name. Do NOT repeat the full name twice.
-- Write plain text only — no markdown, no bullet points, no formatting.
+- Output ONLY bullet points, each starting with "•"
+- Each bullet should be 1-2 sentences max
+- No headings, no titles, no "Professional Summary:", no prefixes
+- No markdown formatting — plain text with • bullets only
+- First bullet: education background and current positioning
+- Second bullet: key skills and domain expertise
+- Third bullet: work experience highlights (if any)
+- Fourth bullet: career readiness and what they bring to employers
+- Optional fifth bullet: unique differentiator or achievement
 
 CONTENT RULES:
 1. Use ONLY the data below — never invent achievements
-2. Open with the candidate's name, their education background, and a strong positioning statement
-3. If they have work experience, mention it prominently with the actual company name
-4. Include 2-3 specific facts (degree, institution, skills, experience)
-5. Use industry keywords naturally: {domain}
-6. End with a career-readiness statement showing they are ready for employment
-7. NEVER mention "Upskillize", "LMS", "platform", or any training platform name
-8. You MAY mention their actual college/university name
-9. Sound like a polished LinkedIn summary written by a professional career counselor
-10. Never say "dedicated learner", "passionate about", "aspiring", or "building foundational skills"
-11. Write in third person
-12. If assessment scores are 0, skip them entirely — focus on education, skills, and experience
-13. If they have a LinkedIn headline, use it to position them professionally
-14. Make it sound IMPRESSIVE and recruiter-ready — this person should sound hireable
+2. NEVER mention "Upskillize", "LMS", "platform", or any training platform name
+3. You MAY mention their actual college/university and companies they worked at
+4. Sound IMPRESSIVE and recruiter-ready — this person should sound hireable
+5. Never say "dedicated learner", "passionate about", "aspiring", or "building foundational skills"
+6. Write in third person
+7. If assessment scores are 0, skip them — focus on education, skills, and experience
+8. Use strong action verbs and industry-standard terminology
 
 DATA:
 {data_str}"""

@@ -315,7 +315,33 @@ class RoleMatcher:
         # Performance score
         perf_score = min(20, int(computed.get("overall_score", 0) * 0.2))
 
-        ats_total = min(98, keyword_score + evidence_score + perf_score + int(best_match * 0.3))
+        # Job Preferences bonus (filled in = recruiter alignment)
+        personal = student_data.get("personal", {})
+        pref_bonus = 0
+        if personal.get("preferred_role"):
+            pref_bonus += 5
+        if personal.get("target_industries"):
+            pref_bonus += 3
+        if personal.get("preferred_location"):
+            pref_bonus += 2
+
+        # External data bonus (resume, LinkedIn, GitHub enrich the profile)
+        data_sources = student_data.get("data_sources", [])
+        source_bonus = 0
+        if "resume" in data_sources:
+            source_bonus += 5
+        if "linkedin" in data_sources:
+            source_bonus += 3
+        if "github" in data_sources:
+            source_bonus += 3
+
+        # Education & work experience bonus
+        edu_bonus = min(5, len(student_data.get("education", [])) * 3)
+        work_bonus = min(5, len(student_data.get("work_experience", [])) * 3)
+
+        ats_total = min(98, keyword_score + evidence_score + perf_score +
+                        int(best_match * 0.3) + pref_bonus + source_bonus +
+                        edu_bonus + work_bonus)
 
         return {
             "total_score": ats_total,
@@ -385,11 +411,31 @@ class RoleMatcher:
         for exp in d.get("work_experience", []):
             title = (exp.get("title") or "").lower()
             keywords.update(word for word in title.split() if len(word) > 3)
+            desc = (exp.get("description") or "").lower()
+            keywords.update(word for word in desc.split() if len(word) > 4)
 
         # From education
         for edu in d.get("education", []):
             degree = (edu.get("degree") or "").lower()
+            field = (edu.get("field_of_study") or "").lower()
             keywords.update(word for word in degree.split() if len(word) > 3)
+            keywords.update(word for word in field.split() if len(word) > 3)
+
+        # From Job Preferences (boosts ATS significantly)
+        personal = d.get("personal", {})
+        pref_role = (personal.get("preferred_role") or "").lower()
+        if pref_role:
+            keywords.update(word for word in pref_role.split() if len(word) > 3)
+            keywords.add(pref_role.strip())
+        target_ind = (personal.get("target_industries") or "").lower()
+        if target_ind:
+            for ind in target_ind.replace(";", ",").split(","):
+                ind = ind.strip()
+                if ind and len(ind) > 2:
+                    keywords.add(ind)
+        career_goals = (personal.get("career_goals") or "").lower()
+        if career_goals:
+            keywords.update(word for word in career_goals.split() if len(word) > 4)
 
         # Universal soft skills (derived from activity)
         computed = d.get("computed", {})

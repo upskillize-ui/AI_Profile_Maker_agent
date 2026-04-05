@@ -182,6 +182,12 @@ class DataCollector:
             "key_skills": "key_skills",
             "career_goals": "career_goals",
             "preferred_role": "preferred_role",
+            "preferred_location": "preferred_location",
+            "target_industries": "target_industries",
+            "expected_salary_min": "expected_salary_min",
+            "expected_salary_max": "expected_salary_max",
+            "employment_type": "employment_type",
+            "work_mode": "work_mode",
         }
 
         for db_col, key_name in users_columns.items():

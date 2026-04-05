@@ -181,6 +181,17 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
 <div class="wrap">
 
+<!-- ═══ UPSKILLIZE BRANDING ═══ -->
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;margin-bottom:4px">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#1E3A5F,#2563EB);display:flex;align-items:center;justify-content:center">
+      <span style="color:#fff;font-weight:700;font-size:14px;font-family:'Playfair Display',serif">U</span>
+    </div>
+    <span style="font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.2px">Upskillize</span>
+    <span style="font-size:11px;color:var(--text4);font-weight:500;padding:2px 8px;border-radius:4px;background:var(--bg3)">AI Profile</span>
+  </div>
+</div>
+
 <!-- ═══ HERO ═══ -->
 <div class="hero">
   <div class="hero-grid">
@@ -224,7 +235,16 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
 <!-- ═══ PROFESSIONAL SUMMARY ═══ -->
 <div class="section"><div class="section-title"><span class="icon" style="background:rgba(59,130,246,0.1);color:var(--accent2)">✦</span> Professional Summary</div>
-<p class="summary-text">{{ professional_summary or 'Professional summary will appear once profile data is available.' }}</p>
+{% set summary_text = professional_summary or 'Professional summary will appear once profile data is available.' %}
+{% if '•' in summary_text %}
+<ul style="list-style:none;padding:0;margin:0">
+{% for line in summary_text.split('•') %}{% if line.strip() %}
+<li style="font-size:15px;line-height:1.8;color:var(--text2);padding:6px 0 6px 20px;position:relative;border-bottom:1px solid var(--border)"><span style="position:absolute;left:0;color:var(--accent2);font-weight:700">›</span> {{ line.strip() }}</li>
+{% endif %}{% endfor %}
+</ul>
+{% else %}
+<p class="summary-text">{{ summary_text }}</p>
+{% endif %}
 {% if growth_statement %}<p class="summary-text" style="margin-top:12px;color:var(--green);font-style:italic">{{ growth_statement }}</p>{% endif %}
 </div>
 
