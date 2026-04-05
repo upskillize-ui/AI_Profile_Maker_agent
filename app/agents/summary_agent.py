@@ -113,20 +113,26 @@ Preferred Role: {personal.get('preferred_role', '')}"""
 
         prompt = f"""Write a 4-5 sentence professional summary for a candidate profile. Recruiters and HR managers will read this.
 
-STRICT RULES:
+CRITICAL FORMAT RULES:
+- Output ONLY the summary paragraph. No headings, no titles, no "# Professional Summary:", no prefixes.
+- Start DIRECTLY with the candidate's first name. Do NOT repeat the full name twice.
+- Write plain text only — no markdown, no bullet points, no formatting.
+
+CONTENT RULES:
 1. Use ONLY the data below — never invent achievements
-2. Start with the candidate's name, their education background, and a strong opening
-3. If they have work experience, mention it prominently
-4. Include 2-3 specific facts (education, scores, experience, skills)
+2. Open with the candidate's name, their education background, and a strong positioning statement
+3. If they have work experience, mention it prominently with the actual company name
+4. Include 2-3 specific facts (degree, institution, skills, experience)
 5. Use industry keywords naturally: {domain}
-6. End with a career-readiness statement
-7. NEVER mention any platform, course title, school name, or training provider name other than their actual college/university
-8. Talk about skills, domains, competencies, education, experience, and results
-9. Sound like a LinkedIn summary written by a career counselor
-10. Never say "dedicated learner" or "passionate about"
+6. End with a career-readiness statement showing they are ready for employment
+7. NEVER mention "Upskillize", "LMS", "platform", or any training platform name
+8. You MAY mention their actual college/university name
+9. Sound like a polished LinkedIn summary written by a professional career counselor
+10. Never say "dedicated learner", "passionate about", "aspiring", or "building foundational skills"
 11. Write in third person
-12. If assessment scores are 0, focus on education and experience instead — do NOT mention 0 scores
-13. If they have a LinkedIn headline, draw from it for professional positioning
+12. If assessment scores are 0, skip them entirely — focus on education, skills, and experience
+13. If they have a LinkedIn headline, use it to position them professionally
+14. Make it sound IMPRESSIVE and recruiter-ready — this person should sound hireable
 
 DATA:
 {data_str}"""
