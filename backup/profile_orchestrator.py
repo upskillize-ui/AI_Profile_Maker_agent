@@ -153,6 +153,9 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
             "ats_data": ats_data,
             "ats_keywords": skills.get("ats_keywords", []) if isinstance(skills, dict) else [],
             "data_sources": merged_data.get("data_sources", ["lms"]),
+            "courses_data":      student_data.get("courses", []),
+            "assignments_data":  student_data.get("assignments", []),
+            "attendance_data":   student_data.get("attendance", {}),
             "generation_time_seconds": round(time.time() - start, 2),
             "ai_model_used": "claude-haiku-4-5-20251001" if self.summary_agent.has_api else "rule-based-v4",
         }

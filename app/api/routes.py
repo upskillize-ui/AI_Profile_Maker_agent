@@ -71,25 +71,52 @@ async def generate_profile(
     student=Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
+    """Generate or regenerate a student profile.
+
+    Behavior:
+      - First time (no profile exists): full generation, all sections built.
+      - Existing profile + force_regenerate=False: returns existing slug instantly.
+      - Existing profile + force_regenerate=True: PARTIAL regeneration.
+        Only sections whose underlying data has changed since the last run
+        get rebuilt. If nothing changed, returns "already up to date" with
+        zero agent calls (saves Haiku cost + gives instant UX).
+    """
     student_id = body.student_id or student.id
 
     existing = db.query(StudentProfile).filter_by(student_id=student_id).first()
+
+    # ── Case 1: profile exists, no force_regenerate → return as-is ──
     if existing and existing.status == ProfileStatus.COMPLETED and not body.force_regenerate:
         return {
             "message": "Profile already exists. Use force_regenerate=true to rebuild.",
             "slug": existing.slug,
             "status": existing.status.value,
             "profile_url": f"{AGENT_BASE}/api/v1/profile/public/{existing.slug}",
+            "download_url": f"{AGENT_BASE}/api/v1/profile/download/{existing.slug}",
         }
 
+    # ── Case 2: profile exists + force_regenerate → try partial regen ──
+    if existing and existing.status == ProfileStatus.COMPLETED and body.force_regenerate:
+        return await _partial_regenerate(student_id, existing, db)
+
+    # ── Case 3: no profile yet (or previous failed) → full generation ──
     if not existing:
-        existing = StudentProfile(student_id=student_id, status=ProfileStatus.GENERATING, visibility=VisibilityMode.PUBLIC)
+        existing = StudentProfile(
+            student_id=student_id,
+            status=ProfileStatus.GENERATING,
+            visibility=VisibilityMode.PUBLIC,
+        )
         db.add(existing)
         db.flush()
     else:
         existing.status = ProfileStatus.GENERATING
         db.flush()
 
+    return await _full_generate(student_id, existing, db)
+
+
+async def _full_generate(student_id: int, existing: StudentProfile, db: Session) -> dict:
+    """Full profile generation — runs all agents from scratch."""
     try:
         start = time.time()
 
@@ -111,13 +138,12 @@ async def generate_profile(
             visibility=existing.visibility.value if existing.visibility else "public",
         )
 
-        # ── FIXED: Derive headline and program from REAL data ──
         existing.slug = slug
         existing.student_name = name
         existing.student_email = personal.get("email", "")
         photo = personal.get("photo_url", "") or ""
         existing.student_photo_url = photo[:255] if len(photo) > 255 else photo
-        existing.student_headline = profile_data.get("headline", "Financial Services Professional")
+        existing.student_headline = profile_data.get("headline", "Professional")
         existing.program_name = _derive_program(student_data)
         existing.professional_summary = profile_data.get("professional_summary", "")
         existing.skills_data = profile_data.get("skills_data", {})
@@ -132,7 +158,7 @@ async def generate_profile(
         existing.rendered_html = html
         existing.status = ProfileStatus.COMPLETED
         existing.generation_time_seconds = round(time.time() - start, 2)
-        existing.ai_model_used = profile_data.get("ai_model_used", "rule-based-v4")
+        existing.ai_model_used = profile_data.get("ai_model_used", "rule-based-v6")
 
         db.commit()
         db.refresh(existing)
@@ -145,6 +171,7 @@ async def generate_profile(
             "profile_url": f"{AGENT_BASE}/api/v1/profile/public/{existing.slug}",
             "download_url": f"{AGENT_BASE}/api/v1/profile/download/{existing.slug}",
             "generation_time": existing.generation_time_seconds,
+            "updated_sections": "all",
         }
 
     except Exception as e:
@@ -152,6 +179,131 @@ async def generate_profile(
         existing.status = ProfileStatus.FAILED
         db.commit()
         raise HTTPException(500, f"Profile generation failed: {str(e)}")
+
+
+async def _partial_regenerate(student_id: int, existing: StudentProfile, db: Session) -> dict:
+    """Partial regeneration — only rebuild sections whose source data changed.
+
+    If nothing changed, returns instantly without calling any agents.
+    Reads previous section hashes from existing.performance_data['_meta'].
+    """
+    try:
+        start = time.time()
+
+        collector = DataCollector(db)
+        student_data = await collector.collect_all(student_id)
+
+        # Reconstruct existing profile_data from the DB columns
+        existing_profile_data = {
+            "professional_summary":  existing.professional_summary or "",
+            "skills_data":           existing.skills_data or {},
+            "performance_data":      existing.performance_data or {},
+            "journey_data":          existing.journey_data or {},
+            "personality_data":      existing.personality_data or {},
+            "case_studies_data":     existing.case_studies_data or [],
+            "testgen_data":          existing.testgen_data or {},
+            "projects_data":         existing.projects_data or [],
+            "certifications_data":   existing.certifications_data or [],
+            "ats_keywords":          existing.ats_keywords or [],
+            "headline":              existing.student_headline or "Professional",
+            "education_data":        [],
+            "work_experience":       [],
+            "role_matches":          [],
+            "ats_data":              {},
+            "top_achievements":      [],
+            "case_study_highlights": [],
+            "test_highlights":       [],
+        }
+
+        existing_meta = (existing.performance_data or {}).get("_meta", {})
+
+        orchestrator = ProfileOrchestrator()
+        result = await orchestrator.regenerate_partial(
+            student_data=student_data,
+            existing_profile_data=existing_profile_data,
+            existing_meta=existing_meta,
+        )
+
+        updated_sections = result["updated_sections"]
+        was_no_op        = result["was_no_op"]
+        new_profile_data = result["profile_data"]
+
+        # ── Fast path: nothing to do ──
+        if was_no_op:
+            return {
+                "message": "Profile is already up to date — no new data found.",
+                "slug": existing.slug,
+                "status": "completed",
+                "profile_url":  f"{AGENT_BASE}/api/v1/profile/public/{existing.slug}",
+                "download_url": f"{AGENT_BASE}/api/v1/profile/download/{existing.slug}",
+                "updated_sections": [],
+                "regen_time": result["regen_time_seconds"],
+                "was_no_op": True,
+            }
+
+        # ── Re-render HTML (cheap, ~50ms) and persist only changed columns ──
+        renderer = ProfileRenderer()
+        html = renderer.render(
+            student_data=student_data,
+            profile_data=new_profile_data,
+            slug=existing.slug,
+            visibility=existing.visibility.value if existing.visibility else "public",
+        )
+
+        # Map section name → DB column(s) to update
+        section_to_columns = {
+            "summary":      ["professional_summary"],
+            "skills":       ["skills_data", "ats_keywords"],
+            "roles":        [],  # role_matches lives in rendered_html only
+            "achievements": [],  # achievements live in rendered_html only
+            "personality":  ["personality_data"],
+            "projects":     ["projects_data"],
+            "education":    [],  # lives in rendered_html
+            "experience":   [],  # lives in rendered_html
+        }
+
+        changed_columns = set()
+        for section in updated_sections:
+            for col in section_to_columns.get(section, []):
+                changed_columns.add(col)
+
+        if "professional_summary" in changed_columns:
+            existing.professional_summary = new_profile_data.get("professional_summary", "")
+        if "skills_data" in changed_columns:
+            existing.skills_data = new_profile_data.get("skills_data", {})
+        if "ats_keywords" in changed_columns:
+            existing.ats_keywords = new_profile_data.get("ats_keywords", [])
+        if "personality_data" in changed_columns:
+            existing.personality_data = new_profile_data.get("personality_data", {})
+        if "projects_data" in changed_columns:
+            existing.projects_data = new_profile_data.get("projects_data", [])
+
+        # Always refresh: performance_data (holds the new hashes), headline, html
+        existing.performance_data = new_profile_data.get("performance_data", {})
+        existing.student_headline = new_profile_data.get("headline", existing.student_headline)
+        existing.rendered_html = html
+        existing.generation_time_seconds = round(time.time() - start, 2)
+
+        db.commit()
+        db.refresh(existing)
+        CacheService.invalidate_profile(existing.slug)
+        CacheService.set_profile_html(existing.slug, html)
+
+        return {
+            "message": f"Profile updated — refreshed {len(updated_sections)} section(s).",
+            "slug": existing.slug,
+            "status": "completed",
+            "profile_url":  f"{AGENT_BASE}/api/v1/profile/public/{existing.slug}",
+            "download_url": f"{AGENT_BASE}/api/v1/profile/download/{existing.slug}",
+            "updated_sections": updated_sections,
+            "regen_time": result["regen_time_seconds"],
+            "was_no_op": False,
+        }
+
+    except Exception as e:
+        logger.error(f"Partial regeneration failed for student {student_id}: {e}")
+        # Don't mark profile as failed — the existing one is still valid
+        raise HTTPException(500, f"Regeneration failed: {str(e)}")
 
 
 @router.get("/profile/me")

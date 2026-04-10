@@ -245,36 +245,179 @@ COURSE_KEYWORD_MAP = {
 
 
 class RoleMatcher:
-    """Matches students to real job roles based on their actual data."""
+    """Matches students to real job roles based on their actual data.
+
+    v6 — Weighted scoring:
+      • 45 pts — keyword overlap (skills/courses)
+      • 25 pts — education fit (degree matches role's expected education)
+      • 20 pts — work experience fit (job title/desc matches role keywords)
+      • 10 pts — course completion volume
+    Roles where the student has ZERO of {education match, course match, skill match}
+    are filtered out — no more "Python Developer" suggestions for B.Com students
+    with no Python anywhere in their profile.
+    """
+
+    # Map common education abbreviations/synonyms to their canonical forms
+    _EDU_SYNONYMS = {
+        "btech": ["b.tech", "btech", "bachelor of technology", "be ", "b.e."],
+        "bcom":  ["b.com", "bcom", "bachelor of commerce"],
+        "bba":   ["bba", "bachelor of business"],
+        "bca":   ["bca", "bachelor of computer applications"],
+        "mca":   ["mca", "master of computer applications"],
+        "mba":   ["mba", "master of business", "pgdm"],
+        "bsc":   ["b.sc", "bsc", "bachelor of science"],
+        "msc":   ["m.sc", "msc", "master of science"],
+        "ca":    ["chartered accountant", " ca "],
+        "law":   ["llb", "law", "ll.b"],
+        "any graduate": ["bachelor", "graduate", "degree"],
+    }
+
+    def _normalize_edu_token(self, token: str) -> str:
+        """Convert a role's expected-education entry into a canonical key."""
+        t = token.lower().replace(".", "").replace(" ", "")
+        if "tech" in t or t == "be":
+            return "btech"
+        if "com" in t and "computer" not in t:
+            return "bcom"
+        if "bba" in t:
+            return "bba"
+        if "bca" in t:
+            return "bca"
+        if "mca" in t:
+            return "mca"
+        if "mba" in t or "pgdm" in t:
+            return "mba"
+        if "bsc" in t:
+            return "bsc"
+        if "msc" in t:
+            return "msc"
+        if t == "ca":
+            return "ca"
+        if "law" in t or "llb" in t:
+            return "law"
+        if "graduate" in t or "any" in t:
+            return "any graduate"
+        return t
+
+    def _education_fit_score(self, role_education: list, student_education: list) -> int:
+        """0-25 points based on whether the student's degree matches the role.
+
+        25 = strong match, 15 = partial (any-graduate role), 0 = no match.
+        """
+        if not student_education:
+            return 0
+        if not role_education:
+            return 15  # role doesn't specify, give partial credit
+
+        # Build student's degree text
+        student_text = " ".join(
+            f"{edu.get('degree', '')} {edu.get('field_of_study', '')}"
+            for edu in student_education
+        ).lower()
+
+        if not student_text.strip():
+            return 0
+
+        # Check each role-required degree
+        for role_edu in role_education:
+            canonical = self._normalize_edu_token(role_edu)
+            if canonical == "any graduate":
+                # Any graduate qualifies
+                if student_text.strip():
+                    return 15
+                continue
+            synonyms = self._EDU_SYNONYMS.get(canonical, [canonical])
+            for syn in synonyms:
+                if syn.strip() in student_text:
+                    return 25  # exact degree match
+
+        return 0
+
+    def _work_fit_score(self, role_keywords: set, student_work: list) -> int:
+        """0-20 points based on whether work history mentions role keywords."""
+        if not student_work:
+            return 0
+
+        work_text = " ".join(
+            f"{w.get('title', '')} {w.get('company', '')} {w.get('description', '')}"
+            for w in student_work
+        ).lower()
+
+        if not work_text.strip():
+            return 0
+
+        matches = 0
+        for kw in role_keywords:
+            if kw.lower() in work_text:
+                matches += 1
+        if matches == 0:
+            return 0
+        if matches >= 4:
+            return 20
+        if matches >= 2:
+            return 14
+        return 8
+
+    def _course_completion_score(self, computed: dict) -> int:
+        """0-10 points from completed-course volume."""
+        completed = computed.get("completed_courses", 0) or 0
+        if completed >= 4:
+            return 10
+        if completed >= 2:
+            return 7
+        if completed >= 1:
+            return 4
+        # Partial credit if at least enrolled
+        if (computed.get("total_courses", 0) or 0) >= 1:
+            return 2
+        return 0
 
     def match_roles(self, student_data: Dict[str, Any]) -> List[Dict]:
-        """Find top matching roles for a student."""
+        """Find top matching roles using weighted scoring."""
         student_keywords = self._extract_student_keywords(student_data)
         computed = student_data.get("computed", {})
-        overall_score = computed.get("overall_score", 0)
+        education = student_data.get("education", [])
+        work_experience = student_data.get("work_experience", [])
+
+        course_score = self._course_completion_score(computed)
 
         matches = []
         for role_name, role_info in ROLE_DATABASE.items():
             role_keywords = role_info["keywords"]
 
-            # Calculate keyword overlap
+            # ── 1. Keyword overlap (45 points max) ──
             matched = student_keywords & role_keywords
             if not matched:
+                # No keyword match — only consider if education is a strong fit
+                edu_check = self._education_fit_score(role_info.get("education", []), education)
+                if edu_check < 25:
+                    continue
+                keyword_score = 0
+            else:
+                overlap_pct = len(matched) / len(role_keywords)
+                keyword_score = round(overlap_pct * 45)
+
+            # ── 2. Education fit (25 points max) ──
+            edu_score = self._education_fit_score(role_info.get("education", []), education)
+
+            # ── 3. Work experience fit (20 points max) ──
+            work_score = self._work_fit_score(role_keywords, work_experience)
+
+            # ── 4. Course completion (10 points max) ──
+            # course_score computed once outside the loop
+
+            # Total weighted score (0-100)
+            total = keyword_score + edu_score + work_score + course_score
+
+            # Filter: must have at least one of {keyword match, education match, work match}
+            if keyword_score == 0 and edu_score == 0 and work_score == 0:
                 continue
 
-            match_pct = round(len(matched) / len(role_keywords) * 100)
-            missing = role_keywords - student_keywords
+            # Final cap and floor
+            final_match = max(0, min(99, total))
 
-            # Boost for strong performance
-            score_bonus = 0
-            if overall_score >= 70:
-                score_bonus = 10
-            elif overall_score >= 50:
-                score_bonus = 5
-
-            final_match = min(99, match_pct + score_bonus)
-
-            if final_match >= role_info["min_score"]:
+            if final_match >= role_info.get("min_score", 35):
+                missing = role_keywords - student_keywords
                 matches.append({
                     "role_title": role_name,
                     "category": role_info["category"],
@@ -283,6 +426,12 @@ class RoleMatcher:
                     "missing_keywords": sorted(list(missing))[:5],
                     "total_matched": len(matched),
                     "total_required": len(role_keywords),
+                    "score_breakdown": {
+                        "keywords": keyword_score,
+                        "education": edu_score,
+                        "experience": work_score,
+                        "courses": course_score,
+                    },
                     "recommendation": self._get_recommendation(missing, role_name),
                 })
 

@@ -93,11 +93,16 @@ class ProfileRenderer:
             # v4: Certifications (merged)
             "certifications_data": profile_data.get("certifications_data", []),
 
-            # Courses (for the courses section if kept)
+     # Courses (already in context — keep this)
             "courses": student_data.get("courses", []),
 
-            # Data sources used
-            "data_sources": profile_data.get("data_sources", ["lms"]),
+             # ── NEW: Full LMS sections for the template ───────────
+            "courses_data":     profile_data.get("courses_data",     student_data.get("courses", [])),
+            "assignments_data": profile_data.get("assignments_data", student_data.get("assignments", [])),
+            "attendance_data":  profile_data.get("attendance_data",  student_data.get("attendance", {})),
+
+             # Data sources used
+            "data_sources": profile_data.get("data_sources", []),
 
             # Meta
             "slug": slug,

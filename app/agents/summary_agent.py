@@ -1,22 +1,28 @@
 """
-Summary Agent v5 — Hybrid (AI + Fallback)
-══════════════════════════════════════════
+Summary Agent v6 — Hybrid (AI + Fallback) with woven industry keywords
+══════════════════════════════════════════════════════════════════════
 Uses ONE Claude Haiku API call for the professional summary.
 NEVER mentions course names, platform name, or LMS.
 Speaks about SKILLS, DOMAINS, ACHIEVEMENTS, EDUCATION, and EXPERIENCE.
 
-NEW in v5:
+NEW in v6:
+- Industry/ATS keywords are now WOVEN INTO the summary text instead of
+  being shown as a separate section. The renderer no longer passes
+  ats_keywords to the template.
+- The AI prompt enforces natural keyword integration.
+- The template fallback appends a closing line that lists top keywords.
+
+Inherited from v5:
 - Uses education and work experience data in summary
 - Uses LinkedIn headline/summary for context
 - Domain derived from education + courses + skills (not just courses)
-- Emergency summary uses actual background data
 """
 
 import os
 import hashlib
 import logging
 import httpx
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +42,10 @@ class SummaryAgent:
         name = (personal.get("full_name") or "Student").strip()
         course_names = [c.get("course_name", "") for c in courses if c.get("course_name")]
 
-        # Derive domain from ALL available sources (not just courses)
+        # Pull industry keywords gathered by skills_agent / data_merger / role_matcher
+        industry_keywords = self._collect_industry_keywords(student_data)
+
+        # Derive domain from ALL available sources
         domain = self._derive_domain(course_names, education, work_experience, personal)
 
         # Build education string
@@ -67,29 +76,108 @@ class SummaryAgent:
             elif title:
                 work_str = title
 
-        # If we have education or work data, we can make a real profile even without courses
         has_background = bool(edu_str or work_str)
 
         if not course_names and not has_background:
-            return f"{name} is an aspiring {domain} professional, building foundational skills through structured assessment programs and hands-on training."
+            kw_tail = self._format_keyword_tail(industry_keywords)
+            return (
+                f"{name} is an aspiring {domain} professional, building foundational skills "
+                f"through structured assessment programs and hands-on training."
+                + (f" {kw_tail}" if kw_tail else "")
+            )
 
         if self.has_api:
             try:
-                return await self._ai_summary(name, student_data, domain, computed, edu_str, work_str)
+                return await self._ai_summary(
+                    name, student_data, domain, computed,
+                    edu_str, work_str, industry_keywords,
+                )
             except Exception as e:
                 logger.warning(f"AI summary failed, using fallback: {e}")
 
-        return self._template_summary(name, domain, computed, edu_str, work_str)
+        return self._template_summary(name, domain, computed, edu_str, work_str, industry_keywords)
 
-    async def _ai_summary(self, name: str, student_data: Dict, domain: str, computed: Dict, edu_str: str, work_str: str) -> str:
+    # ─── Industry keyword collection ─────────────────────────────
+
+    def _collect_industry_keywords(self, student_data: Dict[str, Any]) -> List[str]:
+        """Collect deduped, capped industry keywords from all available sources.
+
+        Order of preference (highest first):
+          1. Resume/LinkedIn skills
+          2. LMS top subjects
+          3. Course-derived ATS keywords
+          4. GitHub languages
+        """
+        seen = set()
+        ordered: List[str] = []
+
+        def _add(name: str):
+            if not name:
+                return
+            key = name.strip().lower()
+            if key and key not in seen and len(key) <= 40:
+                seen.add(key)
+                # Title-case for display, but keep common acronyms upper
+                if key.upper() in ("SQL", "API", "AWS", "KYC", "AML", "UPI", "ETL", "BFSI", "CRM", "ERP", "REST"):
+                    ordered.append(key.upper())
+                else:
+                    ordered.append(name.strip().title() if not name.isupper() else name.strip())
+
+        all_skills = student_data.get("all_skills", {}) or {}
+        for sk in all_skills.get("technical_skills", [])[:12]:
+            _add(sk.get("name", "") if isinstance(sk, dict) else str(sk))
+
+        computed = student_data.get("computed", {}) or {}
+        for subj in computed.get("top_subjects", [])[:6]:
+            if isinstance(subj, (list, tuple)) and subj:
+                _add(str(subj[0]))
+
+        # ATS keywords from skills_agent (course → keyword map)
+        # These may have been pre-attached to merged_data by the orchestrator
+        for kw in (student_data.get("ats_keywords") or []):
+            _add(kw)
+
+        github_profile = student_data.get("github_profile", {}) or {}
+        for lang in list((github_profile.get("languages") or {}).keys())[:4]:
+            _add(lang)
+
+        return ordered[:8]  # cap at 8 keywords for natural flow
+
+    def _format_keyword_tail(self, keywords: List[str]) -> str:
+        """Format the closing keyword sentence used by template fallbacks."""
+        if not keywords:
+            return ""
+        if len(keywords) == 1:
+            return f"Core competencies include {keywords[0]}."
+        if len(keywords) == 2:
+            return f"Core competencies span {keywords[0]} and {keywords[1]}."
+        head = ", ".join(keywords[:-1])
+        return f"Core competencies span {head}, and {keywords[-1]}."
+
+    # ─── AI-powered summary ──────────────────────────────────────
+
+    async def _ai_summary(
+        self,
+        name: str,
+        student_data: Dict,
+        domain: str,
+        computed: Dict,
+        edu_str: str,
+        work_str: str,
+        industry_keywords: List[str],
+    ) -> str:
         personality = student_data.get("personality", {})
         case_studies = student_data.get("case_studies", [])
-        best_case = max(case_studies, key=lambda x: float(x.get("score", 0) or 0)).get("title", "") if case_studies else ""
+        best_case = (
+            max(case_studies, key=lambda x: float(x.get("score", 0) or 0)).get("title", "")
+            if case_studies else ""
+        )
         personal = student_data.get("personal", {})
 
-        # LinkedIn context
         linkedin_headline = personal.get("linkedin_headline", "") or ""
         linkedin_summary = personal.get("linkedin_summary", "") or ""
+
+        keywords_str = ", ".join(industry_keywords) if industry_keywords else "(none available)"
 
         data_str = f"""Candidate: {name}
 Domain: {domain}
@@ -109,7 +197,8 @@ Top Case Analysis: {best_case}
 Personality: {personality.get('personality_type', '')}
 Traits: {personality.get('traits_json', '')}
 Career Goals: {personal.get('career_goals', '')}
-Preferred Role: {personal.get('preferred_role', '')}"""
+Preferred Role: {personal.get('preferred_role', '')}
+INDUSTRY KEYWORDS TO WEAVE IN: {keywords_str}"""
 
         prompt = f"""Write a professional summary for a candidate profile as 4-5 bullet points. Recruiters and HR managers will read this.
 
@@ -119,10 +208,19 @@ CRITICAL FORMAT RULES:
 - No headings, no titles, no "Professional Summary:", no prefixes
 - No markdown formatting — plain text with • bullets only
 - First bullet: education background and current positioning
-- Second bullet: key skills and domain expertise
-- Third bullet: work experience highlights (if any)
+- Second bullet: key skills and domain expertise (NATURALLY INCLUDE 3-4 industry keywords from the list)
+- Third bullet: work experience highlights (if any) — weave in 1-2 more keywords
 - Fourth bullet: career readiness and what they bring to employers
 - Optional fifth bullet: unique differentiator or achievement
+
+INDUSTRY KEYWORD RULES (CRITICAL):
+- The "INDUSTRY KEYWORDS TO WEAVE IN" list above MUST appear naturally inside the bullet sentences
+- DO NOT list them as a separate bullet ("• Skills: Python, SQL, ...") — that is FORBIDDEN
+- DO NOT add a "Key competencies:" or "Industry expertise:" line
+- Weave them into normal sentences. Example: instead of "• Skills: Python, SQL, KYC"
+  write "• Brings hands-on expertise in Python and SQL combined with deep KYC and compliance knowledge"
+- Try to include at least 5-6 of the keywords across all bullets
+- Use the EXACT keyword spelling from the list (don't change "KYC" to "Know Your Customer")
 
 CONTENT RULES:
 1. Use ONLY the data below — never invent achievements
@@ -147,7 +245,7 @@ DATA:
                 },
                 json={
                     "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 300,
+                    "max_tokens": 350,
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
@@ -155,8 +253,21 @@ DATA:
             data = response.json()
             return data["content"][0]["text"].strip()
 
-    def _template_summary(self, name: str, domain: str, computed: Dict, edu_str: str = "", work_str: str = "") -> str:
-        """Template summaries — uses education and work background."""
+    # ─── Template fallback ───────────────────────────────────────
+
+    def _template_summary(
+        self,
+        name: str,
+        domain: str,
+        computed: Dict,
+        edu_str: str = "",
+        work_str: str = "",
+        industry_keywords: List[str] = None,
+    ) -> str:
+        """Template summaries — uses education and work background plus woven keywords."""
+        if industry_keywords is None:
+            industry_keywords = []
+
         score = computed.get("overall_score", 0)
         total_quizzes = computed.get("total_quizzes", 0)
         total_cases = computed.get("total_case_studies", 0)
@@ -168,63 +279,70 @@ DATA:
         name_hash = int(hashlib.md5(name.encode()).hexdigest()[:8], 16)
         total_assessments = total_quizzes + total_cases + total_tests
 
-        # Build intro parts
         edu_intro = f", a {edu_str} graduate" if edu_str else ""
         work_intro = f" with experience as {work_str}" if work_str else ""
+        kw_tail = self._format_keyword_tail(industry_keywords)
+        kw_clause = f" {kw_tail}" if kw_tail else ""
 
         if score >= 70:
             templates = [
                 f"{name}{edu_intro}{work_intro}, is a high-performing {domain} professional achieving {score}% overall across {total_assessments} rigorous assessments. "
                 f"With a peak score of {best_test}% and {completed} certification{'s' if completed != 1 else ''} earned, {name} demonstrates strong analytical capabilities and verified domain expertise. "
-                f"Ready for immediate contribution in roles requiring {domain} competency.",
+                f"Ready for immediate contribution in roles requiring {domain} competency.{kw_clause}",
 
                 f"With a commanding {score}% performance in {domain}, {name}{edu_intro}{work_intro} stands out as a results-driven professional. "
                 f"Having completed {total_cases} case analyses and {total_quizzes} assessments, {name} consistently demonstrates practical problem-solving ability and domain mastery. "
-                f"Positioned for high-impact roles with assessment-backed credentials.",
+                f"Positioned for high-impact roles with assessment-backed credentials.{kw_clause}",
 
                 f"{name}{edu_intro}{work_intro} brings proven expertise in {domain}, developed through {round(hours, 1)} hours of focused professional training. "
                 f"Achieving {score}% overall with {total_assessments} assessments, {name} combines theoretical knowledge with practical application. "
-                f"A {improvement}% performance improvement trajectory reflects the growth mindset that employers value.",
+                f"A {improvement}% performance improvement trajectory reflects the growth mindset that employers value.{kw_clause}",
             ]
         elif score >= 35 or total_assessments > 0:
             templates = [
                 f"{name}{edu_intro}{work_intro} is building strong expertise in {domain} through structured professional development. "
                 f"With {total_assessments} assessments completed at {score}% overall, {name} shows consistent engagement and growing competency. "
-                f"Well-positioned for junior roles in {domain} with a proven upward trajectory.",
+                f"Well-positioned for junior roles in {domain} with a proven upward trajectory.{kw_clause}",
 
                 f"Currently developing {domain} capabilities, {name}{edu_intro}{work_intro} has completed {total_assessments} assessments including {total_cases} case analyses. "
                 f"At {score}% overall performance, {name} is building the practical skills that {domain} employers require. "
-                f"An emerging professional ready for growth-oriented opportunities.",
+                f"An emerging professional ready for growth-oriented opportunities.{kw_clause}",
 
                 f"{name}{edu_intro}{work_intro} brings dedication to {domain}, having invested {round(hours, 1)} hours in professional skill development. "
                 f"With {total_assessments} verified assessments completed, {name} is building credible industry expertise. "
-                f"Positioned for entry-level {domain} opportunities with strong growth potential.",
+                f"Positioned for entry-level {domain} opportunities with strong growth potential.{kw_clause}",
             ]
         elif edu_str or work_str:
-            # NEW: Has education/work background but no Upskillize assessments yet
             templates = [
                 f"{name}{edu_intro}{work_intro} is an emerging {domain} professional combining academic foundations with hands-on skill development. "
                 f"Currently expanding expertise through structured professional training and industry-relevant coursework. "
-                f"Positioned for roles in {domain} with a strong educational foundation and proactive approach to professional growth.",
+                f"Positioned for roles in {domain} with a strong educational foundation and proactive approach to professional growth.{kw_clause}",
 
                 f"{name}{edu_intro}{work_intro} brings a solid academic foundation to the {domain} sector. "
                 f"Actively developing industry-relevant skills through structured professional training and certification programs. "
-                f"A motivated professional ready to apply theoretical knowledge to real-world {domain} challenges.",
+                f"A motivated professional ready to apply theoretical knowledge to real-world {domain} challenges.{kw_clause}",
 
                 f"With a background in {edu_str or domain}{work_intro}, {name} is building expertise in {domain} through focused professional development. "
                 f"Combining academic knowledge with practical skill-building, {name} is positioned for emerging opportunities in the {domain} industry. "
-                f"A growth-oriented professional with strong foundational capabilities.",
+                f"A growth-oriented professional with strong foundational capabilities.{kw_clause}",
             ]
         else:
             templates = [
                 f"{name} is building foundational expertise in {domain} through structured professional training. "
-                f"Developing core competencies and positioned for growth in the {domain} sector.",
+                f"Developing core competencies and positioned for growth in the {domain} sector.{kw_clause}",
             ]
 
         return templates[name_hash % len(templates)]
 
-    def _derive_domain(self, course_names: list, education: list = None, work_experience: list = None, personal: dict = None) -> str:
-        """Derive professional domain from ALL available sources."""
+    # ─── Domain derivation (unchanged from v5) ───────────────────
+
+    def _derive_domain(
+        self,
+        course_names: list,
+        education: list = None,
+        work_experience: list = None,
+        personal: dict = None,
+    ) -> str:
         if education is None:
             education = []
         if work_experience is None:
@@ -232,22 +350,18 @@ DATA:
         if personal is None:
             personal = {}
 
-        # Combine all text sources for keyword matching
         all_text_parts = list(course_names)
 
-        # Add education fields
         for edu in education:
             all_text_parts.append(edu.get("degree", ""))
             all_text_parts.append(edu.get("field_of_study", ""))
             all_text_parts.append(edu.get("institution", ""))
 
-        # Add work experience
         for work in work_experience:
             all_text_parts.append(work.get("title", ""))
             all_text_parts.append(work.get("company", ""))
             all_text_parts.append(work.get("description", ""))
 
-        # Add personal fields
         all_text_parts.append(personal.get("career_goals", "") or "")
         all_text_parts.append(personal.get("preferred_role", "") or "")
         all_text_parts.append(personal.get("current_designation", "") or "")
@@ -259,7 +373,6 @@ DATA:
         if not text.strip():
             return "Financial Services"
 
-        # More comprehensive domain detection
         if "business analy" in text or "business intelligence" in text:
             return "Business Analysis & Analytics"
         elif "ux" in text or "ui" in text or "user experience" in text or "user interface" in text:
