@@ -484,8 +484,10 @@ class ProfileOrchestrator:
                 env_base = os.environ.get("LMS_BASE_URL", "")
                 if env_base:
                     lms_bases.append(env_base.rstrip("/"))
-                # Default known LMS hosts
+                # Default known LMS hosts — Render backend is the actual file server
                 lms_bases.extend([
+                    "https://upskillize-lms-backend.onrender.com",
+                    "https://upskillize-lms-backend.onrender.com/api",
                     "https://lms.upskillize.com",
                     "https://api.upskillize.com",
                     "https://upskillize.com",
