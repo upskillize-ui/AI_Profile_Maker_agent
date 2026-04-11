@@ -409,30 +409,72 @@ class DataCollector:
     # ─── Case Studies ────────────────────────────────────
 
     def _get_case_studies(self, student_id: int) -> List[Dict]:
-        try:
-            rows = self.db.execute(
-                text("""
-                    SELECT
-                        css.id AS submission_id, csd.title, csd.key_concepts,
-                        csd.max_score, css.ai_score AS score, css.ai_grade,
-                        css.ai_feedback, css.ai_rubric_scores,
-                        css.ai_strengths, css.ai_improvements,
-                        css.ai_missing_concepts, css.attempt_number,
-                        css.word_count, css.submitted_at, css.status,
-                        c.course_name
-                    FROM case_study_submissions css
-                    JOIN case_studies csd ON csd.id = css.case_study_id
-                    LEFT JOIN courses c ON c.id = csd.course_id
-                    WHERE css.student_id = :sid
-                      AND css.status IN ('graded', 'mentor_reviewed')
-                    ORDER BY css.ai_score DESC
-                """),
-                {"sid": student_id},
-            ).mappings().all()
-            return clean_data([dict(r) for r in rows])
-        except Exception as e:
-            logger.warning(f"case_studies failed: {e}")
-            return []
+        """Fetch graded case study submissions. Defensively tries multiple
+        column combinations since LMS schemas vary."""
+
+        # Define progressive query variants — try richest first, fall back gracefully
+        query_variants = [
+            # Variant 1: full schema with key_concepts
+            """SELECT
+                css.id AS submission_id, csd.title, csd.key_concepts,
+                csd.max_score, css.ai_score AS score, css.ai_grade,
+                css.ai_feedback, css.ai_rubric_scores,
+                css.ai_strengths, css.ai_improvements,
+                css.ai_missing_concepts, css.attempt_number,
+                css.word_count, css.submitted_at, css.status,
+                c.course_name
+            FROM case_study_submissions css
+            JOIN case_studies csd ON csd.id = css.case_study_id
+            LEFT JOIN courses c ON c.id = csd.course_id
+            WHERE css.student_id = :sid
+              AND css.status IN ('graded', 'mentor_reviewed')
+            ORDER BY css.ai_score DESC""",
+
+            # Variant 2: without key_concepts
+            """SELECT
+                css.id AS submission_id, csd.title,
+                csd.max_score, css.ai_score AS score, css.ai_grade,
+                css.ai_feedback, css.submitted_at, css.status,
+                c.course_name
+            FROM case_study_submissions css
+            JOIN case_studies csd ON csd.id = css.case_study_id
+            LEFT JOIN courses c ON c.id = csd.course_id
+            WHERE css.student_id = :sid
+              AND css.status IN ('graded', 'mentor_reviewed')
+            ORDER BY css.ai_score DESC""",
+
+            # Variant 3: minimal — just title, score, status
+            """SELECT
+                css.id AS submission_id, csd.title,
+                css.ai_score AS score, css.status, css.submitted_at
+            FROM case_study_submissions css
+            JOIN case_studies csd ON csd.id = css.case_study_id
+            WHERE css.student_id = :sid
+              AND css.status IN ('graded', 'mentor_reviewed')
+            ORDER BY css.ai_score DESC""",
+
+            # Variant 4: even more minimal — drop status filter
+            """SELECT
+                css.id AS submission_id, csd.title,
+                css.ai_score AS score
+            FROM case_study_submissions css
+            JOIN case_studies csd ON csd.id = css.case_study_id
+            WHERE css.student_id = :sid
+            ORDER BY css.ai_score DESC""",
+        ]
+
+        for i, query in enumerate(query_variants):
+            try:
+                rows = self.db.execute(text(query), {"sid": student_id}).mappings().all()
+                if i > 0:
+                    logger.info(f"case_studies fetched using fallback variant #{i+1}")
+                return clean_data([dict(r) for r in rows])
+            except Exception as e:
+                logger.info(f"case_studies variant {i+1} failed: {e}")
+                continue
+
+        logger.warning("All case_studies query variants failed — returning empty list")
+        return []
 
     # ─── Assignments ─────────────────────────────────────
 

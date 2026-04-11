@@ -71,16 +71,38 @@ class ProfileOrchestrator:
         # Also check if student filled skills/bio in LMS profile directly
         lms_skills_text = personal.get("key_skills") or personal.get("skills") or ""
         lms_bio = personal.get("about_me") or ""
-        if lms_skills_text and not resume_text:
-            # Use LMS profile fields as mini-resume
-            resume_text = f"""
-Name: {personal.get('full_name', '')}
-Headline: {personal.get('current_designation', '')}
-Skills: {lms_skills_text}
-Bio: {lms_bio}
-Education: {personal.get('education_level', '')} {personal.get('field_of_study', '')} from {personal.get('institution', '')} ({personal.get('graduation_year', '')})
-Experience: {personal.get('work_experience_years', '')} years at {personal.get('current_employer', '')}
-"""
+
+        # Build a mini-resume from ANY LMS profile data we have, even if just bio
+        # This ensures the AI summary has SOMETHING real to work with
+        if not resume_text and (lms_skills_text or lms_bio or personal.get("education_level") or
+                                 personal.get("institution") or personal.get("current_designation") or
+                                 personal.get("current_employer")):
+            parts = [f"Name: {personal.get('full_name', '')}"]
+            if personal.get("current_designation"):
+                parts.append(f"Current Role: {personal['current_designation']}")
+            if personal.get("current_employer"):
+                parts.append(f"Employer: {personal['current_employer']}")
+            if personal.get("work_experience_years"):
+                parts.append(f"Experience: {personal['work_experience_years']} years")
+            if personal.get("education_level") or personal.get("institution"):
+                edu_line = f"Education: {personal.get('education_level', '')}"
+                if personal.get("field_of_study"):
+                    edu_line += f" in {personal['field_of_study']}"
+                if personal.get("institution"):
+                    edu_line += f" from {personal['institution']}"
+                if personal.get("graduation_year"):
+                    edu_line += f" ({personal['graduation_year']})"
+                parts.append(edu_line)
+            if lms_skills_text:
+                parts.append(f"Skills: {lms_skills_text}")
+            if lms_bio:
+                parts.append(f"About: {lms_bio}")
+            if personal.get("career_goals"):
+                parts.append(f"Career Goals: {personal['career_goals']}")
+            if personal.get("preferred_role"):
+                parts.append(f"Preferred Role: {personal['preferred_role']}")
+            resume_text = "\n".join(parts)
+            logger.info(f"Built mini-resume from LMS fields: {len(resume_text)} chars")
 
         github_url = personal.get("github_url") or ""
         linkedin_url = personal.get("linkedin_url") or ""
@@ -442,18 +464,82 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
         }
 
     async def _download_resume(self, url: str) -> str:
-        """Download resume PDF from URL and extract text."""
+        """Download resume PDF from URL and extract text.
+        Handles both absolute URLs and relative paths like /uploads/resumes/foo.pdf
+        by trying multiple LMS base URLs."""
         try:
             import httpx
-            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-                resp = await client.get(url)
-                if resp.status_code != 200:
-                    logger.warning(f"Resume download failed: HTTP {resp.status_code}")
+            import os
+
+            # Build list of URLs to try
+            urls_to_try = []
+
+            if url.startswith("http://") or url.startswith("https://"):
+                # Already absolute
+                urls_to_try.append(url)
+            else:
+                # Relative path — prepend LMS base URLs
+                # Read from env if set, otherwise try known defaults
+                lms_bases = []
+                env_base = os.environ.get("LMS_BASE_URL", "")
+                if env_base:
+                    lms_bases.append(env_base.rstrip("/"))
+                # Default known LMS hosts
+                lms_bases.extend([
+                    "https://lms.upskillize.com",
+                    "https://api.upskillize.com",
+                    "https://upskillize.com",
+                    "https://lms-api.upskillize.com",
+                    "https://backend.upskillize.com",
+                ])
+                # Deduplicate while preserving order
+                seen = set()
+                unique_bases = []
+                for b in lms_bases:
+                    if b not in seen:
+                        seen.add(b)
+                        unique_bases.append(b)
+
+                # Make sure path starts with /
+                rel = url if url.startswith("/") else "/" + url
+                for base in unique_bases:
+                    urls_to_try.append(base + rel)
+
+            logger.info(f"Resume download attempts: {len(urls_to_try)} URLs to try for path '{url}'")
+
+            async with httpx.AsyncClient(
+                timeout=15.0,
+                follow_redirects=True,
+                headers={"User-Agent": "Mozilla/5.0 ProfileAgent/1.0"},
+            ) as client:
+                resp = None
+                successful_url = None
+                for try_url in urls_to_try:
+                    try:
+                        logger.info(f"Trying resume URL: {try_url}")
+                        r = await client.get(try_url)
+                        if r.status_code == 200 and len(r.content) > 100:
+                            # Check it's actually a PDF (starts with %PDF)
+                            if r.content[:4] == b"%PDF":
+                                resp = r
+                                successful_url = try_url
+                                break
+                            else:
+                                logger.info(f"  Got 200 but not a PDF (first bytes: {r.content[:10]})")
+                        else:
+                            logger.info(f"  Returned HTTP {r.status_code}")
+                    except Exception as e:
+                        logger.info(f"  Failed: {e}")
+                        continue
+
+                if not resp:
+                    logger.warning(f"Resume download failed: tried {len(urls_to_try)} URLs, none worked. Original path: {url}")
                     return ""
+
+                logger.info(f"Resume downloaded successfully from: {successful_url} ({len(resp.content)} bytes)")
 
                 # Save to temp file and extract text
                 import tempfile
-                import os
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
                     f.write(resp.content)
                     tmp_path = f.name
@@ -494,7 +580,10 @@ Experience: {personal.get('work_experience_years', '')} years at {personal.get('
                     logger.warning("No PDF extraction library available (install PyPDF2, pdfplumber, or pdfminer)")
                     return ""
                 finally:
-                    os.unlink(tmp_path)
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
 
         except Exception as e:
             logger.warning(f"Resume download/extract failed: {e}")
