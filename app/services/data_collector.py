@@ -401,8 +401,9 @@ class DataCollector:
                 ptype, traits = "Curious Explorer", "Self-initiated, Building foundations"
                 ws = "Self-paced learning"
             else:
-                ptype, traits = "Getting Started", "Enrolled and ready to learn"
-                ws = "Self-paced"
+                # No assessments — return empty so the section is hidden from recruiters
+                return {"personality_type": "", "traits_json": "", "work_style": "",
+                        "communication_profile": "", "leadership_indicators": ""}
 
             return {
                 "personality_type": ptype, "traits_json": traits, "work_style": ws,

@@ -222,10 +222,30 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
   {% endif %}
 </div>
 
-<!-- PROFESSIONAL SUMMARY (industry keywords now woven INTO this paragraph) -->
+<!-- PROFESSIONAL SUMMARY — bullet points highlighting unique student strengths -->
 <div class="s">
   <div class="st"><span class="ic" style="background:var(--al);color:var(--a2)">✦</span> Professional Summary</div>
-  <p class="stx">{{ professional_summary or 'Professional summary will appear once profile data is available.' }}</p>
+  {% if professional_summary %}
+    {% set summary_lines = professional_summary.split('\n') %}
+    {% set has_bullets = professional_summary.startswith('•') or professional_summary.startswith('-') or '\n•' in professional_summary or '\n-' in professional_summary %}
+    {% if has_bullets %}
+      <ul style="list-style:none;padding:0;margin:0">
+        {% for line in summary_lines %}
+          {% set clean = line.strip().lstrip('•').lstrip('-').strip() %}
+          {% if clean %}
+          <li style="position:relative;padding:6px 0 6px 22px;font-size:15px;line-height:1.7;color:#374151">
+            <span style="position:absolute;left:0;top:11px;width:6px;height:6px;border-radius:50%;background:var(--a2)"></span>
+            {{ clean }}
+          </li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="stx">{{ professional_summary }}</p>
+    {% endif %}
+  {% else %}
+    <p class="stx">Professional summary will appear once profile data is available.</p>
+  {% endif %}
   {% if growth_statement %}<p class="stx" style="margin-top:12px;color:var(--g);font-style:italic">{{ growth_statement }}</p>{% endif %}
 </div>
 
@@ -403,15 +423,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
     </div>
     {% endif %}
 
-    <!-- GROWTH AREAS -->
-    {% if ats_data and ats_data.improvement_tips %}
-    <div class="s">
-      <div class="st"><span class="ic" style="background:var(--aml);color:var(--am)">📈</span> Growth Areas</div>
-      {% for tip in ats_data.improvement_tips %}
-      <div class="ti"><div class="tic">→</div><div>{{ tip }}</div></div>
-      {% endfor %}
-    </div>
-    {% endif %}
+    <!-- GROWTH AREAS REMOVED — recruiter-facing profile should not show coaching tips -->
 
   </div>
   <!-- ═══════════════ /RIGHT COLUMN ═══════════════ -->
@@ -419,14 +431,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t);line-h
 </div>
 <!-- /grid2 -->
 
-<!-- BOOST NUDGE — full width, only for low activity -->
-{% if performance_data and (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) + (performance_data.total_case_studies or 0) == 0 %}
-<div class="nd" style="margin-top:20px">
-  <h3>🚀 Build Your Profile Strength</h3>
-  <p>Complete assessments and case studies to unlock achievements, boost your ATS score, and get matched with specific job roles.</p>
-  <div class="na"><span>📝 Take assessments</span><span>📋 Submit case studies</span><span>💬 Participate in discussions</span></div>
-</div>
-{% endif %}
+<!-- BOOST NUDGE REMOVED — internal coaching not appropriate for recruiter-facing profile -->
 
 <!-- FOOTER -->
 <div class="ft">
