@@ -138,6 +138,9 @@ class SummaryAgent:
         current_employer = personal.get("current_employer", "") or ""
         work_years = personal.get("work_experience_years", "") or ""
 
+        # NEW: about_me / bio is critical fallback when other fields are empty
+        about_me = personal.get("about_me", "") or personal.get("bio", "") or ""
+
         # LinkedIn
         linkedin_headline = personal.get("linkedin_headline", "") or ""
         linkedin_summary = personal.get("linkedin_summary", "") or ""
@@ -155,6 +158,7 @@ class SummaryAgent:
             "current_designation":  current_designation,
             "current_employer":     current_employer,
             "work_years":           work_years,
+            "about_me":             about_me,
             "linkedin_headline":    linkedin_headline,
             "linkedin_summary":     linkedin_summary,
             "personality_type":     personality.get("personality_type", ""),
@@ -227,6 +231,8 @@ class SummaryAgent:
             data_lines.append(f"Career Goals: {ctx['career_goals']}")
         if ctx["preferred_role"]:
             data_lines.append(f"Preferred Role: {ctx['preferred_role']}")
+        if ctx.get("about_me"):
+            data_lines.append(f"About Me (student's own words): {ctx['about_me']}")
         if ctx["domain"]:
             data_lines.append(f"Industry Domain: {ctx['domain']}")
 

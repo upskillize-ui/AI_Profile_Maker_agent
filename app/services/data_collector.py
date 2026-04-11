@@ -167,6 +167,94 @@ class DataCollector:
                 continue
         return clean_data(prefs)
 
+    # ─── NEW v9.2: Parse education from free-text bio ───────
+
+    def _parse_education_from_bio(self, bio: str) -> Dict[str, str]:
+        """Extract degree + institution from a free-text bio like
+        'i completed my b.tech from sec, Sasaram.' or
+        'BCA graduate from XYZ University 2024'."""
+        import re
+        if not bio or len(bio.strip()) < 10:
+            return None
+
+        bio_lower = bio.lower()
+
+        # Detect degree
+        degree_patterns = [
+            (r'\bb\.?\s*tech\b', 'B.Tech'),
+            (r'\bb\.?\s*e\b', 'B.E'),
+            (r'\bb\.?\s*c\.?\s*a\b', 'BCA'),
+            (r'\bm\.?\s*c\.?\s*a\b', 'MCA'),
+            (r'\bm\.?\s*b\.?\s*a\b', 'MBA'),
+            (r'\bm\.?\s*tech\b', 'M.Tech'),
+            (r'\bb\.?\s*com\b', 'B.Com'),
+            (r'\bm\.?\s*com\b', 'M.Com'),
+            (r'\bb\.?\s*sc\b', 'B.Sc'),
+            (r'\bm\.?\s*sc\b', 'M.Sc'),
+            (r'\bph\.?\s*d\b', 'Ph.D'),
+            (r'\bbachelor\b', "Bachelor's Degree"),
+            (r'\bmaster\b', "Master's Degree"),
+            (r'\bdiploma\b', 'Diploma'),
+        ]
+
+        degree = ""
+        for pat, name in degree_patterns:
+            if re.search(pat, bio_lower):
+                degree = name
+                break
+
+        if not degree:
+            return None
+
+        # Try to extract institution after "from" keyword
+        institution = ""
+        # Match "from X" where X can contain commas and spaces, until end of string or sentence
+        from_match = re.search(r'\bfrom\s+([^.;]+?)(?:\.\s*$|$|;)', bio, re.IGNORECASE)
+        if from_match:
+            institution = from_match.group(1).strip().rstrip(',.')
+            # Smart casing: keep short all-caps words (acronyms like SEC, IIT, NIT) uppercase,
+            # title-case the rest
+            if len(institution) < 100 and institution:
+                words = []
+                for w in institution.split():
+                    if len(w) <= 4 and w.isalpha():
+                        words.append(w.upper())
+                    else:
+                        words.append(w.title())
+                institution = ' '.join(words)
+
+        # Try to extract year
+        year_match = re.search(r'\b(19|20)\d{2}\b', bio)
+        year = year_match.group(0) if year_match else ""
+
+        # Try to extract field of study
+        field = ""
+        field_patterns = [
+            (r'computer\s+science', 'Computer Science'),
+            (r'\bcse\b', 'Computer Science'),
+            (r'information\s+technology', 'Information Technology'),
+            (r'\bit\b', 'Information Technology'),
+            (r'electronics', 'Electronics'),
+            (r'mechanical', 'Mechanical Engineering'),
+            (r'civil', 'Civil Engineering'),
+            (r'electrical', 'Electrical Engineering'),
+            (r'commerce', 'Commerce'),
+            (r'e-?commerce', 'E-Commerce'),
+        ]
+        for pat, name in field_patterns:
+            if re.search(pat, bio_lower):
+                field = name
+                break
+
+        return {
+            "degree": degree,
+            "institution": institution,
+            "year": year,
+            "field_of_study": field,
+            "percentage": "",
+            "source": "lms_bio_parsed",
+        }
+
     # ─── Personal Info ───────────────────────────────────
 
     def _get_personal_info(self, student_id: int) -> Dict[str, Any]:
@@ -245,6 +333,14 @@ class DataCollector:
                 "percentage": "",
                 "source": "lms_profile",
             })
+        else:
+            # NEW v9.2: Try to parse education from the about_me bio field
+            # e.g. "i completed my b.tech from sec, Sasaram." → degree="B.Tech", institution="SEC, Sasaram"
+            bio = d.get("about_me", "") or ""
+            if bio:
+                parsed_edu = self._parse_education_from_bio(bio)
+                if parsed_edu:
+                    lms_education.append(parsed_edu)
         d["lms_education"] = lms_education
 
         lms_work_experience = []
