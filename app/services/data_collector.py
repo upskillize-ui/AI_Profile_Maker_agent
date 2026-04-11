@@ -56,6 +56,11 @@ class DataCollector:
         forum_activity = self._get_forum_activity(student_id)
         batch_info = self._get_batch_info(stu_id)
 
+        # NEW v9: capstone projects, semester results, job preferences
+        capstone_projects = self._get_capstone_projects(stu_id)
+        semester_results = self._get_semester_results(stu_id)
+        job_preferences = self._get_job_preferences(student_id)
+
         computed = self._compute_metrics(
             test_scores=test_scores,
             case_studies=case_studies,
@@ -81,12 +86,86 @@ class DataCollector:
             "forum_activity": forum_activity,
             "batch_info": batch_info,
             "computed": computed,
-            # v6: surface LMS-derived education + work experience at top level
-            # so DataMerger can use them as fallback when resume/LinkedIn lack data
+            "capstone_projects": capstone_projects,
+            "semester_results": semester_results,
+            "job_preferences": job_preferences,
             "lms_education": personal.get("lms_education", []),
             "lms_work_experience": personal.get("lms_work_experience", []),
         }
         return clean_data(result)
+
+    # ─── NEW: Capstone Projects ──────────────────────────
+
+    def _get_capstone_projects(self, student_id: int) -> list:
+        """Fetch capstone project submissions with scores and status.
+        Tries multiple table names defensively."""
+        for table in ("capstone_projects", "capstone_submissions", "student_capstones"):
+            try:
+                rows = self.db.execute(
+                    text(f"""
+                        SELECT * FROM {table}
+                        WHERE student_id = :sid
+                        ORDER BY id DESC
+                        LIMIT 5
+                    """),
+                    {"sid": student_id},
+                ).mappings().all()
+                if rows:
+                    return clean_data([dict(r) for r in rows])
+            except Exception:
+                continue
+        return []
+
+    # ─── NEW: Semester / Final Results ───────────────────
+
+    def _get_semester_results(self, student_id: int) -> list:
+        """Fetch semester or final results."""
+        for table in ("semester_results", "final_results", "academic_results"):
+            try:
+                rows = self.db.execute(
+                    text(f"""
+                        SELECT * FROM {table}
+                        WHERE student_id = :sid
+                        ORDER BY id DESC
+                    """),
+                    {"sid": student_id},
+                ).mappings().all()
+                if rows:
+                    return clean_data([dict(r) for r in rows])
+            except Exception:
+                continue
+        return []
+
+    # ─── NEW: Job Preferences ────────────────────────────
+
+    def _get_job_preferences(self, student_id: int) -> dict:
+        """Fetch from job_preferences table OR fall back to user table fields."""
+        # Try a dedicated table first
+        for table in ("job_preferences", "student_job_preferences"):
+            try:
+                row = self.db.execute(
+                    text(f"SELECT * FROM {table} WHERE user_id = :sid OR student_id = :sid LIMIT 1"),
+                    {"sid": student_id},
+                ).mappings().first()
+                if row:
+                    return clean_data(dict(row))
+            except Exception:
+                continue
+
+        # Fall back to user-level columns
+        prefs = {}
+        for col in ("preferred_role", "preferred_industry", "preferred_location",
+                    "work_mode", "expected_salary", "notice_period", "open_to_relocate"):
+            try:
+                r = self.db.execute(
+                    text(f"SELECT {col} FROM users WHERE id = :sid LIMIT 1"),
+                    {"sid": student_id},
+                ).mappings().first()
+                if r and r.get(col):
+                    prefs[col] = r[col]
+            except Exception:
+                continue
+        return clean_data(prefs)
 
     # ─── Personal Info ───────────────────────────────────
 

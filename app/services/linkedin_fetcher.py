@@ -29,15 +29,23 @@ class LinkedInFetcher:
         if not username:
             return self._empty_result()
 
-        # Strategy 1: Try fetching public LinkedIn page
+        # Strategy 1: Try fetching public LinkedIn page directly
         try:
             profile_data = await self._fetch_public_profile(linkedin_url, username)
-            if profile_data and profile_data.get("_source") != "empty":
+            if profile_data and profile_data.get("_source") != "empty" and profile_data.get("headline"):
                 return profile_data
         except Exception as e:
-            logger.info(f"LinkedIn public fetch failed (expected): {e}")
+            logger.info(f"LinkedIn direct fetch failed (expected): {e}")
 
-        # LinkedIn blocked — return what we can (just the URL and username)
+        # Strategy 2: Try Bing's cached version (Google blocks too, Bing sometimes works)
+        try:
+            cached_data = await self._fetch_via_search_cache(username)
+            if cached_data and cached_data.get("headline"):
+                return cached_data
+        except Exception as e:
+            logger.info(f"LinkedIn cached fetch failed: {e}")
+
+        # LinkedIn blocked everywhere — return URL only
         return {
             "username": username,
             "profile_url": f"https://linkedin.com/in/{username}",
@@ -49,6 +57,68 @@ class LinkedInFetcher:
             "certifications": [],
             "_source": "linkedin_url_only",
         }
+
+    async def _fetch_via_search_cache(self, username: str) -> Dict[str, Any]:
+        """Try Bing search to get LinkedIn metadata from search snippets.
+        Bing usually indexes LinkedIn public profiles and serves the og:title/description."""
+        search_url = f"https://www.bing.com/search?q=site:linkedin.com/in/{username}"
+        async with httpx.AsyncClient(
+            timeout=10.0,
+            follow_redirects=True,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+        ) as client:
+            resp = await client.get(search_url)
+            if resp.status_code != 200:
+                return self._empty_result()
+
+            html = resp.text
+            # Bing renders LinkedIn snippets with title and description
+            # Title pattern: "Name - Headline | LinkedIn"
+            title_match = re.search(
+                rf'<h2><a[^>]*href="[^"]*linkedin\.com/in/{re.escape(username)}[^"]*"[^>]*>([^<]+)</a></h2>',
+                html, re.IGNORECASE,
+            )
+            desc_match = re.search(
+                rf'href="[^"]*linkedin\.com/in/{re.escape(username)}[^"]*".*?<p[^>]*>([^<]+)</p>',
+                html, re.DOTALL | re.IGNORECASE,
+            )
+
+            headline = ""
+            summary = ""
+
+            if title_match:
+                raw_title = title_match.group(1).strip()
+                # Clean: "Name - Headline | LinkedIn" → "Headline"
+                raw_title = re.sub(r'\s*[\|–-]\s*LinkedIn\s*$', '', raw_title).strip()
+                # If contains " - " split into name and headline
+                if " - " in raw_title:
+                    parts = raw_title.split(" - ", 1)
+                    headline = parts[1].strip() if len(parts) > 1 else raw_title
+                else:
+                    headline = raw_title
+
+            if desc_match:
+                summary = desc_match.group(1).strip()[:500]
+
+            if headline or summary:
+                return {
+                    "username": username,
+                    "profile_url": f"https://linkedin.com/in/{username}",
+                    "headline": headline,
+                    "summary": summary,
+                    "skills": [],
+                    "experience": [],
+                    "education": [],
+                    "certifications": [],
+                    "_source": "bing_cached",
+                }
+
+            return self._empty_result()
 
     async def _fetch_public_profile(self, url: str, username: str) -> Dict[str, Any]:
         """Try to extract data from LinkedIn's public profile page."""

@@ -338,6 +338,160 @@ async def get_my_profile(
     }
 
 
+# ═══════════════════════════════════════════
+# DIAGNOSTIC: shows what data the agent sees for the current student
+# Use this to debug WHY a profile looks incomplete
+# ═══════════════════════════════════════════
+
+@router.get("/profile/debug/me")
+async def debug_my_profile_data(
+    student=Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Returns a diagnostic of every data source the agent will use.
+    Tells you which sources have data and which are empty/blocked.
+    """
+    from app.services.data_collector import DataCollector
+    from app.services.resume_parser import ResumeParser
+    from app.services.github_fetcher import GitHubFetcher
+    from app.services.linkedin_fetcher import LinkedInFetcher
+    from app.agents.profile_orchestrator import ProfileOrchestrator
+
+    collector = DataCollector(db)
+    student_data = await collector.collect_all(student.id)
+    personal = student_data.get("personal", {})
+
+    diag = {
+        "student_id": student.id,
+        "student_name": personal.get("full_name", ""),
+        "lms_profile_fields": {
+            "current_designation":   personal.get("current_designation", ""),
+            "current_employer":      personal.get("current_employer", ""),
+            "work_experience_years": personal.get("work_experience_years", ""),
+            "education_level":       personal.get("education_level", ""),
+            "institution":           personal.get("institution", ""),
+            "field_of_study":        personal.get("field_of_study", ""),
+            "graduation_year":       personal.get("graduation_year", ""),
+            "key_skills":            personal.get("key_skills", ""),
+            "career_goals":          personal.get("career_goals", ""),
+            "preferred_role":        personal.get("preferred_role", ""),
+            "about_me":              personal.get("about_me", ""),
+        },
+        "external_urls": {
+            "resume_url":     personal.get("resume_url", ""),
+            "linkedin_url":   personal.get("linkedin_url", ""),
+            "github_url":     personal.get("github_url", ""),
+            "portfolio_url":  personal.get("portfolio_url", ""),
+        },
+        "lms_activity": {
+            "courses_enrolled":  len(student_data.get("courses", [])),
+            "test_scores":       len(student_data.get("test_scores", [])),
+            "case_studies":      len(student_data.get("case_studies", [])),
+            "assignments":       len(student_data.get("assignments", [])),
+            "quizzes":           len(student_data.get("quiz_scores", [])),
+            "certifications":    len(student_data.get("certifications", [])),
+            "projects":          len(student_data.get("projects", [])),
+        },
+        "computed": student_data.get("computed", {}),
+        "personality_from_psychometric": student_data.get("personality", {}),
+        "data_source_results": {},
+    }
+
+    # Try resume download + parse
+    if personal.get("resume_url"):
+        try:
+            orch = ProfileOrchestrator()
+            resume_text = await orch._download_resume(personal["resume_url"])
+            if resume_text:
+                parser = ResumeParser()
+                parsed = await parser.parse(resume_text)
+                diag["data_source_results"]["resume"] = {
+                    "status": "success",
+                    "text_length": len(resume_text),
+                    "parser_used": parsed.get("_source", "unknown"),
+                    "extracted_skills":     len(parsed.get("technical_skills", [])),
+                    "extracted_education":  len(parsed.get("education", [])),
+                    "extracted_experience": len(parsed.get("work_experience", [])),
+                    "extracted_projects":   len(parsed.get("projects", [])),
+                    "headline":             parsed.get("headline", ""),
+                    "linkedin_from_resume": parsed.get("linkedin_url", ""),
+                    "github_from_resume":   parsed.get("github_url", ""),
+                }
+            else:
+                diag["data_source_results"]["resume"] = {
+                    "status": "download_failed",
+                    "reason": "Could not download or extract text from resume_url",
+                }
+        except Exception as e:
+            diag["data_source_results"]["resume"] = {
+                "status": "error",
+                "error": str(e),
+            }
+    else:
+        diag["data_source_results"]["resume"] = {
+            "status": "no_url",
+            "reason": "users.resume_url is empty in DB — no resume uploaded",
+        }
+
+    # Try LinkedIn fetch
+    if personal.get("linkedin_url"):
+        try:
+            li = LinkedInFetcher()
+            li_data = await li.fetch(personal["linkedin_url"])
+            diag["data_source_results"]["linkedin"] = {
+                "status": "success" if li_data.get("_source") not in ("empty", "linkedin_url_only") else "blocked_or_empty",
+                "source_method": li_data.get("_source", ""),
+                "headline": li_data.get("headline", ""),
+                "summary_length": len(li_data.get("summary", "")),
+                "skills_count": len(li_data.get("skills", [])),
+                "experience_count": len(li_data.get("experience", [])),
+                "education_count": len(li_data.get("education", [])),
+                "note": "LinkedIn aggressively blocks scrapers — usually returns empty unless you upload LinkedIn PDF export",
+            }
+        except Exception as e:
+            diag["data_source_results"]["linkedin"] = {"status": "error", "error": str(e)}
+    else:
+        diag["data_source_results"]["linkedin"] = {"status": "no_url"}
+
+    # Try GitHub fetch
+    if personal.get("github_url"):
+        try:
+            gh = GitHubFetcher()
+            gh_data = await gh.fetch(personal["github_url"])
+            diag["data_source_results"]["github"] = {
+                "status": "success" if gh_data.get("username") else "failed",
+                "username":      gh_data.get("username", ""),
+                "public_repos":  gh_data.get("public_repos", 0),
+                "followers":     gh_data.get("followers", 0),
+                "languages":     list((gh_data.get("languages") or {}).keys())[:8],
+                "skills_derived": len(gh_data.get("technical_skills", [])),
+            }
+        except Exception as e:
+            diag["data_source_results"]["github"] = {"status": "error", "error": str(e)}
+    else:
+        diag["data_source_results"]["github"] = {"status": "no_url"}
+
+    # Summary of what's missing
+    missing = []
+    if not personal.get("current_designation"):
+        missing.append("LMS: current_designation")
+    if not personal.get("education_level"):
+        missing.append("LMS: education_level")
+    if not personal.get("institution"):
+        missing.append("LMS: institution")
+    if not personal.get("key_skills"):
+        missing.append("LMS: key_skills")
+    if not personal.get("resume_url"):
+        missing.append("Resume not uploaded")
+    if not personal.get("linkedin_url"):
+        missing.append("LinkedIn URL not provided")
+    if not personal.get("github_url"):
+        missing.append("GitHub URL not provided")
+    diag["missing_data_for_better_profile"] = missing
+
+    return diag
+
+
 @router.get("/profile/public/{slug}")
 async def get_public_profile(
     slug: str,

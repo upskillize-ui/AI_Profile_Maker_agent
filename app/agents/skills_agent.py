@@ -63,47 +63,63 @@ class SkillsAgent:
         }
 
     def _derive_technical_skills(self, courses, computed):
+        """Derive technical skills ONLY if real evidence exists.
+        No more 40% placeholder skills with no scores backing them up."""
         skills = {}
         total_quizzes = computed.get("total_quizzes", 0)
         total_cases = computed.get("total_case_studies", 0)
         total_assignments = computed.get("total_assignments", 0)
+        avg_test_score = computed.get("avg_test_score", 0)
 
-        for course in courses:
-            cname = (course.get("course_name") or "").lower()
-            progress = course.get("progress_percentage", 0) or 0
-            completed = course.get("completed_at") is not None
+        # Only generate skills if there's REAL activity backing them
+        has_real_activity = (total_quizzes + total_cases + total_assignments) > 0 or avg_test_score > 0
 
-            for keyword, skill_names in SKILL_MAP.items():
-                if keyword in cname:
-                    for skill_name in skill_names:
-                        if skill_name not in skills:
-                            base = progress * 0.4
-                            test_bonus = computed.get("avg_test_score", 0) * 0.3
-                            activity = min(30, total_quizzes * 2 + total_cases * 5 + total_assignments * 3)
-                            completion = 15 if completed else 0
-                            final_score = max(40, min(95, int(base + test_bonus + activity + completion)))
+        if has_real_activity:
+            for course in courses:
+                cname = (course.get("course_name") or "").lower()
+                progress = course.get("progress_percentage", 0) or 0
+                completed = course.get("completed_at") is not None
 
-                            skills[skill_name] = {
-                                "name": skill_name,
-                                "score": final_score,
-                                "evidence": f"Course: {course.get('course_name', '')}, {progress}% complete",
-                            }
+                # Only derive skill if course has actual progress or completion
+                if progress < 10 and not completed:
+                    continue
 
+                for keyword, skill_names in SKILL_MAP.items():
+                    if keyword in cname:
+                        for skill_name in skill_names:
+                            if skill_name not in skills:
+                                base = progress * 0.4
+                                test_bonus = avg_test_score * 0.3
+                                activity = min(30, total_quizzes * 2 + total_cases * 5 + total_assignments * 3)
+                                completion = 15 if completed else 0
+                                final_score = max(50, min(95, int(base + test_bonus + activity + completion)))
+
+                                skills[skill_name] = {
+                                    "name": skill_name,
+                                    "score": final_score,
+                                    "evidence": f"Course: {course.get('course_name', '')}, {progress}% complete",
+                                }
+
+        # Top subjects from real test scores ALWAYS valid
         for subj_name, subj_score in computed.get("top_subjects", [])[:4]:
-            if subj_name not in skills:
+            if subj_name not in skills and subj_score > 0:
                 skills[subj_name] = {"name": subj_name, "score": int(subj_score), "evidence": f"Test avg: {subj_score}%"}
 
         return sorted(skills.values(), key=lambda x: x["score"], reverse=True)
 
     def _derive_domain_knowledge(self, courses):
+        """Only show domain knowledge for courses with REAL progress (not 0%)."""
         domain, seen = [], set()
         for course in courses:
             cname = course.get("course_name", "")
+            progress = course.get("progress_percentage", 0) or 0
+            # Skip courses with no real progress — don't fabricate 40% scores
+            if progress < 10:
+                continue
             if cname and cname not in seen:
                 seen.add(cname)
-                progress = course.get("progress_percentage", 0) or 0
-                score = max(40, int(progress * 0.8)) if progress > 0 else 40
-                domain.append({"name": cname, "score": score, "evidence": f"{progress}% complete" if progress > 0 else "Currently enrolled"})
+                score = max(40, int(progress * 0.8))
+                domain.append({"name": cname, "score": score, "evidence": f"{progress}% complete"})
         return domain
 
     def _derive_soft_skills(self, computed, student_data):

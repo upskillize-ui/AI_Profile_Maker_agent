@@ -1,9 +1,14 @@
 """
-Profile Renderer v4
+Profile Renderer v9
 ═══════════════════
-Passes ALL v4 data to the template: achievements, role matches,
-ATS score, education, work experience, GitHub profile.
-Template variables match the new profile_template.html exactly.
+Passes ALL data sources to the template:
+- LMS data (courses, scores, case studies, capstone, semester results)
+- Resume data (education, work experience, skills)
+- GitHub data
+- LinkedIn data
+- Psychometric data (personality, traits, work style)
+- Job preferences
+- Auto-detects fresher vs working professional
 """
 
 import os
@@ -37,78 +42,91 @@ class ProfileRenderer:
         loc_parts = [personal.get("city", ""), personal.get("state", ""), personal.get("country", "")]
         student_location = ", ".join([p for p in loc_parts if p])
 
+        # ── Detect fresher vs working professional ──
+        work_experience = profile_data.get("work_experience", [])
+        work_years = personal.get("work_experience_years", "") or ""
+        current_employer = personal.get("current_employer", "") or ""
+
+        is_working_professional = bool(
+            work_experience or current_employer or
+            (work_years and str(work_years) not in ("0", "", "fresher", "Fresher"))
+        )
+        is_fresher = not is_working_professional
+
         context = {
-            # Student info
+            # ── Student basic info ──
             "student_name": (personal.get("full_name") or "Student").strip(),
             "student_email": personal.get("email", ""),
+            "student_phone": personal.get("phone", ""),
             "student_photo_url": personal.get("photo_url", ""),
             "student_location": student_location,
             "linkedin_url": personal.get("linkedin_url", ""),
             "github_url": personal.get("github_url", ""),
             "portfolio_url": personal.get("portfolio_url", ""),
 
-            # v4: Headline from role matcher (not course names)
-            "headline": profile_data.get("headline", "Financial Services Professional"),
+            # ── Career stage detection ──
+            "is_fresher": is_fresher,
+            "is_working_professional": is_working_professional,
 
-            # v4: Professional summary (AI-generated or template)
+            # ── Headline & summary ──
+            "headline": profile_data.get("headline", "Professional"),
             "professional_summary": profile_data.get("professional_summary", ""),
 
-            # v4: Skills (merged from LMS + resume + GitHub)
+            # ── Skills (merged from all sources) ──
             "skills_data": profile_data.get("skills_data", {}),
 
-            # v4: Performance metrics
+            # ── Performance & metrics ──
             "performance_data": profile_data.get("performance_data", {}),
-
-            # v4: Top achievements (reframed from real data)
             "top_achievements": profile_data.get("top_achievements", []),
 
-            # v4: Case study highlights (reframed professionally)
+            # ── Case studies & tests ──
             "case_study_highlights": profile_data.get("case_study_highlights", []),
-
-            # v4: Test highlights (reframed professionally)
             "test_highlights": profile_data.get("test_highlights", []),
 
-            # v4: Role matches (eligible job roles)
+            # ── Job role matches & ATS ──
             "role_matches": profile_data.get("role_matches", []),
-
-            # v6: ATS score data (keywords are now woven into the summary text instead)
             "ats_data": profile_data.get("ats_data", {}),
 
-            # v4: Personality from psychometric
+            # ── Personality (from psychometric) ──
             "personality_data": profile_data.get("personality_data", {}),
 
-            # v4: Statements (growth, consistency, engagement)
+            # ── Optional growth statements ──
             "growth_statement": profile_data.get("growth_statement", ""),
             "consistency_statement": profile_data.get("consistency_statement", ""),
             "engagement_statement": profile_data.get("engagement_statement", ""),
 
-            # v4: Education (from resume)
+            # ── Education & Work Experience ──
             "education_data": profile_data.get("education_data", []),
+            "work_experience": work_experience,
 
-            # v4: Work experience (from resume)
-            "work_experience": profile_data.get("work_experience", []),
-
-            # v4: Projects (merged LMS + resume + GitHub)
+            # ── Projects ──
             "projects_data": profile_data.get("projects_data", []),
 
-            # v4: GitHub profile
+            # ── GitHub profile ──
             "github_profile": profile_data.get("github_profile", {}),
 
-            # v4: Certifications (merged)
+            # ── Certifications ──
             "certifications_data": profile_data.get("certifications_data", []),
 
-     # Courses (already in context — keep this)
+            # ── NEW v9: Capstone projects ──
+            "capstone_projects": student_data.get("capstone_projects", []),
+
+            # ── NEW v9: Semester / final results ──
+            "semester_results": student_data.get("semester_results", []),
+
+            # ── NEW v9: Job preferences ──
+            "job_preferences": student_data.get("job_preferences", {}),
+
+            # ── LMS sections ──
             "courses": student_data.get("courses", []),
-
-             # ── NEW: Full LMS sections for the template ───────────
-            "courses_data":     profile_data.get("courses_data",     student_data.get("courses", [])),
+            "courses_data":     profile_data.get("courses_data", student_data.get("courses", [])),
             "assignments_data": profile_data.get("assignments_data", student_data.get("assignments", [])),
-            "attendance_data":  profile_data.get("attendance_data",  student_data.get("attendance", {})),
+            "attendance_data":  profile_data.get("attendance_data", student_data.get("attendance", {})),
 
-             # Data sources used
+            # ── Data sources tracking ──
             "data_sources": profile_data.get("data_sources", []),
 
-            # Meta
+            # ── Meta ──
             "slug": slug,
             "visibility": visibility,
             "profile_url": f"{agent_base}/api/v1/profile/public/{slug}",
