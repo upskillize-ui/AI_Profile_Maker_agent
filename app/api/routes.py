@@ -230,8 +230,19 @@ async def _partial_regenerate(student_id: int, existing: StudentProfile, db: Ses
 
         # ── Fast path: nothing to do ──
         if was_no_op:
+            # Still re-render HTML in case template changed
+            renderer = ProfileRenderer()
+            html = renderer.render(
+                student_data=student_data,
+                profile_data=new_profile_data,
+                slug=existing.slug,
+                visibility=existing.visibility.value if existing.visibility else "public",
+            )
+            existing.rendered_html = html
+            db.commit()
+            CacheService.set_profile_html(existing.slug, html)
             return {
-                "message": "Profile is already up to date — no new data found.",
+                "message": "Profile refreshed with latest template.",
                 "slug": existing.slug,
                 "status": "completed",
                 "profile_url":  f"{AGENT_BASE}/api/v1/profile/public/{existing.slug}",
