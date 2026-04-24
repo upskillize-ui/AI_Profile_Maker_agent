@@ -346,6 +346,59 @@ body{
 .persona-cell .pl{font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); font-weight: 700; margin-bottom: 3px}
 .persona-cell .pv{font-size: 13px; font-weight: 500; color: var(--text-2); line-height: 1.5}
 
+/* ═══════════ LMS COURSE CARDS ═══════════ */
+.course-row{
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; background: var(--bg-soft); border-radius: 10px;
+  margin-bottom: 8px; gap: 12px; transition: all .2s;
+}
+.course-row:last-child{margin-bottom: 0}
+.course-row:hover{background: var(--bg-softer)}
+.course-name{font-size: 13.5px; font-weight: 600; color: var(--text); flex: 1}
+.course-status{
+  font-size: 10px; font-weight: 700; padding: 3px 10px;
+  border-radius: 99px; text-transform: uppercase; letter-spacing: .5px;
+  flex-shrink: 0;
+}
+.course-status.completed{background: var(--teal-soft); color: var(--teal); border: 1px solid var(--teal)}
+.course-status.in-progress{background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber)}
+.course-status.enrolled{background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent)}
+
+/* ═══════════ SCORE ROWS ═══════════ */
+.score-row{
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; background: var(--bg-soft); border-radius: 10px;
+  margin-bottom: 8px; transition: all .2s;
+}
+.score-row:last-child{margin-bottom: 0}
+.score-row:hover{background: var(--bg-softer)}
+.score-val{
+  font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700;
+  color: var(--teal); min-width: 52px; text-align: center; line-height: 1;
+}
+.score-val.mid{color: var(--amber)}
+.score-val.low{color: var(--text-3)}
+.score-info{flex: 1}
+.score-title{font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 2px}
+.score-meta{font-size: 11px; color: var(--text-3); font-weight: 500}
+.score-meta span + span::before{content: ' · '; opacity: .5}
+
+/* ═══════════ PLACEHOLDER ═══════════ */
+.placeholder{
+  text-align: center; padding: 20px 16px;
+  background: var(--bg-soft); border-radius: 12px;
+  border: 1.5px dashed var(--border-strong);
+}
+.placeholder .ph-icon{
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--bg-softer); display: flex;
+  align-items: center; justify-content: center;
+  margin: 0 auto 10px; color: var(--text-4);
+}
+.placeholder .ph-icon svg{width: 16px; height: 16px; stroke-width: 2}
+.placeholder .ph-text{font-size: 12.5px; color: var(--text-3); font-weight: 500; line-height: 1.6}
+.placeholder .ph-text strong{color: var(--text-2); font-weight: 700}
+
 /* ═══════════ CERTIFICATIONS ═══════════ */
 .cert-card{display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--divider); align-items: center}
 .cert-card:last-child{border-bottom: none}
@@ -582,8 +635,173 @@ body{
   {% endif %}
 </div>
 
+<!-- ═══════════ ENROLLED COURSES ═══════════ -->
+<div class="section">
+  <div class="section-title">
+    <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+    </div>
+    Enrolled Courses
+    {% if total_courses %}<span style="font-size:11px;color:var(--text-3);font-weight:500;font-family:'Plus Jakarta Sans',sans-serif;margin-left:8px">{{ completed_courses }}/{{ total_courses }} completed</span>{% endif %}
+  </div>
+  {% if courses_data and courses_data|length > 0 %}
+    {% for course in courses_data[:6] %}
+    <div class="course-row">
+      <div class="course-name">{{ course.course_name or 'Course' }}</div>
+      {% set cs_status = course.completion_status or course.status or 'enrolled' %}
+      <span class="course-status {{ 'completed' if cs_status == 'completed' else ('in-progress' if cs_status in ('in_progress', 'active', 'started') else 'enrolled') }}">
+        {{ 'Completed' if cs_status == 'completed' else ('In Progress' if cs_status in ('in_progress', 'active', 'started') else 'Enrolled') }}
+      </span>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg></div>
+      <div class="ph-text">No courses enrolled yet.<br><strong>Enroll in a course</strong> to unlock role matching and stronger ATS scores.</div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ═══════════ PERSONALITY & WORK STYLE ═══════════ -->
+<div class="section">
+  <div class="section-title">
+    <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a9 9 0 019 9c0 3.87-3.13 7-7 7h-2v4l-4-4A9 9 0 0112 2z"/></svg>
+    </div>
+    Personality &amp; Work Style
+  </div>
+  {% if personality_data and personality_data.personality_type %}
+    <div class="persona-hero">
+      <div class="type">{{ personality_data.personality_type }}</div>
+      <div class="src">Psychometric Assessment</div>
+    </div>
+    <div class="persona-grid">
+      {% if personality_data.traits %}<div class="persona-cell"><div class="pl">Key Traits</div><div class="pv">{{ personality_data.traits }}</div></div>{% endif %}
+      {% if personality_data.work_style %}<div class="persona-cell"><div class="pl">Work Style</div><div class="pv">{{ personality_data.work_style }}</div></div>{% endif %}
+      {% if personality_data.communication %}<div class="persona-cell"><div class="pl">Communication</div><div class="pv">{{ personality_data.communication }}</div></div>{% endif %}
+      {% if personality_data.leadership %}<div class="persona-cell"><div class="pl">Team Role</div><div class="pv">{{ personality_data.leadership }}</div></div>{% endif %}
+    </div>
+  {% else %}
+    <div class="placeholder">
+      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a9 9 0 019 9c0 3.87-3.13 7-7 7h-2v4l-4-4A9 9 0 0112 2z"/></svg></div>
+      <div class="ph-text">Personality profile not available yet.<br><strong>Complete the Psychometric Test</strong> in your LMS profile to unlock AI-powered personality insights.</div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ═══════════ ASSESSMENT & QUIZ PERFORMANCE ═══════════ -->
+<div class="section">
+  <div class="section-title">
+    <div class="ic" style="background:var(--green-soft);color:var(--green)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    </div>
+    Assessment Performance
+    {% if total_assessments %}<span style="font-size:11px;color:var(--text-3);font-weight:500;font-family:'Plus Jakarta Sans',sans-serif;margin-left:8px">{{ total_assessments }} total</span>{% endif %}
+  </div>
+  {% if best_test_scores and best_test_scores|length > 0 %}
+    {% for ts in best_test_scores[:5] %}
+    {% set pct = ts.percentage or ts.score or 0 %}
+    {% set pct_class = 'teal' if pct >= 70 else ('mid' if pct >= 40 else 'low') %}
+    <div class="score-row">
+      <div class="score-val {{ pct_class }}">{{ "%.0f"|format(pct) }}%</div>
+      <div class="score-info">
+        <div class="score-title">{{ ts.subject or ts.topic or 'Assessment' }}</div>
+        <div class="score-meta">
+          {% if ts.course_name %}<span>{{ ts.course_name }}</span>{% endif %}
+          {% if ts.module_name %}<span>{{ ts.module_name }}</span>{% endif %}
+          {% if ts.grade %}<span>Grade: {{ ts.grade }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+      <div class="ph-text">No assessment scores yet.<br><strong>Take quizzes and tests</strong> in your enrolled courses to build verified skill evidence.</div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ═══════════ CASE STUDIES ═══════════ -->
+<div class="section">
+  <div class="section-title">
+    <div class="ic" style="background:var(--purple-soft);color:var(--purple)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    </div>
+    Case Studies
+    {% if total_case_studies %}<span style="font-size:11px;color:var(--text-3);font-weight:500;font-family:'Plus Jakarta Sans',sans-serif;margin-left:8px">{{ total_case_studies }} submitted</span>{% endif %}
+  </div>
+  {% if best_case_studies and best_case_studies|length > 0 %}
+    {% for cs in best_case_studies %}
+    {% set cs_score = cs.score or cs.ai_score or 0 %}
+    {% set cs_max = cs.max_score or 100 %}
+    {% set cs_pct = (cs_score / cs_max * 100) if cs_max > 0 else 0 %}
+    {% set cs_class = 'teal' if cs_pct >= 70 else ('mid' if cs_pct >= 40 else 'low') %}
+    <div class="score-row">
+      <div class="score-val {{ cs_class }}">{{ "%.0f"|format(cs_pct) }}%</div>
+      <div class="score-info">
+        <div class="score-title">{{ cs.title or 'Case Study' }}</div>
+        <div class="score-meta">
+          {% if cs.course_name %}<span>{{ cs.course_name }}</span>{% endif %}
+          {% if cs.topic %}<span>{{ cs.topic }}</span>{% endif %}
+          {% if cs.ai_grade %}<span>Grade: {{ cs.ai_grade }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% elif case_study_highlights and case_study_highlights|length > 0 %}
+    {% for cs in case_study_highlights[:2] %}
+    <div class="score-row">
+      <div class="score-val teal">{{ cs.score_pct }}%</div>
+      <div class="score-info">
+        <div class="score-title">{{ cs.title }}</div>
+        {% if cs.concepts %}<div class="score-meta"><span>{{ cs.concepts|join(', ') }}</span></div>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+      <div class="ph-text">No case studies submitted yet.<br><strong>Submit case studies</strong> to demonstrate analytical and problem-solving skills.</div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ═══════════ BEST ASSIGNMENTS ═══════════ -->
+<div class="section">
+  <div class="section-title">
+    <div class="ic" style="background:var(--amber-soft);color:var(--amber)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+    </div>
+    Assignments
+    {% if total_assignments %}<span style="font-size:11px;color:var(--text-3);font-weight:500;font-family:'Plus Jakarta Sans',sans-serif;margin-left:8px">{{ total_assignments }} total</span>{% endif %}
+  </div>
+  {% if best_assignments and best_assignments|length > 0 %}
+    {% for asgn in best_assignments %}
+    {% set a_score = asgn.score or 0 %}
+    {% set a_max = asgn.max_score or 100 %}
+    {% set a_pct = (a_score / a_max * 100) if a_max > 0 else 0 %}
+    {% set a_class = 'teal' if a_pct >= 70 else ('mid' if a_pct >= 40 else 'low') %}
+    <div class="score-row">
+      <div class="score-val {{ a_class }}">{{ "%.0f"|format(a_pct) }}%</div>
+      <div class="score-info">
+        <div class="score-title">{{ asgn.title or 'Assignment' }}</div>
+        <div class="score-meta">
+          {% if asgn.course_name %}<span>{{ asgn.course_name }}</span>{% endif %}
+          {% if asgn.module_name %}<span>{{ asgn.module_name }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></div>
+      <div class="ph-text">No graded assignments yet.<br><strong>Complete assignments</strong> in your courses to showcase applied learning.</div>
+    </div>
+  {% endif %}
+</div>
+
 <!-- ═══════════ CAPSTONE PROJECT ═══════════ -->
-{% if capstone_projects and capstone_projects|length > 0 %}
 <div class="section">
   <div class="section-title">
     <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
@@ -591,46 +809,37 @@ body{
     </div>
     Capstone Project
   </div>
-  {% for cp in capstone_projects[:1] %}
-  <div class="highlight-card green">
-    <div class="hc-head">
-      <div class="hc-title">{{ cp.title or cp.project_name or 'Capstone Project' }}{% if cp.status %}<span class="hc-status">{{ cp.status }}</span>{% endif %}</div>
-      {% if cp.score %}<div class="hc-score">{{ cp.score }}{% if cp.max_score %}/{{ cp.max_score }}{% endif %}</div>{% endif %}
+  {% if capstone_project %}
+    <div class="highlight-card green">
+      <div class="hc-head">
+        <div class="hc-title">{{ capstone_project.title or capstone_project.project_name or 'Capstone Project' }}{% if capstone_project.status %}<span class="hc-status">{{ capstone_project.status }}</span>{% endif %}</div>
+        {% if capstone_project.score %}<div class="hc-score">{{ capstone_project.score }}{% if capstone_project.max_score %}/{{ capstone_project.max_score }}{% endif %}</div>{% endif %}
+      </div>
+      {% if capstone_project.description %}<div class="hc-desc">{{ capstone_project.description[:300] }}</div>{% endif %}
+      {% if capstone_project.course_name %}<div class="score-meta" style="margin-top:6px"><span>{{ capstone_project.course_name }}</span></div>{% endif %}
+      {% if capstone_project.technologies or capstone_project.tech_stack %}
+      <div class="hc-tags">
+        {% for t in (capstone_project.technologies or capstone_project.tech_stack or '').split(',') %}<span>{{ t.strip() }}</span>{% endfor %}
+      </div>
+      {% endif %}
     </div>
-    {% if cp.description %}<div class="hc-desc">{{ cp.description[:300] }}</div>{% endif %}
-    {% if cp.technologies or cp.tech_stack %}
-    <div class="hc-tags">
-      {% for t in (cp.technologies or cp.tech_stack or '').split(',') %}<span>{{ t.strip() }}</span>{% endfor %}
+  {% elif capstone_projects and capstone_projects|length > 0 %}
+    {% for cp in capstone_projects[:1] %}
+    <div class="highlight-card green">
+      <div class="hc-head">
+        <div class="hc-title">{{ cp.title or cp.project_name or 'Capstone Project' }}{% if cp.status %}<span class="hc-status">{{ cp.status }}</span>{% endif %}</div>
+        {% if cp.score %}<div class="hc-score">{{ cp.score }}{% if cp.max_score %}/{{ cp.max_score }}{% endif %}</div>{% endif %}
+      </div>
+      {% if cp.description %}<div class="hc-desc">{{ cp.description[:300] }}</div>{% endif %}
     </div>
-    {% endif %}
-  </div>
-  {% endfor %}
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M16 8l-4 4-2-2"/></svg></div>
+      <div class="ph-text">No capstone project submitted yet.<br><strong>Submit your capstone</strong> to showcase your end-to-end project delivery capability.</div>
+    </div>
+  {% endif %}
 </div>
-{% endif %}
-
-<!-- ═══════════ FEATURED CASE STUDIES ═══════════ -->
-{% if case_study_highlights and case_study_highlights|length > 0 %}
-<div class="section">
-  <div class="section-title">
-    <div class="ic" style="background:var(--purple-soft);color:var(--purple)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-    </div>
-    Featured Case Studies
-  </div>
-  {% for cs in case_study_highlights[:2] %}
-  <div class="highlight-card">
-    <div class="hc-head">
-      <div class="hc-title">{{ cs.title }}</div>
-      <div class="hc-score">{{ cs.score_pct }}%</div>
-    </div>
-    {% if cs.description %}<div class="hc-desc">{{ cs.description }}</div>{% endif %}
-    {% if cs.concepts %}
-    <div class="hc-tags">{% for co in cs.concepts %}<span>{{ co }}</span>{% endfor %}</div>
-    {% endif %}
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
 
 <!-- ═══════════ ACADEMIC RESULTS ═══════════ -->
 {% if semester_results and semester_results|length > 0 %}
@@ -764,27 +973,6 @@ body{
         {% for sk in soft[:6] %}<span>{{ sk.name if sk.name is defined else sk }}</span>{% endfor %}
       </div>
       {% endif %}
-    </div>
-    {% endif %}
-
-    {% if personality_data and personality_data.personality_type %}
-    <div class="section">
-      <div class="section-title">
-        <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a9 9 0 019 9c0 3.87-3.13 7-7 7h-2v4l-4-4A9 9 0 0112 2z"/></svg>
-        </div>
-        Personality &amp; Work Style
-      </div>
-      <div class="persona-hero">
-        <div class="type">{{ personality_data.personality_type }}</div>
-        <div class="src">Psychometric Assessment</div>
-      </div>
-      <div class="persona-grid">
-        {% if personality_data.traits %}<div class="persona-cell"><div class="pl">Key Traits</div><div class="pv">{{ personality_data.traits }}</div></div>{% endif %}
-        {% if personality_data.work_style %}<div class="persona-cell"><div class="pl">Work Style</div><div class="pv">{{ personality_data.work_style }}</div></div>{% endif %}
-        {% if personality_data.communication %}<div class="persona-cell"><div class="pl">Communication</div><div class="pv">{{ personality_data.communication }}</div></div>{% endif %}
-        {% if personality_data.leadership %}<div class="persona-cell"><div class="pl">Team Role</div><div class="pv">{{ personality_data.leadership }}</div></div>{% endif %}
-      </div>
     </div>
     {% endif %}
 

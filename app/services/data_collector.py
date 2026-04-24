@@ -561,76 +561,43 @@ class DataCollector:
             logger.info(f"certificates table not found or empty: {e}")
             return []
 
-    # ─── Personality ─────────────────────────────────────
+    # ─── Personality (from psychometric test) ────────────
 
     def _get_personality(self, student_id: int) -> Dict[str, Any]:
+        """Read psychometric test results and interpret with AI.
+
+        Priority:
+          1. Pre-interpreted results in users.psycho_result (has personality_type)
+          2. Raw psychometric responses → AI interprets them
+          3. Empty — personality section hidden in profile
+
+        NEVER invents labels from quiz/assignment counts.
+        """
+        from app.agents.personality_agent import PersonalityAgent
+
+        empty = {"personality_type": "", "traits_json": "", "work_style": "",
+                 "communication_profile": "", "leadership_indicators": ""}
         try:
             row = self.db.execute(
-                text("SELECT psycho_result FROM users WHERE id = :sid LIMIT 1"),
+                text("SELECT psycho_result, full_name FROM users WHERE id = :sid LIMIT 1"),
                 {"sid": student_id},
             ).mappings().first()
 
-            if row and row.get("psycho_result") and row["psycho_result"] != "default":
-                raw = row["psycho_result"]
-                try:
-                    data = json.loads(raw) if isinstance(raw, str) else raw
-                    if isinstance(data, dict) and data.get("personality_type"):
-                        return {
-                            "personality_type": data.get("personality_type", ""),
-                            "traits_json": data.get("traits", ""),
-                            "work_style": data.get("work_style", ""),
-                            "communication_profile": data.get("communication", ""),
-                            "leadership_indicators": data.get("leadership", ""),
-                        }
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            return self._derive_personality(student_id)
+            if not row:
+                return empty
+
+            raw = row.get("psycho_result")
+            name = row.get("full_name", "Student") or "Student"
+
+            if not raw or raw == "default":
+                return empty
+
+            agent = PersonalityAgent()
+            return agent.interpret(raw, student_name=name)
+
         except Exception as e:
             logger.info(f"psycho_result not available: {e}")
-            return self._derive_personality(student_id)
-
-    def _derive_personality(self, student_id: int) -> dict:
-        try:
-            quiz_row = self.db.execute(
-                text("SELECT COUNT(*) AS cnt FROM quiz_attempts WHERE student_id = :sid"),
-                {"sid": student_id},
-            ).mappings().first()
-            case_row = self.db.execute(
-                text("""SELECT COUNT(*) AS cnt FROM case_study_submissions
-                        WHERE student_id = :sid AND status IN ('graded','mentor_reviewed')"""),
-                {"sid": student_id},
-            ).mappings().first()
-
-            quizzes = int(quiz_row["cnt"]) if quiz_row else 0
-            cases = int(case_row["cnt"]) if case_row else 0
-            total = quizzes + cases
-
-            if total >= 15:
-                ptype, traits = "Strategic Achiever", "High-performer, Assessment-driven, Detail-oriented"
-                ws = "Structured and goal-oriented"
-            elif total >= 8:
-                ptype, traits = "Analytical Strategist", "Methodical, Self-motivated, Consistent"
-                ws = "Structured and methodical"
-            elif total >= 3:
-                ptype, traits = "Active Learner", "Curious, Engaged, Growing"
-                ws = "Self-paced with regular engagement"
-            elif total >= 1:
-                ptype, traits = "Curious Explorer", "Self-initiated, Building foundations"
-                ws = "Self-paced learning"
-            else:
-                # No assessments — return empty so the section is hidden from recruiters
-                return {"personality_type": "", "traits_json": "", "work_style": "",
-                        "communication_profile": "", "leadership_indicators": ""}
-
-            return {
-                "personality_type": ptype, "traits_json": traits, "work_style": ws,
-                "communication_profile": "Clear and concise",
-                "leadership_indicators": "Collaborative" if cases >= 2 else "Individual contributor",
-            }
-        except Exception as e:
-            logger.warning(f"derive_personality failed: {e}")
-            return {"personality_type": "", "traits_json": "", "work_style": "",
-                    "communication_profile": "", "leadership_indicators": ""}
+            return empty
 
     # ─── Platform Activity ───────────────────────────────
 
