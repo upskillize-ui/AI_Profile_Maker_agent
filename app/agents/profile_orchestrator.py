@@ -1,12 +1,12 @@
 """
-Profile Orchestrator v6 — Hashed partial regeneration
-═════════════════════════════════════════════════════
-- Handles resume_url (downloads PDF) AND resume_text
-- Fetches GitHub + LinkedIn data in parallel (wired up — was missing in v4)
-- Merges all sources (LMS + Resume + GitHub + LinkedIn) before generating
-- NEW: Per-section data hashing → only changed sections regenerate on
-  force_regenerate, saving Haiku cost and giving instant UX when nothing changed
-- NEW: regenerate_partial(...) returns {updated_sections, profile_data}
+Profile Orchestrator v7 — Safe partial regeneration
+════════════════════════════════════════════════════
+Key fix from v6: When resume/GitHub/LinkedIn fetch fails during
+regenerate_partial(), the old data is PRESERVED instead of being
+replaced with empty data. This prevents data loss on re-generation.
+
+Also: full regeneration now stores external fetch results in
+profile_data._meta so partial regen can fall back to them.
 """
 
 import asyncio
@@ -60,22 +60,24 @@ class ProfileOrchestrator:
         self.linkedin_fetcher = LinkedInFetcher()
         self.data_merger = DataMerger()
 
-    async def generate_profile(self, student_data: Dict[str, Any]) -> Dict[str, Any]:
-        start = time.time()
-        personal = student_data.get("personal", {})
+    # ══════════════════════════════════════════════════════════════════
+    # SHARED: Fetch external data (resume, GitHub, LinkedIn)
+    # ══════════════════════════════════════════════════════════════════
 
-        # ── Step 1: Get resume text (from DB text or download from URL) ──
+    async def _fetch_external_data(self, personal: Dict) -> Dict[str, Any]:
+        """Fetch resume, GitHub, and LinkedIn data. Returns dict with
+        'resume_data', 'github_data', 'linkedin_data', and 'fetch_status'
+        indicating which sources succeeded."""
+
         resume_text = personal.get("resume_text") or ""
 
         if not resume_text and personal.get("resume_url"):
             resume_text = await self._download_resume(personal["resume_url"])
 
-        # Also check if student filled skills/bio in LMS profile directly
+        # Build a mini-resume from LMS profile fields as fallback
         lms_skills_text = personal.get("key_skills") or personal.get("skills") or ""
         lms_bio = personal.get("about_me") or ""
 
-        # Build a mini-resume from ANY LMS profile data we have, even if just bio
-        # This ensures the AI summary has SOMETHING real to work with
         if not resume_text and (lms_skills_text or lms_bio or personal.get("education_level") or
                                  personal.get("institution") or personal.get("current_designation") or
                                  personal.get("current_employer")):
@@ -109,8 +111,9 @@ class ProfileOrchestrator:
         github_url = personal.get("github_url") or ""
         linkedin_url = personal.get("linkedin_url") or ""
 
-        # ── Step 2: Fetch external data (parallel) ──
         resume_data, github_data, linkedin_data = {}, {}, {}
+        fetch_status = {"resume": False, "github": False, "linkedin": False}
+
         try:
             tasks = []
             if resume_text:
@@ -130,14 +133,38 @@ class ProfileOrchestrator:
                         logger.warning(f"{name} fetch failed: {results[i]}")
                     elif name == "resume":
                         resume_data = results[i]
+                        fetch_status["resume"] = bool(resume_data)
                     elif name == "github":
                         github_data = results[i]
+                        fetch_status["github"] = bool(github_data)
                     elif name == "linkedin":
                         linkedin_data = results[i]
+                        fetch_status["linkedin"] = bool(linkedin_data)
         except Exception as e:
             logger.warning(f"External data fetch failed: {e}")
 
-        # ── Step 3: Merge all data sources (now includes LinkedIn) ──
+        return {
+            "resume_data": resume_data,
+            "github_data": github_data,
+            "linkedin_data": linkedin_data,
+            "fetch_status": fetch_status,
+        }
+
+    # ══════════════════════════════════════════════════════════════════
+    # FULL GENERATION
+    # ══════════════════════════════════════════════════════════════════
+
+    async def generate_profile(self, student_data: Dict[str, Any]) -> Dict[str, Any]:
+        start = time.time()
+        personal = student_data.get("personal", {})
+
+        # ── Step 1-2: Fetch external data ──
+        ext = await self._fetch_external_data(personal)
+        resume_data = ext["resume_data"]
+        github_data = ext["github_data"]
+        linkedin_data = ext["linkedin_data"]
+
+        # ── Step 3: Merge all data sources ──
         merged_data = self.data_merger.merge(student_data, resume_data, github_data, linkedin_data)
 
         # ── Step 4: Generate AI summary + rule-based skills (parallel) ──
@@ -178,15 +205,7 @@ class ProfileOrchestrator:
         # ── Step 7: Achievement engine ──
         achievements = self.achievement_engine.generate_all(merged_data, role_matches)
 
-        # ── Step 8: Compute per-section data hashes for partial regen tracking ──
-        section_hashes = self._compute_section_hashes(merged_data)
-
-        performance = self._performance(merged_data)
-        # Embed _meta inside performance_data so it gets saved to the existing JSON column
-        # — no DB schema change needed.
-
-
-# ── Step 9: AI Polish — enhance projects, experience, headline ──
+        # ── Step 9: AI Polish — enhance projects, experience, headline ──
         try:
             polished = self.ai_polisher.polish_all(student_data, merged_data)
             if polished.get("polished_projects"):
@@ -209,10 +228,15 @@ class ProfileOrchestrator:
         except Exception as e:
             logger.warning(f"AI Polisher failed (non-fatal): {e}")
 
+        # ── Step 8: Compute per-section data hashes ──
+        section_hashes = self._compute_section_hashes(merged_data)
+
+        performance = self._performance(merged_data)
         performance["_meta"] = {
             "section_hashes": section_hashes,
             "last_full_regen": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "data_sources": merged_data.get("data_sources", ["lms"]),
+            "fetch_status": ext["fetch_status"],
         }
 
         return {
@@ -240,7 +264,6 @@ class ProfileOrchestrator:
             "certifications_data": merged_data.get("certifications", []),
             "role_matches": role_matches,
             "ats_data": ats_data,
-            # ats_keywords kept in payload for back-compat, but template no longer renders them as a section
             "ats_keywords": skills.get("ats_keywords", []) if isinstance(skills, dict) else [],
             "data_sources": merged_data.get("data_sources", ["lms"]),
             "courses_data":      student_data.get("courses", []),
@@ -251,7 +274,7 @@ class ProfileOrchestrator:
         }
 
     # ══════════════════════════════════════════════════════════════════
-    # PARTIAL REGENERATION — only refresh sections whose source data changed
+    # PARTIAL REGENERATION — SAFE (preserves old data on fetch failure)
     # ══════════════════════════════════════════════════════════════════
 
     def _hash_obj(self, obj: Any) -> str:
@@ -263,9 +286,6 @@ class ProfileOrchestrator:
         return hashlib.md5(blob.encode("utf-8")).hexdigest()[:12]
 
     def _compute_section_hashes(self, merged_data: Dict[str, Any]) -> Dict[str, str]:
-        """Compute one hash per section, based on the SOURCE data that
-        section depends on. If the source hash matches the previous run,
-        the section can be skipped on regenerate."""
         personal = merged_data.get("personal", {}) or {}
         computed = merged_data.get("computed", {}) or {}
         all_skills = merged_data.get("all_skills", {}) or {}
@@ -318,10 +338,29 @@ class ProfileOrchestrator:
         }
 
     def _diff_sections(self, old_hashes: Dict[str, str], new_hashes: Dict[str, str]) -> List[str]:
-        """Return the list of sections whose hash changed (or are new)."""
         if not old_hashes:
             return list(new_hashes.keys())
         return [k for k, v in new_hashes.items() if old_hashes.get(k) != v]
+
+    def _count_data_richness(self, profile_data: Dict[str, Any]) -> int:
+        """Count total data items in a profile — used to detect data loss."""
+        count = 0
+        count += len(profile_data.get("education_data", []))
+        count += len(profile_data.get("work_experience", []))
+        count += len(profile_data.get("projects_data", []))
+        count += len(profile_data.get("certifications_data", []))
+        count += len(profile_data.get("role_matches", []))
+        count += len(profile_data.get("top_achievements", []))
+        skills = profile_data.get("skills_data", {})
+        if isinstance(skills, dict):
+            count += len(skills.get("technical_skills", []))
+            count += len(skills.get("tools", []))
+            count += len(skills.get("soft_skills", []))
+        if profile_data.get("professional_summary"):
+            count += 1
+        if profile_data.get("personality_data", {}).get("personality_type"):
+            count += 1
+        return count
 
     async def regenerate_partial(
         self,
@@ -329,67 +368,72 @@ class ProfileOrchestrator:
         existing_profile_data: Dict[str, Any],
         existing_meta: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Regenerate ONLY the sections whose source data has changed.
+        """Regenerate ONLY sections whose source data changed.
 
-        Returns a dict with:
-          - profile_data: the updated profile (existing data merged with new sections)
-          - updated_sections: list of section names that actually changed
-          - was_no_op: True if nothing changed (frontend can show "already up to date")
+        KEY SAFETY RULE: If external fetch fails (resume/GitHub/LinkedIn),
+        preserve the old data for those sections instead of regenerating
+        with empty input. This prevents data loss.
+
+        Returns dict with:
+          - profile_data: updated profile
+          - updated_sections: list of section names that changed
+          - was_no_op: True if nothing changed
         """
         start = time.time()
         personal = student_data.get("personal", {})
 
-        # ── Re-fetch external sources (resume / github / linkedin) ──
-        resume_text = personal.get("resume_text") or ""
-        if not resume_text and personal.get("resume_url"):
-            resume_text = await self._download_resume(personal["resume_url"])
+        # ── Fetch external data ──
+        ext = await self._fetch_external_data(personal)
+        resume_data = ext["resume_data"]
+        github_data = ext["github_data"]
+        linkedin_data = ext["linkedin_data"]
+        fetch_status = ext["fetch_status"]
 
-        lms_skills_text = personal.get("key_skills") or personal.get("skills") or ""
-        lms_bio = personal.get("about_me") or ""
-        if lms_skills_text and not resume_text:
-            resume_text = (
-                f"Name: {personal.get('full_name', '')}\n"
-                f"Headline: {personal.get('current_designation', '')}\n"
-                f"Skills: {lms_skills_text}\n"
-                f"Bio: {lms_bio}\n"
-                f"Education: {personal.get('education_level', '')} {personal.get('field_of_study', '')} "
-                f"from {personal.get('institution', '')} ({personal.get('graduation_year', '')})\n"
-                f"Experience: {personal.get('work_experience_years', '')} years at {personal.get('current_employer', '')}\n"
+        # ── SAFETY: Check which sources previously succeeded but now failed ──
+        old_fetch_status = (existing_meta or {}).get("fetch_status", {})
+        lost_sources = []
+        for src in ("resume", "github", "linkedin"):
+            if old_fetch_status.get(src) and not fetch_status.get(src):
+                lost_sources.append(src)
+
+        if lost_sources:
+            logger.warning(
+                f"Partial regen: external sources LOST this time: {lost_sources}. "
+                f"Will preserve old data for dependent sections."
             )
-
-        github_url = personal.get("github_url") or ""
-        linkedin_url = personal.get("linkedin_url") or ""
-
-        resume_data, github_data, linkedin_data = {}, {}, {}
-        try:
-            tasks = []
-            if resume_text:
-                tasks.append(("resume", self.resume_parser.parse(resume_text)))
-            if github_url:
-                tasks.append(("github", self.github_fetcher.fetch(github_url)))
-            if linkedin_url:
-                tasks.append(("linkedin", self.linkedin_fetcher.fetch(linkedin_url)))
-            if tasks:
-                results = await asyncio.gather(*[t[1] for t in tasks], return_exceptions=True)
-                for i, (name, _) in enumerate(tasks):
-                    if isinstance(results[i], Exception):
-                        logger.warning(f"{name} fetch failed: {results[i]}")
-                    elif name == "resume":   resume_data = results[i]
-                    elif name == "github":   github_data = results[i]
-                    elif name == "linkedin": linkedin_data = results[i]
-        except Exception as e:
-            logger.warning(f"External fetch failed in partial regen: {e}")
 
         merged_data = self.data_merger.merge(student_data, resume_data, github_data, linkedin_data)
 
-        # ── Compute new hashes and diff against the old ones ──
+        # ── Compute new hashes and diff ──
         new_hashes = self._compute_section_hashes(merged_data)
         old_hashes = (existing_meta or {}).get("section_hashes", {}) if existing_meta else {}
         changed = self._diff_sections(old_hashes, new_hashes)
 
-        # ── Fast path: nothing changed → return existing profile, $0 cost ──
+        # ── SAFETY: If sources were lost, exclude dependent sections from "changed" ──
+        # These sections changed only because data DISAPPEARED, not because new data arrived.
+        if lost_sources:
+            protected_sections = set()
+            if "resume" in lost_sources:
+                protected_sections.update([SECTION_SUMMARY, SECTION_SKILLS, SECTION_EDUCATION,
+                                            SECTION_EXPERIENCE, SECTION_ROLES, SECTION_ACHIEVEMENTS])
+            if "github" in lost_sources:
+                protected_sections.update([SECTION_PROJECTS, SECTION_SKILLS])
+            if "linkedin" in lost_sources:
+                protected_sections.update([SECTION_SUMMARY, SECTION_SKILLS])
+
+            before_count = len(changed)
+            changed = [s for s in changed if s not in protected_sections]
+            skipped = before_count - len(changed)
+            if skipped > 0:
+                logger.info(f"Protected {skipped} sections from data-loss regeneration")
+                # Keep old hashes for protected sections so they don't trigger next time either
+                for s in protected_sections:
+                    if s in old_hashes:
+                        new_hashes[s] = old_hashes[s]
+
+        # ── Fast path: nothing changed ──
         if not changed:
-            logger.info(f"Partial regen: no sections changed, returning cached profile (0ms agent calls)")
+            logger.info(f"Partial regen: no sections changed, returning cached profile")
             return {
                 "profile_data": existing_profile_data,
                 "updated_sections": [],
@@ -399,10 +443,10 @@ class ProfileOrchestrator:
 
         logger.info(f"Partial regen: {len(changed)} section(s) changed: {changed}")
 
-        # ── Always need merged role_matches if anything dependent changed ──
-        # Roles + summary + achievements may all be affected — recompute lazily
-        updated = dict(existing_profile_data)  # shallow copy
+        # ── Start from existing data (shallow copy) ──
+        updated = dict(existing_profile_data)
 
+        # ── Roles ──
         needs_roles = any(s in changed for s in (SECTION_ROLES, SECTION_SKILLS, SECTION_EDUCATION, SECTION_EXPERIENCE))
         role_matches = updated.get("role_matches", [])
         ats_data     = updated.get("ats_data", {})
@@ -412,14 +456,13 @@ class ProfileOrchestrator:
             updated["role_matches"] = role_matches
             updated["ats_data"]     = ats_data
 
-        # ── Skills (rule-based, fast) ──
+        # ── Skills ──
         if SECTION_SKILLS in changed:
             try:
                 skills = await self.skills_agent.generate(merged_data)
             except Exception as e:
                 logger.error(f"Skills agent failed in partial regen: {e}")
                 skills = updated.get("skills_data", {})
-            # Merge with multi-source skills (same logic as full regen)
             all_skills = merged_data.get("all_skills", {})
             if all_skills:
                 combined_tech = self._combine_skill_lists(
@@ -437,7 +480,7 @@ class ProfileOrchestrator:
             updated["skills_data"] = skills
             updated["ats_keywords"] = skills.get("ats_keywords", []) if isinstance(skills, dict) else []
 
-        # ── Summary (the only call that costs Haiku money) ──
+        # ── Summary ──
         if SECTION_SUMMARY in changed:
             try:
                 summary = await self.summary_agent.generate(merged_data)
@@ -446,7 +489,7 @@ class ProfileOrchestrator:
                 summary = updated.get("professional_summary", "") or self._emergency_summary(merged_data)
             updated["professional_summary"] = summary
 
-        # ── Achievements (rule-based, fast) ──
+        # ── Achievements ──
         if SECTION_ACHIEVEMENTS in changed or needs_roles:
             achievements = self.achievement_engine.generate_all(merged_data, role_matches)
             updated["headline"]              = achievements.get("headline", updated.get("headline", "Professional"))
@@ -460,7 +503,7 @@ class ProfileOrchestrator:
             updated["growth_statement"]      = achievements.get("growth_statement", "")
             updated["engagement_statement"]  = achievements.get("engagement_statement", "")
 
-        # ── Personality / Projects / Education / Experience are pure data passthroughs ──
+        # ── Data passthroughs ──
         if SECTION_PERSONALITY in changed:
             updated["personality_data"] = self._personality(merged_data)
         if SECTION_PROJECTS in changed:
@@ -471,13 +514,35 @@ class ProfileOrchestrator:
         if SECTION_EXPERIENCE in changed:
             updated["work_experience"] = merged_data.get("work_experience", [])
 
-        # ── Always refresh performance metrics + meta hashes ──
+        # ── FINAL SAFETY CHECK: Don't return a profile with less data ──
+        old_richness = self._count_data_richness(existing_profile_data)
+        new_richness = self._count_data_richness(updated)
+
+        if new_richness < old_richness * 0.7:
+            # More than 30% data loss — something went wrong, preserve old profile
+            logger.error(
+                f"DATA LOSS DETECTED: old={old_richness} items, new={new_richness} items. "
+                f"Aborting partial regen to preserve data integrity."
+            )
+            return {
+                "profile_data": existing_profile_data,
+                "updated_sections": [],
+                "was_no_op": True,
+                "regen_time_seconds": round(time.time() - start, 3),
+            }
+
+        # ── Update meta ──
         performance = self._performance(merged_data)
         performance["_meta"] = {
             "section_hashes": new_hashes,
             "last_full_regen": (existing_meta or {}).get("last_full_regen", time.strftime("%Y-%m-%dT%H:%M:%S")),
             "last_partial_regen": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "data_sources": merged_data.get("data_sources", ["lms"]),
+            "fetch_status": {
+                # Merge: if a source succeeded before OR now, mark it as available
+                src: fetch_status.get(src) or old_fetch_status.get(src, False)
+                for src in ("resume", "github", "linkedin")
+            },
         }
         updated["performance_data"] = performance
         updated["data_sources"] = merged_data.get("data_sources", ["lms"])
@@ -490,28 +555,24 @@ class ProfileOrchestrator:
             "regen_time_seconds": round(time.time() - start, 3),
         }
 
+    # ══════════════════════════════════════════════════════════════════
+    # HELPERS (unchanged from v6)
+    # ══════════════════════════════════════════════════════════════════
+
     async def _download_resume(self, url: str) -> str:
-        """Download resume PDF from URL and extract text.
-        Handles both absolute URLs and relative paths like /uploads/resumes/foo.pdf
-        by trying multiple LMS base URLs."""
+        """Download resume PDF from URL and extract text."""
         try:
             import httpx
             import os
 
-            # Build list of URLs to try
             urls_to_try = []
-
             if url.startswith("http://") or url.startswith("https://"):
-                # Already absolute
                 urls_to_try.append(url)
             else:
-                # Relative path — prepend LMS base URLs
-                # Read from env if set, otherwise try known defaults
                 lms_bases = []
                 env_base = os.environ.get("LMS_BASE_URL", "")
                 if env_base:
                     lms_bases.append(env_base.rstrip("/"))
-                # Default known LMS hosts — Render backend is the actual file server
                 lms_bases.extend([
                     "https://upskillize-lms-backend.onrender.com",
                     "https://upskillize-lms-backend.onrender.com/api",
@@ -521,7 +582,6 @@ class ProfileOrchestrator:
                     "https://lms-api.upskillize.com",
                     "https://backend.upskillize.com",
                 ])
-                # Deduplicate while preserving order
                 seen = set()
                 unique_bases = []
                 for b in lms_bases:
@@ -529,7 +589,6 @@ class ProfileOrchestrator:
                         seen.add(b)
                         unique_bases.append(b)
 
-                # Make sure path starts with /
                 rel = url if url.startswith("/") else "/" + url
                 for base in unique_bases:
                     urls_to_try.append(base + rel)
@@ -548,7 +607,6 @@ class ProfileOrchestrator:
                         logger.info(f"Trying resume URL: {try_url}")
                         r = await client.get(try_url)
                         if r.status_code == 200 and len(r.content) > 100:
-                            # Check it's actually a PDF (starts with %PDF)
                             if r.content[:4] == b"%PDF":
                                 resp = r
                                 successful_url = try_url
@@ -567,14 +625,12 @@ class ProfileOrchestrator:
 
                 logger.info(f"Resume downloaded successfully from: {successful_url} ({len(resp.content)} bytes)")
 
-                # Save to temp file and extract text
                 import tempfile
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
                     f.write(resp.content)
                     tmp_path = f.name
 
                 try:
-                    # Try PyPDF2 first
                     try:
                         from PyPDF2 import PdfReader
                         reader = PdfReader(tmp_path)
@@ -585,7 +641,6 @@ class ProfileOrchestrator:
                     except ImportError:
                         pass
 
-                    # Try pdfplumber
                     try:
                         import pdfplumber
                         with pdfplumber.open(tmp_path) as pdf:
@@ -596,7 +651,6 @@ class ProfileOrchestrator:
                     except ImportError:
                         pass
 
-                    # Try pdfminer
                     try:
                         from pdfminer.high_level import extract_text as pdfminer_extract
                         text = pdfminer_extract(tmp_path)

@@ -1,22 +1,33 @@
 """
-Role Matcher & ATS Calculator v4
-═════════════════════════════════
-100% rule-based. Matches students to real job roles using
-keyword intersection from their actual course data, skills,
-and achievements. Calculates ATS compatibility scores.
+Role Matcher & ATS Calculator v5 — Course-First, Dynamic
+═════════════════════════════════════════════════════════
+KEY CHANGE: LMS enrolled/completed courses drive role matching.
+Resume/education/GitHub are SUPPLEMENTARY, not primary.
+
+Scoring weights (total 100):
+  • 50 pts — LMS course keyword overlap (enrolled/completed courses)
+  • 15 pts — education fit
+  • 15 pts — resume/skills keyword overlap
+  • 10 pts — work experience fit
+  • 10 pts — course completion + assessment volume
+
+A student with zero LMS courses can still match roles via
+resume/education, but at a capped 50% max — ensuring LMS
+engagement is always the primary signal.
 """
 
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Set
 
 logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════
-# REAL JOB ROLE DATABASE — keywords from actual JDs
+# ROLE DATABASE — keywords from actual JDs
 # ═══════════════════════════════════════════════
 
 ROLE_DATABASE = {
+    # ── Banking & Finance ──
     "Credit Analyst": {
         "category": "Banking",
         "keywords": {
@@ -26,7 +37,7 @@ ROLE_DATABASE = {
             "regulatory compliance", "Basel", "portfolio analysis",
         },
         "education": ["B.Com", "BBA", "MBA", "M.Com", "CA", "Finance"],
-        "min_score": 40,
+        "min_score": 30,
     },
     "Business Analyst - BFSI": {
         "category": "Banking",
@@ -37,7 +48,7 @@ ROLE_DATABASE = {
             "KYC", "AML", "digital banking", "payment systems",
         },
         "education": ["BBA", "MBA", "B.Com", "B.Tech", "MCA"],
-        "min_score": 35,
+        "min_score": 30,
     },
     "Risk Operations Associate": {
         "category": "Risk",
@@ -47,7 +58,7 @@ ROLE_DATABASE = {
             "risk assessment", "control testing", "banking",
         },
         "education": ["B.Com", "MBA", "CA", "Finance", "Law"],
-        "min_score": 35,
+        "min_score": 30,
     },
     "Digital Payment Specialist": {
         "category": "FinTech",
@@ -58,7 +69,7 @@ ROLE_DATABASE = {
             "digital wallet", "QR payment",
         },
         "education": ["B.Tech", "BCA", "MCA", "B.Com", "MBA"],
-        "min_score": 35,
+        "min_score": 30,
     },
     "Compliance Officer": {
         "category": "Risk",
@@ -68,7 +79,7 @@ ROLE_DATABASE = {
             "anti-money laundering", "PMLA", "FEMA", "governance",
         },
         "education": ["Law", "CA", "CS", "MBA", "B.Com"],
-        "min_score": 40,
+        "min_score": 30,
     },
     "Relationship Manager": {
         "category": "Banking",
@@ -79,17 +90,7 @@ ROLE_DATABASE = {
             "sales", "portfolio management",
         },
         "education": ["MBA", "BBA", "B.Com", "Any Graduate"],
-        "min_score": 30,
-    },
-    "Data Analyst - Financial Services": {
-        "category": "Technology",
-        "keywords": {
-            "data analytics", "SQL", "python", "excel", "power BI", "tableau",
-            "data visualization", "statistics", "financial data", "reporting",
-            "data modeling", "ETL", "machine learning", "R",
-        },
-        "education": ["B.Tech", "BCA", "MCA", "B.Sc", "Statistics"],
-        "min_score": 40,
+        "min_score": 25,
     },
     "Operations Executive - Banking": {
         "category": "Banking",
@@ -109,7 +110,7 @@ ROLE_DATABASE = {
             "product management", "UPI", "neo banking", "lending platform",
         },
         "education": ["B.Tech", "MBA", "BCA", "MCA"],
-        "min_score": 40,
+        "min_score": 30,
     },
     "Insurance Analyst": {
         "category": "Insurance",
@@ -119,7 +120,7 @@ ROLE_DATABASE = {
             "reinsurance", "financial services", "compliance",
         },
         "education": ["B.Com", "MBA", "B.Sc Actuarial", "CA"],
-        "min_score": 35,
+        "min_score": 30,
     },
     "Treasury Analyst": {
         "category": "Banking",
@@ -129,8 +130,9 @@ ROLE_DATABASE = {
             "bond", "investment", "financial modeling", "excel",
         },
         "education": ["MBA Finance", "CA", "CFA", "B.Com"],
-        "min_score": 45,
+        "min_score": 35,
     },
+    # ── Technology ──
     "Full Stack Developer - BFSI": {
         "category": "Technology",
         "keywords": {
@@ -139,7 +141,7 @@ ROLE_DATABASE = {
             "web development", "database", "cloud", "CI/CD",
         },
         "education": ["B.Tech", "BCA", "MCA", "B.Sc CS"],
-        "min_score": 45,
+        "min_score": 35,
     },
     "Python Developer": {
         "category": "Technology",
@@ -161,15 +163,15 @@ ROLE_DATABASE = {
         "education": ["B.Tech", "BCA", "MCA", "B.Sc CS"],
         "min_score": 35,
     },
-    "Software Engineer": {
+    "Data Analyst - Financial Services": {
         "category": "Technology",
         "keywords": {
-            "python", "javascript", "java", "SQL", "git", "docker",
-            "agile", "API", "REST", "database", "cloud", "CI/CD",
-            "testing", "linux", "web development", "data structures",
+            "data analytics", "SQL", "python", "excel", "power BI", "tableau",
+            "data visualization", "statistics", "financial data", "reporting",
+            "data modeling", "ETL", "machine learning", "R",
         },
-        "education": ["B.Tech", "BCA", "MCA", "B.Sc CS"],
-        "min_score": 40,
+        "education": ["B.Tech", "BCA", "MCA", "B.Sc", "Statistics"],
+        "min_score": 35,
     },
     "Data Analyst": {
         "category": "Technology",
@@ -179,6 +181,16 @@ ROLE_DATABASE = {
             "machine learning", "reporting", "ETL", "database",
         },
         "education": ["B.Tech", "B.Sc", "MCA", "Statistics", "Mathematics"],
+        "min_score": 30,
+    },
+    "Software Engineer": {
+        "category": "Technology",
+        "keywords": {
+            "python", "javascript", "java", "SQL", "git", "docker",
+            "agile", "API", "REST", "database", "cloud", "CI/CD",
+            "testing", "linux", "web development", "data structures",
+        },
+        "education": ["B.Tech", "BCA", "MCA", "B.Sc CS"],
         "min_score": 35,
     },
     "Junior DevOps Engineer": {
@@ -189,7 +201,7 @@ ROLE_DATABASE = {
             "nginx", "jenkins",
         },
         "education": ["B.Tech", "BCA", "MCA"],
-        "min_score": 40,
+        "min_score": 35,
     },
     "QA / Test Engineer": {
         "category": "Technology",
@@ -199,18 +211,19 @@ ROLE_DATABASE = {
             "quality assurance", "regression",
         },
         "education": ["B.Tech", "BCA", "MCA"],
-        "min_score": 35,
+        "min_score": 30,
     },
 }
 
+
 # ═══════════════════════════════════════════════
-# COURSE → KEYWORD MAPPING (your LMS courses)
+# COURSE → KEYWORD MAPPING (Upskillize courses)
 # ═══════════════════════════════════════════════
 
 COURSE_KEYWORD_MAP = {
     "banking": ["banking operations", "financial products", "banking", "core banking",
                 "KYC", "account management", "deposit", "branch operations",
-                "customer service", "banking regulations"],
+                "customer service", "banking regulations", "financial services"],
     "fintech": ["fintech", "digital banking", "payment technology", "digital payments",
                 "neo banking", "API integration", "digital transformation"],
     "payment": ["payment systems", "UPI", "NEFT", "RTGS", "IMPS", "payment gateway",
@@ -241,23 +254,32 @@ COURSE_KEYWORD_MAP = {
     "excel": ["excel", "financial modeling", "data analysis", "spreadsheet modeling"],
     "sql": ["SQL", "database", "data querying", "reporting"],
     "cloud": ["cloud computing", "AWS", "azure", "cloud infrastructure"],
+    # Upskillize programme names
+    "cbaf": ["credit analysis", "banking", "financial analysis", "credit risk",
+             "banking operations", "financial services", "KYC", "compliance"],
+    "adfba": ["banking", "financial services", "digital banking", "fintech",
+              "banking operations", "financial products"],
+    "cfbm": ["family business", "management", "business strategy", "financial planning",
+             "governance", "succession planning"],
+    "pgdfba": ["banking", "financial analysis", "digital banking", "fintech",
+               "financial services", "compliance", "risk management"],
 }
 
 
 class RoleMatcher:
-    """Matches students to real job roles based on their actual data.
+    """Course-first role matching. LMS data drives roles, background is supplementary.
 
-    v6 — Weighted scoring:
-      • 45 pts — keyword overlap (skills/courses)
-      • 25 pts — education fit (degree matches role's expected education)
-      • 20 pts — work experience fit (job title/desc matches role keywords)
-      • 10 pts — course completion volume
-    Roles where the student has ZERO of {education match, course match, skill match}
-    are filtered out — no more "Python Developer" suggestions for B.Com students
-    with no Python anywhere in their profile.
+    v5 — Weighted scoring:
+      • 50 pts — LMS course keyword overlap (enrolled/completed courses)
+      • 15 pts — education fit
+      • 15 pts — resume/skills/background keyword overlap
+      • 10 pts — work experience fit
+      • 10 pts — course completion + assessment volume
+
+    Students with zero LMS courses are capped at 50% max match,
+    ensuring course engagement is always the primary signal.
     """
 
-    # Map common education abbreviations/synonyms to their canonical forms
     _EDU_SYNONYMS = {
         "btech": ["b.tech", "btech", "bachelor of technology", "be ", "b.e."],
         "bcom":  ["b.com", "bcom", "bachelor of commerce"],
@@ -273,247 +295,36 @@ class RoleMatcher:
     }
 
     def _normalize_edu_token(self, token: str) -> str:
-        """Convert a role's expected-education entry into a canonical key."""
         t = token.lower().replace(".", "").replace(" ", "")
-        if "tech" in t or t == "be":
-            return "btech"
-        if "com" in t and "computer" not in t:
-            return "bcom"
-        if "bba" in t:
-            return "bba"
-        if "bca" in t:
-            return "bca"
-        if "mca" in t:
-            return "mca"
-        if "mba" in t or "pgdm" in t:
-            return "mba"
-        if "bsc" in t:
-            return "bsc"
-        if "msc" in t:
-            return "msc"
-        if t == "ca":
-            return "ca"
-        if "law" in t or "llb" in t:
-            return "law"
-        if "graduate" in t or "any" in t:
-            return "any graduate"
+        if "tech" in t or t == "be": return "btech"
+        if "com" in t and "computer" not in t: return "bcom"
+        if "bba" in t: return "bba"
+        if "bca" in t: return "bca"
+        if "mca" in t: return "mca"
+        if "mba" in t or "pgdm" in t: return "mba"
+        if "bsc" in t: return "bsc"
+        if "msc" in t: return "msc"
+        if t == "ca": return "ca"
+        if "law" in t or "llb" in t: return "law"
+        if "graduate" in t or "any" in t: return "any graduate"
         return t
 
-    def _education_fit_score(self, role_education: list, student_education: list) -> int:
-        """0-25 points based on whether the student's degree matches the role.
+    # ─── Keyword extraction: SEPARATE LMS vs background ───
 
-        25 = strong match, 15 = partial (any-graduate role), 0 = no match.
-        """
-        if not student_education:
-            return 0
-        if not role_education:
-            return 15  # role doesn't specify, give partial credit
-
-        # Build student's degree text
-        student_text = " ".join(
-            f"{edu.get('degree', '')} {edu.get('field_of_study', '')}"
-            for edu in student_education
-        ).lower()
-
-        if not student_text.strip():
-            return 0
-
-        # Check each role-required degree
-        for role_edu in role_education:
-            canonical = self._normalize_edu_token(role_edu)
-            if canonical == "any graduate":
-                # Any graduate qualifies
-                if student_text.strip():
-                    return 15
-                continue
-            synonyms = self._EDU_SYNONYMS.get(canonical, [canonical])
-            for syn in synonyms:
-                if syn.strip() in student_text:
-                    return 25  # exact degree match
-
-        return 0
-
-    def _work_fit_score(self, role_keywords: set, student_work: list) -> int:
-        """0-20 points based on whether work history mentions role keywords."""
-        if not student_work:
-            return 0
-
-        work_text = " ".join(
-            f"{w.get('title', '')} {w.get('company', '')} {w.get('description', '')}"
-            for w in student_work
-        ).lower()
-
-        if not work_text.strip():
-            return 0
-
-        matches = 0
-        for kw in role_keywords:
-            if kw.lower() in work_text:
-                matches += 1
-        if matches == 0:
-            return 0
-        if matches >= 4:
-            return 20
-        if matches >= 2:
-            return 14
-        return 8
-
-    def _course_completion_score(self, computed: dict) -> int:
-        """0-10 points from completed-course volume."""
-        completed = computed.get("completed_courses", 0) or 0
-        if completed >= 4:
-            return 10
-        if completed >= 2:
-            return 7
-        if completed >= 1:
-            return 4
-        # Partial credit if at least enrolled
-        if (computed.get("total_courses", 0) or 0) >= 1:
-            return 2
-        return 0
-
-    def match_roles(self, student_data: Dict[str, Any]) -> List[Dict]:
-        """Find top matching roles using weighted scoring."""
-        student_keywords = self._extract_student_keywords(student_data)
-        computed = student_data.get("computed", {})
-        education = student_data.get("education", [])
-        work_experience = student_data.get("work_experience", [])
-
-        course_score = self._course_completion_score(computed)
-
-        matches = []
-        for role_name, role_info in ROLE_DATABASE.items():
-            role_keywords = role_info["keywords"]
-
-            # ── 1. Keyword overlap (45 points max) ──
-            matched = student_keywords & role_keywords
-            if not matched:
-                # No keyword match — only consider if education is a strong fit
-                edu_check = self._education_fit_score(role_info.get("education", []), education)
-                if edu_check < 25:
-                    continue
-                keyword_score = 0
-            else:
-                overlap_pct = len(matched) / len(role_keywords)
-                keyword_score = round(overlap_pct * 45)
-
-            # ── 2. Education fit (25 points max) ──
-            edu_score = self._education_fit_score(role_info.get("education", []), education)
-
-            # ── 3. Work experience fit (20 points max) ──
-            work_score = self._work_fit_score(role_keywords, work_experience)
-
-            # ── 4. Course completion (10 points max) ──
-            # course_score computed once outside the loop
-
-            # Total weighted score (0-100)
-            total = keyword_score + edu_score + work_score + course_score
-
-            # Filter: must have at least one of {keyword match, education match, work match}
-            if keyword_score == 0 and edu_score == 0 and work_score == 0:
-                continue
-
-            # Final cap and floor
-            final_match = max(0, min(99, total))
-
-            if final_match >= role_info.get("min_score", 35):
-                missing = role_keywords - student_keywords
-                matches.append({
-                    "role_title": role_name,
-                    "category": role_info["category"],
-                    "match_percentage": final_match,
-                    "matching_keywords": sorted(list(matched)),
-                    "missing_keywords": sorted(list(missing))[:5],
-                    "total_matched": len(matched),
-                    "total_required": len(role_keywords),
-                    "score_breakdown": {
-                        "keywords": keyword_score,
-                        "education": edu_score,
-                        "experience": work_score,
-                        "courses": course_score,
-                    },
-                    "recommendation": self._get_recommendation(missing, role_name),
-                })
-
-        # Sort by match percentage
-        matches.sort(key=lambda x: x["match_percentage"], reverse=True)
-        return matches[:5]
-
-    def calculate_ats_score(self, student_data: Dict[str, Any]) -> Dict:
-        """Calculate overall ATS compatibility score."""
-        student_keywords = self._extract_student_keywords(student_data)
-        computed = student_data.get("computed", {})
-
-        # ATS score is based on best role match + keyword density
-        matches = self.match_roles(student_data)
-        best_match = matches[0]["match_percentage"] if matches else 0
-
-        # Keyword density score
-        total_unique_keywords = len(student_keywords)
-        keyword_score = min(30, total_unique_keywords * 2)
-
-        # Skills evidence score (from actual assessments)
-        evidence_score = 0
-        if computed.get("total_tests", 0) > 0:
-            evidence_score += 10
-        if computed.get("total_case_studies", 0) > 0:
-            evidence_score += 10
-        if computed.get("completed_courses", 0) > 0:
-            evidence_score += 10
-
-        # Performance score
-        perf_score = min(20, int(computed.get("overall_score", 0) * 0.2))
-
-        # Job Preferences bonus (filled in = recruiter alignment)
-        personal = student_data.get("personal", {})
-        pref_bonus = 0
-        if personal.get("preferred_role"):
-            pref_bonus += 5
-        if personal.get("target_industries"):
-            pref_bonus += 3
-        if personal.get("preferred_location"):
-            pref_bonus += 2
-
-        # External data bonus (resume, LinkedIn, GitHub enrich the profile)
-        data_sources = student_data.get("data_sources", [])
-        source_bonus = 0
-        if "resume" in data_sources:
-            source_bonus += 5
-        if "linkedin" in data_sources:
-            source_bonus += 3
-        if "github" in data_sources:
-            source_bonus += 3
-
-        # Education & work experience bonus
-        edu_bonus = min(5, len(student_data.get("education", [])) * 3)
-        work_bonus = min(5, len(student_data.get("work_experience", [])) * 3)
-
-        ats_total = min(98, keyword_score + evidence_score + perf_score +
-                        int(best_match * 0.3) + pref_bonus + source_bonus +
-                        edu_bonus + work_bonus)
-
-        return {
-            "total_score": ats_total,
-            "keyword_count": total_unique_keywords,
-            "keyword_score": keyword_score,
-            "evidence_score": evidence_score,
-            "performance_score": perf_score,
-            "best_role_match": matches[0]["role_title"] if matches else "General",
-            "best_role_match_pct": best_match,
-            "keywords_list": sorted(list(student_keywords)),
-            "improvement_tips": self._get_ats_tips(student_data, student_keywords),
-        }
-
-    def _extract_student_keywords(self, d: Dict) -> set:
-        """Extract ALL keywords from student's real data."""
+    def _extract_lms_keywords(self, d: Dict) -> Set[str]:
+        """Extract keywords ONLY from LMS activity: courses, assessments, case studies."""
         keywords = set()
 
-        # From courses
+        # From enrolled/completed courses (highest priority)
         for course in d.get("courses", []):
             name = (course.get("course_name") or "").lower()
             for key, mapped_keywords in COURSE_KEYWORD_MAP.items():
                 if key in name:
                     keywords.update(kw.lower() for kw in mapped_keywords)
+            # Also add individual words from course name
+            for word in name.split():
+                if len(word) > 3:
+                    keywords.add(word)
 
         # From case study topics/concepts
         for cs in d.get("case_studies", []):
@@ -522,30 +333,43 @@ class RoleMatcher:
                 keywords.update(c.lower() for c in concepts if isinstance(c, str))
             topic = (cs.get("topic") or "").lower()
             if topic:
-                keywords.update(topic.split())
+                for word in topic.split():
+                    if len(word) > 3:
+                        keywords.add(word)
 
-        # From test subjects
+        # From test/quiz subjects
         for test in d.get("test_scores", []):
             subject = (test.get("subject") or "").lower()
             keywords.update(word for word in subject.split() if len(word) > 3)
 
-        # From quiz titles
         for quiz in d.get("quiz_scores", []):
             title = (quiz.get("quiz_title") or "").lower()
             keywords.update(word for word in title.split() if len(word) > 3)
 
-        # From resume skills (highest priority — student's own claim)
+        # Universal soft skills from LMS activity
+        computed = d.get("computed", {})
+        if computed.get("total_quizzes", 0) + computed.get("total_case_studies", 0) >= 5:
+            keywords.update(["analytical thinking", "problem solving"])
+        if computed.get("total_case_studies", 0) >= 2:
+            keywords.update(["critical thinking", "research", "report writing"])
+
+        keywords.discard("")
+        return keywords
+
+    def _extract_background_keywords(self, d: Dict) -> Set[str]:
+        """Extract keywords from NON-LMS sources: resume, skills, GitHub, education, work."""
+        keywords = set()
+
+        # From resume/merged skills
         all_skills = d.get("all_skills", {})
         for skill in all_skills.get("technical_skills", []):
             name = skill.get("name", "").lower() if isinstance(skill, dict) else str(skill).lower()
             if name and len(name) > 2:
                 keywords.add(name)
-
         for tool in all_skills.get("tools", []):
             name = tool.get("name", "").lower() if isinstance(tool, dict) else str(tool).lower()
             if name and len(name) > 2:
                 keywords.add(name)
-
         for skill in all_skills.get("soft_skills", []):
             name = skill.get("name", "").lower() if isinstance(skill, dict) else str(skill).lower()
             if name and len(name) > 2:
@@ -556,7 +380,7 @@ class RoleMatcher:
         for lang in github.get("languages", {}).keys():
             keywords.add(lang.lower())
 
-        # From work experience keywords
+        # From work experience
         for exp in d.get("work_experience", []):
             title = (exp.get("title") or "").lower()
             keywords.update(word for word in title.split() if len(word) > 3)
@@ -565,70 +389,239 @@ class RoleMatcher:
 
         # From education
         for edu in d.get("education", []):
-            degree = (edu.get("degree") or "").lower()
             field = (edu.get("field_of_study") or "").lower()
-            keywords.update(word for word in degree.split() if len(word) > 3)
             keywords.update(word for word in field.split() if len(word) > 3)
 
-        # From Job Preferences (boosts ATS significantly)
+        # From career goals / preferences
         personal = d.get("personal", {})
         pref_role = (personal.get("preferred_role") or "").lower()
         if pref_role:
             keywords.update(word for word in pref_role.split() if len(word) > 3)
             keywords.add(pref_role.strip())
-        target_ind = (personal.get("target_industries") or "").lower()
-        if target_ind:
-            for ind in target_ind.replace(";", ",").split(","):
-                ind = ind.strip()
-                if ind and len(ind) > 2:
-                    keywords.add(ind)
-        career_goals = (personal.get("career_goals") or "").lower()
-        if career_goals:
-            keywords.update(word for word in career_goals.split() if len(word) > 4)
 
-        # Universal soft skills (derived from activity)
-        computed = d.get("computed", {})
-        if computed.get("total_quizzes", 0) + computed.get("total_case_studies", 0) >= 5:
-            keywords.update(["analytical thinking", "problem solving", "self-directed learning"])
-        if computed.get("total_case_studies", 0) >= 2:
-            keywords.update(["critical thinking", "research", "report writing"])
-        if computed.get("forum_threads", 0) + computed.get("forum_replies", 0) >= 3:
-            keywords.update(["communication", "team collaboration", "knowledge sharing"])
-
-        # Clean up
         keywords.discard("")
         return keywords
 
+    # ─── Scoring components ───
+
+    def _lms_keyword_score(self, lms_keywords: Set[str], role_keywords: set) -> int:
+        """0-50 points from LMS course keyword overlap."""
+        matched = lms_keywords & role_keywords
+        if not matched:
+            return 0
+        overlap_pct = len(matched) / len(role_keywords)
+        return round(overlap_pct * 50)
+
+    def _background_keyword_score(self, bg_keywords: Set[str], role_keywords: set) -> int:
+        """0-15 points from background (resume/GitHub/education) keyword overlap."""
+        matched = bg_keywords & role_keywords
+        if not matched:
+            return 0
+        overlap_pct = len(matched) / len(role_keywords)
+        return round(overlap_pct * 15)
+
+    def _education_fit_score(self, role_education: list, student_education: list) -> int:
+        """0-15 points based on degree match."""
+        if not student_education:
+            return 0
+        if not role_education:
+            return 8
+
+        student_text = " ".join(
+            f"{edu.get('degree', '')} {edu.get('field_of_study', '')}"
+            for edu in student_education
+        ).lower()
+
+        if not student_text.strip():
+            return 0
+
+        for role_edu in role_education:
+            canonical = self._normalize_edu_token(role_edu)
+            if canonical == "any graduate":
+                if student_text.strip():
+                    return 8
+                continue
+            synonyms = self._EDU_SYNONYMS.get(canonical, [canonical])
+            for syn in synonyms:
+                if syn.strip() in student_text:
+                    return 15
+        return 0
+
+    def _work_fit_score(self, role_keywords: set, student_work: list) -> int:
+        """0-10 points from work history keyword overlap."""
+        if not student_work:
+            return 0
+        work_text = " ".join(
+            f"{w.get('title', '')} {w.get('company', '')} {w.get('description', '')}"
+            for w in student_work
+        ).lower()
+        if not work_text.strip():
+            return 0
+        matches = sum(1 for kw in role_keywords if kw.lower() in work_text)
+        if matches >= 4: return 10
+        if matches >= 2: return 7
+        if matches >= 1: return 4
+        return 0
+
+    def _completion_score(self, computed: dict) -> int:
+        """0-10 points from course completion + assessment volume."""
+        completed = computed.get("completed_courses", 0) or 0
+        assessments = (computed.get("total_tests", 0) or 0) + (computed.get("total_quizzes", 0) or 0)
+
+        score = 0
+        if completed >= 3: score += 6
+        elif completed >= 1: score += 4
+        elif (computed.get("total_courses", 0) or 0) >= 1: score += 2
+
+        if assessments >= 5: score += 4
+        elif assessments >= 2: score += 2
+
+        return min(10, score)
+
+    # ─── Main matching ───
+
+    def match_roles(self, student_data: Dict[str, Any]) -> List[Dict]:
+        """Find top matching roles — LMS courses are PRIMARY signal."""
+        lms_keywords = self._extract_lms_keywords(student_data)
+        bg_keywords = self._extract_background_keywords(student_data)
+        all_keywords = lms_keywords | bg_keywords
+        computed = student_data.get("computed", {})
+        education = student_data.get("education", [])
+        work_experience = student_data.get("work_experience", [])
+
+        has_lms_courses = len(student_data.get("courses", [])) > 0
+        completion_pts = self._completion_score(computed)
+
+        matches = []
+        for role_name, role_info in ROLE_DATABASE.items():
+            role_keywords = role_info["keywords"]
+
+            # ── LMS score (50 pts max) ──
+            lms_score = self._lms_keyword_score(lms_keywords, role_keywords)
+
+            # ── Background score (15 pts max) ──
+            bg_score = self._background_keyword_score(bg_keywords, role_keywords)
+
+            # ── Education fit (15 pts max) ──
+            edu_score = self._education_fit_score(role_info.get("education", []), education)
+
+            # ── Work experience (10 pts max) ──
+            work_score = self._work_fit_score(role_keywords, work_experience)
+
+            # ── Completion volume (10 pts max) ──
+            comp_score = completion_pts
+
+            # Total
+            total = lms_score + bg_score + edu_score + work_score + comp_score
+
+            # ── Filter: must have SOME signal ──
+            if lms_score == 0 and bg_score == 0 and edu_score == 0 and work_score == 0:
+                continue
+
+            # ── Cap: if NO LMS courses, max 50% match ──
+            if not has_lms_courses:
+                total = min(50, total)
+
+            final_match = max(0, min(99, total))
+
+            if final_match >= role_info.get("min_score", 25):
+                matched_kw = all_keywords & role_keywords
+                missing_kw = role_keywords - all_keywords
+                matches.append({
+                    "role_title": role_name,
+                    "category": role_info["category"],
+                    "match_percentage": final_match,
+                    "matching_keywords": sorted(list(matched_kw)),
+                    "missing_keywords": sorted(list(missing_kw))[:5],
+                    "total_matched": len(matched_kw),
+                    "total_required": len(role_keywords),
+                    "lms_driven": lms_score > 0,
+                    "score_breakdown": {
+                        "lms_courses": lms_score,
+                        "background": bg_score,
+                        "education": edu_score,
+                        "experience": work_score,
+                        "completion": comp_score,
+                    },
+                    "recommendation": self._get_recommendation(missing_kw, role_name),
+                })
+
+        # Sort: LMS-driven roles FIRST, then by match percentage
+        matches.sort(key=lambda x: (x["lms_driven"], x["match_percentage"]), reverse=True)
+        return matches[:5]
+
+    def calculate_ats_score(self, student_data: Dict[str, Any]) -> Dict:
+        """ATS score — LMS activity weighted higher."""
+        lms_keywords = self._extract_lms_keywords(student_data)
+        bg_keywords = self._extract_background_keywords(student_data)
+        all_keywords = lms_keywords | bg_keywords
+        computed = student_data.get("computed", {})
+
+        matches = self.match_roles(student_data)
+        best_match = matches[0]["match_percentage"] if matches else 0
+
+        # LMS keyword density (higher weight)
+        lms_kw_score = min(20, len(lms_keywords) * 2)
+        # Background keyword density (lower weight)
+        bg_kw_score = min(10, len(bg_keywords))
+
+        # Evidence from assessments
+        evidence_score = 0
+        if computed.get("total_tests", 0) > 0: evidence_score += 10
+        if computed.get("total_case_studies", 0) > 0: evidence_score += 10
+        if computed.get("completed_courses", 0) > 0: evidence_score += 10
+
+        # Performance
+        perf_score = min(15, int(computed.get("overall_score", 0) * 0.15))
+
+        # External data bonus
+        data_sources = student_data.get("data_sources", [])
+        source_bonus = 0
+        if "resume" in data_sources: source_bonus += 4
+        if "linkedin" in data_sources: source_bonus += 2
+        if "github" in data_sources: source_bonus += 2
+
+        # Preferences bonus
+        personal = student_data.get("personal", {})
+        pref_bonus = 0
+        if personal.get("preferred_role"): pref_bonus += 3
+        if personal.get("preferred_location"): pref_bonus += 2
+
+        ats_total = min(98, lms_kw_score + bg_kw_score + evidence_score +
+                        perf_score + int(best_match * 0.25) + source_bonus + pref_bonus)
+
+        return {
+            "total_score": ats_total,
+            "keyword_count": len(all_keywords),
+            "lms_keyword_count": len(lms_keywords),
+            "keyword_score": lms_kw_score + bg_kw_score,
+            "evidence_score": evidence_score,
+            "performance_score": perf_score,
+            "best_role_match": matches[0]["role_title"] if matches else "General",
+            "best_role_match_pct": best_match,
+            "keywords_list": sorted(list(all_keywords)),
+            "improvement_tips": self._get_ats_tips(student_data, all_keywords, lms_keywords),
+        }
+
     def _get_recommendation(self, missing: set, role: str) -> str:
-        """Suggest next steps based on what's missing."""
         if not missing:
             return "Strong match — profile well-aligned with this role"
-
         missing_list = sorted(list(missing))[:3]
         return f"To strengthen your match, build skills in: {', '.join(missing_list)}"
 
-    def _get_ats_tips(self, d: Dict, current_keywords: set) -> List[str]:
-        """Generate actionable tips to improve ATS score."""
+    def _get_ats_tips(self, d: Dict, all_kw: set, lms_kw: set) -> List[str]:
         tips = []
         computed = d.get("computed", {})
 
-        if computed.get("completed_courses", 0) == 0:
-            tips.append("Complete at least one course to demonstrate commitment")
-
+        if len(lms_kw) == 0:
+            tips.append("Enroll in courses to unlock stronger role matches and ATS keywords")
+        if computed.get("completed_courses", 0) == 0 and computed.get("total_courses", 0) > 0:
+            tips.append("Complete your enrolled courses to boost your profile strength")
         if computed.get("total_case_studies", 0) == 0:
-            tips.append("Submit case studies to show applied analytical skills")
-
+            tips.append("Submit case studies to demonstrate applied analytical skills")
         if computed.get("total_tests", 0) < 3:
             tips.append("Take more assessments to build credible skill evidence")
-
-        if len(current_keywords) < 10:
+        if len(all_kw) < 10:
             tips.append("Enroll in more specialized courses to expand your keyword footprint")
-
-        if "python" not in current_keywords and "sql" not in current_keywords:
-            tips.append("Adding technical skills (Python, SQL, Excel) significantly boosts ATS scores")
-
-        forum = d.get("forum_activity", {})
-        if (forum.get("threads_created", 0) or 0) + (forum.get("replies_given", 0) or 0) == 0:
-            tips.append("Participate in forums to demonstrate communication and collaboration skills")
 
         return tips[:4]
