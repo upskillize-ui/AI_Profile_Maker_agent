@@ -1,20 +1,16 @@
 """
-Summary Agent v7 — Bullet Points + Unique Per Student
-══════════════════════════════════════════════════════
-Generates a 4-6 bullet point professional summary that highlights what's
-ACTUALLY unique and impressive about each student. Pulls from:
+Summary Agent v8 — MBA-Level Articulation
+═══════════════════════════════════════════
+Generates a 4-6 bullet point professional summary with recruiter-grade
+language. Reads like a McKinsey cover letter meets a Bloomberg bio —
+authoritative, specific, and distinguished.
 
-- LMS courses, scores, assignments, case studies, certifications
-- LMS profile fields: current employer, designation, work years
-- Resume: education, work experience, skills
-- LinkedIn: headline, summary, skills
-- Psychometric: personality type, traits, work style
-- Computed metrics: best scores, completion rates, training hours
-
-Each bullet must say something DIFFERENT and SPECIFIC. No generic filler.
-The first bullet is always a strong positioning statement. Subsequent
-bullets cover education, experience, technical capabilities, achievements,
-and career focus — but ONLY when real data backs each one.
+Key upgrades from v7:
+- MBA-caliber vocabulary: "cross-functional" not "team player"
+- Quantified positioning: lead with measurable credentials
+- Structured narrative arc: credential → capability → impact → trajectory
+- Zero filler: no "passionate about", "eager to learn", "aspiring"
+- Indian hiring market awareness: BFSI terminology, tier awareness
 """
 
 import os
@@ -138,7 +134,7 @@ class SummaryAgent:
         current_employer = personal.get("current_employer", "") or ""
         work_years = personal.get("work_experience_years", "") or ""
 
-        # NEW: about_me / bio is critical fallback when other fields are empty
+        # about_me / bio
         about_me = personal.get("about_me", "") or personal.get("bio", "") or ""
 
         # LinkedIn
@@ -180,10 +176,10 @@ class SummaryAgent:
             "consistency":          computed.get("consistency_score", 0),
         }
 
-    # ─── AI Generation ────────────────────────────────────────
+    # ─── AI Generation (MBA-Level Prompt) ─────────────────────
 
     async def _ai_bullet_summary(self, name: str, first_name: str, ctx: Dict) -> str:
-        """Ask Claude Haiku to generate 4-6 unique bullets from the context."""
+        """Ask Claude to generate 4-6 MBA-caliber professional summary bullets."""
 
         # Build a clean data dump for the prompt
         data_lines = [f"Candidate Name: {name}"]
@@ -238,44 +234,41 @@ class SummaryAgent:
 
         data_str = "\n".join(data_lines)
 
-        prompt = f"""You are writing a professional summary for a candidate's recruiter-facing profile. The summary will be displayed as bullet points on a job profile page.
+        prompt = f"""You are a senior executive recruiter drafting a professional summary for a candidate's public profile page. Write with the precision of a McKinsey bio and the authority of a Bloomberg executive profile.
 
 CANDIDATE DATA:
 {data_str}
 
-WRITE A 4-6 BULLET POINT SUMMARY following these STRICT rules:
+GENERATE A 4-6 BULLET POINT SUMMARY following these rules:
 
 FORMAT:
 - Output ONLY bullet points, one per line
 - Each line MUST start with "• " (bullet character + space)
-- No headings, no "Professional Summary:", no markdown, no preamble
-- No introduction paragraph before the bullets
-- Each bullet should be 1-2 sentences maximum
+- No headings, no preamble, no markdown, no "Professional Summary:"
+- Each bullet: 1-2 concise sentences maximum
 
-CONTENT RULES:
-1. Each bullet must say something DIFFERENT — never repeat information
-2. Each bullet must reference SPECIFIC data from the candidate (real numbers, real names, real skills)
-3. Use the candidate's first name "{first_name}" only in the FIRST bullet
-4. Bullet 1 = positioning statement: who they are + their strongest credential (education OR current role OR top skill)
-5. Bullet 2 = academic foundation OR work experience (whichever is stronger), with specific institution/company names
-6. Bullet 3 = technical capabilities — list 3-5 actual skills they have, grouped by domain
-7. Bullet 4 = achievements — best assessment score, case study, certification, or measurable metric (only if data exists)
-8. Bullet 5 = work style or personality from psychometric test (only if data is provided)
-9. Bullet 6 = career focus / what they're seeking next (only if career goals or preferred role provided)
-10. SKIP any bullet where you don't have real data — better to have 4 strong bullets than 6 weak ones
-11. NEVER mention "Upskillize", "LMS", "platform", or any training provider name
-12. NEVER use generic filler like "passionate about", "dedicated learner", "eager to grow", "aspiring professional", "building foundational skills"
-13. NEVER make up data not in the input
-14. Sound IMPRESSIVE but factually accurate — like a senior recruiter wrote it
-15. Use action verbs and specific industry terminology
+NARRATIVE ARC (follow this structure):
+1. POSITIONING (required): Lead with the candidate's strongest credential. Use "{first_name}" only here. Frame as: "[Name] is a [credential] with [distinguishing capability]." If working professional: lead with role + tenure. If fresher: lead with degree + institution + domain focus.
 
-EXAMPLE OUTPUT FORMAT:
-• Maya Chen is a B.Tech Computer Science graduate from VIT Vellore with hands-on experience in full-stack web development and data analytics.
-• Completed an Industry-Focused internship as a Frontend Developer at TechMint Solutions, contributing to production React applications used by 15K+ users.
-• Technical proficiency spans Python, React, Node.js, MongoDB, and AWS — backed by 8 verified assessments at an average score of 87%.
-• Earned distinction on the "E-commerce Recommendation Engine" case study (94%) and holds Google Data Analytics Professional Certificate.
-• Identified as an Analytical Strategist through psychometric assessment — methodical, self-directed, and strong in cross-functional collaboration.
-• Targeting Junior Software Developer or Data Analyst roles in product-based companies with growth-oriented engineering teams.
+2. ACADEMIC or PROFESSIONAL FOUNDATION (if data exists): Reference specific institution, degree, or employer names. Contextualize the credential — don't just list it. Example: "Holds a B.Tech in Computer Science from VIT Vellore, providing quantitative and systems-thinking foundations for technology roles."
+
+3. TECHNICAL COMPETENCIES (if skills exist): Group skills by function, not random list. Use industry-standard phrasing. Example: "Technical proficiency encompasses backend development (Python, Django, FastAPI), data infrastructure (MySQL, MongoDB), and frontend engineering (React, TypeScript) — validated across 8 structured assessments."
+
+4. DEMONSTRATED OUTCOMES (if achievements exist): Lead with the strongest metric. Combine case study scores, certifications, and assessment results into a single achievement-density bullet. Example: "Earned distinction on the 'Credit Risk Modeling' case analysis (94%) and completed the Certified Banking & Finance Analyst programme, demonstrating applied analytical rigour."
+
+5. BEHAVIOURAL PROFILE (only if psychometric data provided): Frame the personality type as a workplace asset, not a label. Example: "Psychometric profiling identifies a Structured Analyst disposition — characterized by methodical problem decomposition, evidence-based decision-making, and high task ownership in cross-functional settings."
+
+6. CAREER TRAJECTORY (only if career goals or preferred role provided): Frame as strategic intent, not wishful thinking. Example: "Positioned for Business Analyst or Product Associate roles in BFSI organizations where analytical depth, domain-specific training, and structured problem-solving drive operational decision-making."
+
+LANGUAGE STANDARDS:
+- Write at MBA/executive level — authoritative, precise, zero filler
+- NEVER use: "passionate about", "dedicated learner", "eager to grow", "aspiring professional", "building foundational skills", "hands-on experience", "keen interest"
+- PREFER: "demonstrated proficiency", "validated through", "positioned for", "complemented by", "underpinned by", "spanning", "encompassing"
+- Use active voice and precise industry terminology
+- Every claim must reference SPECIFIC data from the input — real names, real numbers, real skills
+- NEVER mention "Upskillize", "LMS", "platform", or any training provider name
+- NEVER fabricate data not present in the input
+- SKIP any bullet where real data doesn't exist — 4 strong bullets outperform 6 diluted ones
 
 NOW WRITE THE SUMMARY:"""
 
@@ -315,12 +308,13 @@ NOW WRITE THE SUMMARY:"""
                 elif not line.startswith("•"):
                     line = "• " + line
                 clean_lines.append(line)
+
             return "\n".join(clean_lines)
 
-    # ─── Template Fallback (when no API key) ──────────────────
+    # ─── Template Fallback (MBA-Level) ────────────────────────
 
     def _template_bullet_summary(self, name: str, first_name: str, ctx: Dict) -> str:
-        """Generate bullet summary from templates when no API is available.
+        """Generate MBA-caliber bullet summary when no API is available.
         Each bullet is conditionally added — only if real data backs it."""
         bullets = []
 
@@ -329,7 +323,7 @@ NOW WRITE THE SUMMARY:"""
         if positioning:
             bullets.append(positioning)
 
-        # Bullet 2: Education / Background
+        # Bullet 2: Academic / Professional foundation
         edu_bullet = self._make_education_bullet(ctx)
         if edu_bullet:
             bullets.append(edu_bullet)
@@ -339,22 +333,22 @@ NOW WRITE THE SUMMARY:"""
         if work_bullet:
             bullets.append(work_bullet)
 
-        # Bullet 4: Technical skills
+        # Bullet 4: Technical competencies
         skills_bullet = self._make_skills_bullet(ctx)
         if skills_bullet:
             bullets.append(skills_bullet)
 
-        # Bullet 5: Achievements
+        # Bullet 5: Demonstrated outcomes
         ach_bullet = self._make_achievements_bullet(ctx)
         if ach_bullet:
             bullets.append(ach_bullet)
 
-        # Bullet 6: Personality from psychometric
+        # Bullet 6: Behavioural profile
         pers_bullet = self._make_personality_bullet(ctx)
         if pers_bullet:
             bullets.append(pers_bullet)
 
-        # Bullet 7: Career focus
+        # Bullet 7: Career trajectory
         career_bullet = self._make_career_bullet(ctx)
         if career_bullet:
             bullets.append(career_bullet)
@@ -364,78 +358,78 @@ NOW WRITE THE SUMMARY:"""
 
     def _make_positioning_bullet(self, first_name: str, ctx: Dict) -> str:
         domain = ctx["domain"]
-        # Use most impressive credential available
         if ctx["current_designation"] and ctx["current_employer"]:
-            return f"• {first_name} is a {ctx['current_designation']} at {ctx['current_employer']} with focused expertise in {domain}."
+            yrs = f" with {ctx['work_years']} years of experience" if ctx["work_years"] else ""
+            return f"• {first_name} is a {ctx['current_designation']} at {ctx['current_employer']}{yrs}, specializing in {domain}."
         elif ctx["edu_str"] and ctx["top_skills"]:
-            return f"• {first_name} is a {ctx['edu_str']} graduate building specialized expertise in {domain} with hands-on capability in {', '.join(ctx['top_skills'][:3])}."
+            return f"• {first_name} is a {ctx['edu_str']} graduate with demonstrated proficiency in {', '.join(ctx['top_skills'][:3])}, positioned for entry-level roles in {domain}."
         elif ctx["edu_str"]:
-            return f"• {first_name} is a {ctx['edu_str']} graduate positioned to launch a career in {domain}."
+            return f"• {first_name} is a {ctx['edu_str']} graduate with structured training in {domain}, prepared to contribute to industry-facing analytical and technical functions."
         elif ctx["current_designation"]:
-            return f"• {first_name} is a {ctx['current_designation']} developing advanced expertise in {domain}."
+            return f"• {first_name} is a {ctx['current_designation']} advancing domain-specific expertise in {domain}."
         elif ctx["linkedin_headline"]:
             return f"• {first_name}: {ctx['linkedin_headline']}"
         else:
-            return f"• {first_name} is an emerging professional building structured expertise in {domain}."
+            return f"• {first_name} is an emerging {domain} professional with structured, credential-backed training across core domain competencies."
 
     def _make_education_bullet(self, ctx: Dict) -> str:
         if not ctx["edu_str"]:
             return ""
-        # Don't repeat if already in positioning
-        return f"• Academic foundation: {ctx['edu_str']}, providing the analytical and conceptual base for a career in {ctx['domain']}."
+        return f"• Holds a {ctx['edu_str']}, providing the quantitative and conceptual foundations underpinning a career in {ctx['domain']}."
 
     def _make_work_bullet(self, ctx: Dict) -> str:
         if not ctx["work_strs"]:
             return ""
         if len(ctx["work_strs"]) == 1:
-            return f"• Hands-on industry exposure as {ctx['work_strs'][0]}, applying classroom learning to real-world business challenges."
+            return f"• Professional exposure as {ctx['work_strs'][0]}, applying structured methodologies to real-world operational and business challenges."
         else:
-            return f"• Multi-role professional experience including {' and '.join(ctx['work_strs'][:2])} — building versatile, cross-functional capabilities."
+            return f"• Cross-functional professional experience spanning {' and '.join(ctx['work_strs'][:2])}, building versatile competencies across multiple organizational contexts."
 
     def _make_skills_bullet(self, ctx: Dict) -> str:
         if not ctx["top_skills"]:
             return ""
         skills = ctx["top_skills"][:5]
         if ctx["best_test_score"] > 0:
-            return f"• Core technical capabilities span {', '.join(skills)} — backed by {ctx['total_assessments']} verified assessments with a peak score of {ctx['best_test_score']}%."
-        return f"• Core technical capabilities include {', '.join(skills)} — developed through structured coursework and self-directed practice."
+            return f"• Technical proficiency encompasses {', '.join(skills)} — validated across {ctx['total_assessments']} structured assessments with a peak performance of {ctx['best_test_score']}%."
+        return f"• Technical competencies span {', '.join(skills)}, developed through structured coursework and applied project implementation."
 
     def _make_achievements_bullet(self, ctx: Dict) -> str:
         parts = []
         if ctx["best_case"]:
-            parts.append(f"top case study analysis on {ctx['best_case']}")
+            parts.append(f"earned distinction on the {ctx['best_case']} case analysis")
         if ctx["completed_courses"] > 0:
-            parts.append(f"{ctx['completed_courses']} certified course completion{'s' if ctx['completed_courses'] != 1 else ''}")
+            parts.append(f"completed {ctx['completed_courses']} certified programme{'s' if ctx['completed_courses'] != 1 else ''}")
         if ctx["cert_names"]:
-            parts.append(f"earned {ctx['cert_names'][0]}")
+            parts.append(f"holds the {ctx['cert_names'][0]} credential")
         if ctx["overall_score"] >= 70:
-            parts.append(f"{ctx['overall_score']}% overall performance")
+            parts.append(f"maintained a {ctx['overall_score']}% aggregate performance benchmark")
         if not parts:
             return ""
-        return f"• Notable achievements: {'; '.join(parts[:3])}."
+        joined = "; ".join(parts[:3])
+        return f"• Demonstrated outcomes include {joined} — reflecting applied analytical rigour and sustained engagement."
 
     def _make_personality_bullet(self, ctx: Dict) -> str:
         if not ctx["personality_type"] or ctx["personality_type"] in ("Getting Started", ""):
             return ""
+        result = f"• Psychometric profiling identifies a {ctx['personality_type']} disposition"
         traits = ctx["personality_traits"]
         ws = ctx["work_style"]
-        result = f"• Identified as a {ctx['personality_type']} through psychometric assessment"
         if traits:
-            result += f" — {traits.lower()}"
+            result += f" — characterized by {traits.lower()}"
         if ws:
-            result += f"; {ws.lower()} work style"
+            result += f" and a {ws.lower()} orientation in team settings"
         result += "."
         return result
 
     def _make_career_bullet(self, ctx: Dict) -> str:
         if ctx["preferred_role"]:
-            return f"• Actively targeting {ctx['preferred_role']} opportunities where analytical strengths and {ctx['domain']} foundation can drive measurable impact."
+            return f"• Positioned for {ctx['preferred_role']} opportunities in organizations where analytical depth, domain training, and structured problem-solving drive measurable operational impact."
         elif ctx["career_goals"]:
             cg = ctx["career_goals"][:150]
-            return f"• Career focus: {cg}"
+            return f"• Strategic career focus: {cg}"
         return ""
 
-    # ─── Domain detection (unchanged from v6) ─────────────────
+    # ─── Domain detection ─────────────────────────────────────
 
     def _derive_domain(self, course_names: list, education=None, work_experience=None, personal=None) -> str:
         if education is None: education = []

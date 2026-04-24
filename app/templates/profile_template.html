@@ -1,526 +1,624 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{ student_name }} — Upskillize AI Profile</title>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ student_name or 'Student' }} — Upskillize AI Profile</title>
+<meta name="description" content="Professional AI-verified profile of {{ student_name or 'Student' }} — powered by Upskillize">
+<meta property="og:title" content="{{ student_name or 'Student' }} — Professional Profile">
+<meta property="og:description" content="{{ headline or 'Professional' }} — AI-powered profile from verified credentials">
+<meta property="og:url" content="{{ profile_url or '' }}">
+<meta property="og:type" content="profile">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#0B1426;--bg2:#162236;--bg3:#1E3050;--border:#243B5F;
-  --text:#E2E8F0;--muted:#94A3B8;--subtle:#64748B;
-  --accent:#3B82F6;--gold:#D4A017;--green:#10B981;--red:#EF4444;--purple:#8B5CF6;--teal:#14B8A6;--orange:#F59E0B;
-  --accent-soft:rgba(59,130,246,.12);--gold-soft:rgba(212,160,23,.12);--green-soft:rgba(16,185,129,.12);--red-soft:rgba(239,68,68,.12);--purple-soft:rgba(139,92,246,.12);--teal-soft:rgba(20,184,166,.12);
-  --font-display:'Fraunces',serif;--font-body:'Plus Jakarta Sans',sans-serif;
-  --radius:12px;
-}
-[data-theme="light"]{
-  --bg:#F8FAFC;--bg2:#FFFFFF;--bg3:#F1F5F9;--border:#E2E8F0;
-  --text:#1E293B;--muted:#64748B;--subtle:#94A3B8;
-  --accent-soft:rgba(59,130,246,.08);--gold-soft:rgba(212,160,23,.08);--green-soft:rgba(16,185,129,.08);--red-soft:rgba(239,68,68,.08);--purple-soft:rgba(139,92,246,.08);--teal-soft:rgba(20,184,166,.08);
-}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
-.wrap{max-width:900px;margin:0 auto;padding:24px 20px 60px}
-a{color:var(--accent);text-decoration:none}
 
-/* ── Theme Toggle ── */
-.theme-btn{position:fixed;top:16px;right:16px;z-index:99;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:.2s}
-.theme-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* ═══════════ THEME SYSTEM ═══════════ */
+:root,[data-theme="light"]{
+  --bg: #FAFBFD;
+  --bg-card: #FFFFFF;
+  --bg-soft: #F4F6FA;
+  --bg-softer: #EBEEF5;
+  --text: #0B1628;
+  --text-2: #3D4F6B;
+  --text-3: #8293AB;
+  --text-4: #B8C4D6;
+  --border: #E4E9F2;
+  --border-strong: #CBD3E3;
+  --navy: #0B1628;
+  --navy-2: #1a2744;
+  --gold: #C8992A;
+  --gold-soft: #FBF6EC;
+  --gold-2: #A67C1A;
+  --teal: #0DBFA3;
+  --teal-soft: #EDFAF7;
+  --accent: #1A4FA0;
+  --accent-soft: #EBF1FB;
+  --green: #0F8A65;
+  --green-soft: #EEFBF5;
+  --amber: #C68A17;
+  --amber-soft: #FEF9EE;
+  --purple: #5B2D8E;
+  --purple-soft: #F5F0FB;
+  --shadow-card: 0 1px 2px rgba(11,22,40,.03), 0 4px 16px rgba(11,22,40,.04);
+  --shadow-card-hover: 0 2px 4px rgba(11,22,40,.05), 0 8px 24px rgba(11,22,40,.07);
+  --hero-bg: linear-gradient(160deg, #07112E 0%, #0B1628 35%, #1a2744 100%);
+  --hero-text: #F5F7FB;
+  --hero-text-2: #8293AB;
+  --skill-bar-bg: #E4E9F2;
+  --divider: #E4E9F2;
+  --icon-bg: #F4F6FA;
+}
 
-/* ── Section ── */
-.section{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:16px;position:relative;overflow:hidden}
-.section-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-.section-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
-.section-title{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--text)}
-.section-badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;margin-left:auto}
+[data-theme="dark"]{
+  --bg: #080D19;
+  --bg-card: #0E1525;
+  --bg-soft: #151D30;
+  --bg-softer: #1D2840;
+  --text: #EAEFF6;
+  --text-2: #B0BDCF;
+  --text-3: #6B7D96;
+  --text-4: #3D4F6B;
+  --border: #1D2840;
+  --border-strong: #2A3854;
+  --navy: #050A14;
+  --navy-2: #0B1628;
+  --gold: #E8B84A;
+  --gold-soft: rgba(200,153,42,.1);
+  --gold-2: #C8992A;
+  --teal: #34D9B8;
+  --teal-soft: rgba(13,191,163,.1);
+  --accent: #5B8CD6;
+  --accent-soft: rgba(26,79,160,.12);
+  --green: #34D399;
+  --green-soft: rgba(15,138,101,.12);
+  --amber: #F0C050;
+  --amber-soft: rgba(198,138,23,.12);
+  --purple: #A78BFA;
+  --purple-soft: rgba(91,45,142,.12);
+  --shadow-card: 0 1px 3px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.18);
+  --shadow-card-hover: 0 2px 6px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.22);
+  --hero-bg: linear-gradient(160deg, #030610 0%, #080D19 35%, #0E1525 100%);
+  --hero-text: #EAEFF6;
+  --hero-text-2: #4E6180;
+  --skill-bar-bg: #1D2840;
+  --divider: #1D2840;
+  --icon-bg: #151D30;
+}
 
-/* ── Placeholder ── */
-.placeholder{text-align:center;padding:20px 16px;border:1px dashed var(--border);border-radius:8px;background:var(--bg3)}
-.placeholder-icon{font-size:24px;margin-bottom:8px;opacity:.5}
-.placeholder-text{font-size:13px;color:var(--muted);margin-bottom:4px}
-.placeholder-action{font-size:12px;color:var(--subtle);font-style:italic}
+body{
+  font-family: 'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background .35s ease, color .25s ease;
+}
 
-/* ── Hero ── */
-.hero{background:linear-gradient(135deg,#0B1628 0%,#1A3258 50%,#0D1B33 100%);border-radius:16px;padding:32px;margin-bottom:16px;position:relative;overflow:hidden}
-[data-theme="light"] .hero{background:linear-gradient(135deg,#1E3A5F 0%,#2C5282 50%,#1A365D 100%)}
-.hero::before{content:'';position:absolute;top:-50%;right:-20%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,.08) 0%,transparent 70%)}
-.hero-grid{display:flex;align-items:center;gap:20px;position:relative;z-index:1}
-.hero-avatar{width:72px;height:72px;border-radius:16px;background:rgba(59,130,246,.2);border:2px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:28px;font-weight:700;font-family:var(--font-display);flex-shrink:0;overflow:hidden}
-.hero-avatar img{width:100%;height:100%;object-fit:cover}
-.hero-info{flex:1;min-width:0}
-.hero-name{font-family:var(--font-display);font-size:26px;font-weight:800;color:#fff;margin-bottom:2px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.hero-badge{font-size:10px;padding:3px 10px;border-radius:99px;font-weight:600}
-.badge-fresher{background:rgba(16,185,129,.15);color:#34D399;border:1px solid rgba(16,185,129,.2)}
-.badge-pro{background:rgba(212,160,23,.15);color:var(--gold);border:1px solid rgba(212,160,23,.2)}
-.hero-headline{font-size:14px;color:rgba(147,197,253,.8);margin-bottom:6px;font-weight:500}
-.hero-meta{font-size:12px;color:rgba(148,163,184,.7);display:flex;flex-wrap:wrap;gap:12px}
-.hero-links{display:flex;gap:6px;margin-top:8px}
-.hero-links a{font-size:11px;padding:4px 12px;border:1px solid rgba(255,255,255,.15);border-radius:99px;color:rgba(255,255,255,.6);transition:.2s}
-.hero-links a:hover{border-color:rgba(255,255,255,.4);color:#fff}
-.hero-ats{text-align:center;flex-shrink:0}
-.hero-ats .num{font-family:var(--font-display);font-size:36px;font-weight:800;color:var(--gold)}
-.hero-ats .lbl{font-size:9px;color:rgba(148,163,184,.6);text-transform:uppercase;letter-spacing:1px}
+.wrap{max-width: 920px; margin: 0 auto; padding: 0 20px 56px}
 
-/* ── Grid ── */
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:700px){.grid2{grid-template-columns:1fr}}
+/* ═══════════ INLINE SVG ICON SYSTEM ═══════════ */
+.ic{
+  width: 34px; height: 34px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.ic svg{width: 16px; height: 16px; stroke-width: 2}
 
-/* ── Tags ── */
-.tag{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;margin:2px}
-.tag-tech{background:var(--accent-soft);color:var(--accent)}
-.tag-tool{background:var(--purple-soft);color:var(--purple)}
-.tag-soft{background:var(--green-soft);color:var(--green)}
-.tag-gold{background:var(--gold-soft);color:var(--gold)}
+/* ═══════════ THEME TOGGLE ═══════════ */
+.theme-toggle{
+  position: fixed; top: 20px; right: 20px; z-index: 999;
+  width: 52px; height: 28px; border-radius: 99px;
+  background: var(--bg-softer); border: 1px solid var(--border);
+  cursor: pointer; padding: 3px; display: flex; align-items: center;
+  transition: all .3s;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.theme-toggle .knob{
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--bg-card); display: flex; align-items: center; justify-content: center;
+  transition: transform .3s ease, background .3s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.15);
+}
+.theme-toggle .knob svg{width: 12px; height: 12px}
+[data-theme="dark"] .theme-toggle{background: #1A4FA0; border-color: #3B7DDB}
+[data-theme="dark"] .theme-toggle .knob{transform: translateX(24px); background: #E8B84A}
+.theme-toggle .sun{display: block; color: #C8992A}
+.theme-toggle .moon{display: none; color: #0B1628}
+[data-theme="dark"] .theme-toggle .sun{display: none}
+[data-theme="dark"] .theme-toggle .moon{display: block}
 
-/* ── Cards inside sections ── */
-.item-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:8px}
-.item-card:last-child{margin-bottom:0}
-.item-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px}
-.item-sub{font-size:12px;color:var(--muted)}
-.item-desc{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6}
+/* ═══════════ HERO ═══════════ */
+.hero{
+  background: var(--hero-bg);
+  border-radius: 0 0 24px 24px;
+  margin: 0 -20px 24px;
+  padding: 52px 44px 40px;
+  position: relative; overflow: hidden;
+}
+.hero::before{
+  content: '';position: absolute;top: -120px;right: -80px;
+  width: 350px;height: 350px;border-radius: 50%;
+  background: radial-gradient(circle, rgba(200,153,42,.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero::after{
+  content: '';position: absolute;bottom: -100px;left: -60px;
+  width: 280px;height: 280px;border-radius: 50%;
+  background: radial-gradient(circle, rgba(13,191,163,.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-grid{display: grid; grid-template-columns: 88px 1fr auto; gap: 24px; align-items: center; position: relative; z-index: 1}
+.avatar{
+  width: 88px; height: 88px; border-radius: 20px;
+  background: linear-gradient(145deg, #C8992A 0%, #A67C1A 100%);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 32px; font-weight: 700; font-family: 'Fraunces', serif;
+  border: 2px solid rgba(200,153,42,.25);
+  flex-shrink: 0; letter-spacing: -.5px;
+}
+.avatar img{width: 100%; height: 100%; border-radius: 18px; object-fit: cover}
+.hero-info h1{
+  font-family: 'Fraunces', serif;
+  font-size: 30px; font-weight: 600; line-height: 1.15;
+  color: var(--hero-text); letter-spacing: -.4px; margin-bottom: 6px;
+}
+.hero-info .headline{
+  font-size: 14px; font-weight: 500; color: #C8992A;
+  margin-bottom: 10px; letter-spacing: .2px;
+}
+.hero-info .meta{font-size: 12.5px; color: var(--hero-text-2); margin-bottom: 12px; letter-spacing: .1px}
+.hero-info .meta span + span::before{content: ' · '; margin: 0 6px; opacity: .5}
+.hero-links{display: flex; gap: 8px; flex-wrap: wrap}
+.hero-links a{
+  font-size: 11.5px; font-weight: 600; padding: 5px 14px;
+  color: rgba(255,255,255,.75);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 99px; text-decoration: none;
+  transition: all .25s; letter-spacing: .3px;
+  text-transform: uppercase;
+}
+.hero-links a:hover{background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.25); color: #fff}
 
-/* ── Progress bar ── */
-.progress-track{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:6px}
-.progress-fill{height:100%;border-radius:2px;transition:width .4s}
+.fresher-badge{
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 700; padding: 3px 10px;
+  background: rgba(13,191,163,.12); color: #34D9B8;
+  border: 1px solid rgba(13,191,163,.2); border-radius: 99px;
+  margin-left: 10px; text-transform: uppercase; letter-spacing: .8px;
+}
+.pro-badge{
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 700; padding: 3px 10px;
+  background: rgba(200,153,42,.15); color: #E8B84A;
+  border: 1px solid rgba(200,153,42,.25); border-radius: 99px;
+  margin-left: 10px; text-transform: uppercase; letter-spacing: .8px;
+}
 
-/* ── Score badge ── */
-.score{font-family:var(--font-display);font-size:22px;font-weight:700;flex-shrink:0}
-.score-sm{font-size:16px}
+.ats-box{text-align: center; min-width: 84px}
+.ats-box .score{font-family: 'Fraunces', serif; font-size: 42px; font-weight: 700; line-height: 1; color: #34D9B8}
+.ats-box .score.mid{color: #E8B84A}
+.ats-box .score.low{color: var(--hero-text-2)}
+.ats-box .lbl{font-size: 9px; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; color: var(--hero-text-2); margin-top: 4px}
 
-/* ── Timeline ── */
-.timeline-item{padding-left:20px;border-left:2px solid var(--border);margin-bottom:16px;position:relative}
-.timeline-item::before{content:'';position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--accent)}
-.timeline-item:last-child{margin-bottom:0}
+/* ═══════════ METRICS STRIP ═══════════ */
+.metrics{display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 22px}
+.metric-card{
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 18px 14px; text-align: center;
+  box-shadow: var(--shadow-card);
+  transition: all .25s;
+}
+.metric-card:hover{transform: translateY(-1px); box-shadow: var(--shadow-card-hover)}
+.metric-card .v{font-family: 'Fraunces', serif; font-size: 26px; font-weight: 700; color: var(--accent); line-height: 1}
+.metric-card .v.green{color: var(--green)}
+.metric-card .v.amber{color: var(--amber)}
+.metric-card .v.teal{color: var(--teal)}
+.metric-card .l{font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; color: var(--text-3); margin-top: 6px}
 
-/* ── Metric row ── */
-.metric-row{display:flex;gap:10px;margin-bottom:12px}
-.metric-box{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
-.metric-val{font-family:var(--font-display);font-size:24px;font-weight:700;color:var(--text)}
-.metric-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+/* ═══════════ SECTIONS ═══════════ */
+.section{
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 26px 28px; margin-bottom: 16px;
+  box-shadow: var(--shadow-card);
+  transition: all .3s;
+}
+.section:hover{box-shadow: var(--shadow-card-hover)}
+.section-title{
+  font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600;
+  margin-bottom: 16px; display: flex; align-items: center; gap: 12px;
+  color: var(--text); letter-spacing: -.2px;
+}
 
-/* ── Role match ── */
-.role-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:10px}
-.role-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.role-name{font-size:14px;font-weight:700;color:var(--text)}
+/* ═══════════ PROFESSIONAL SUMMARY ═══════════ */
+.summary-bullets{list-style: none; padding: 0; margin: 0}
+.summary-bullets li{
+  position: relative; padding: 6px 0 6px 22px;
+  font-size: 14.5px; line-height: 1.75; color: var(--text-2);
+}
+.summary-bullets li::before{
+  content: ''; position: absolute; left: 0; top: 14px;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--gold);
+}
+.summary-bullets li + li{margin-top: 2px}
+.summary-text{font-size: 14.5px; line-height: 1.8; color: var(--text-2)}
 
-/* ── Bullet list ── */
-.bullet{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start}
-.bullet::before{content:'•';color:var(--accent);font-size:18px;line-height:1.4;flex-shrink:0}
+/* ═══════════ TIMELINE CARDS ═══════════ */
+.timeline-card{
+  position: relative; padding: 16px 20px;
+  background: var(--bg-soft); border-left: 3px solid var(--accent);
+  border-radius: 0 12px 12px 0; margin-bottom: 12px;
+  transition: all .2s;
+}
+.timeline-card:last-child{margin-bottom: 0}
+.timeline-card:hover{background: var(--bg-softer)}
+.timeline-card.work{border-left-color: var(--teal)}
+.tc-title{font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 2px}
+.tc-org{font-size: 13px; color: var(--accent); font-weight: 600; margin-bottom: 4px}
+.tc-meta{font-size: 11.5px; color: var(--text-3); display: flex; gap: 14px; flex-wrap: wrap; font-weight: 500}
+.tc-desc{font-size: 13px; color: var(--text-2); margin-top: 6px; line-height: 1.65}
 
-/* ── Footer ── */
-.footer{text-align:center;padding:24px 0;border-top:1px solid var(--border);margin-top:24px}
-.footer-title{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px}
-.footer-sub{font-size:12px;color:var(--muted);margin-bottom:10px}
-.source-tags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
-.source-tag{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:600}
+/* ═══════════ HIGHLIGHT CARDS ═══════════ */
+.highlight-card{
+  background: var(--bg-soft);
+  border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: 12px; padding: 18px 20px; margin-bottom: 12px;
+  transition: all .2s;
+}
+.highlight-card:hover{border-color: var(--accent); box-shadow: var(--shadow-card-hover)}
+.highlight-card.green{border-left-color: var(--teal)}
+.highlight-card.green:hover{border-color: var(--teal)}
+.hc-head{display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; gap: 12px}
+.hc-title{font-size: 15px; font-weight: 700; color: var(--text); flex: 1}
+.hc-score{
+  font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700;
+  color: var(--teal); line-height: 1; flex-shrink: 0;
+}
+.hc-status{
+  display: inline-block; font-size: 10px; padding: 2px 10px;
+  background: var(--teal-soft); color: var(--teal); border: 1px solid var(--teal);
+  border-radius: 99px; font-weight: 700; margin-left: 8px;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.hc-desc{font-size: 13px; color: var(--text-2); line-height: 1.6; margin-top: 6px}
+.hc-tags{display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px}
+.hc-tags span{
+  font-size: 10.5px; padding: 3px 10px; background: var(--purple-soft);
+  color: var(--purple); border: 1px solid transparent; border-radius: 6px; font-weight: 600;
+  letter-spacing: .2px;
+}
 
+/* ═══════════ SKILLS ═══════════ */
+.skill-cat{
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.6px;
+  font-weight: 700; color: var(--text-3); margin: 16px 0 10px;
+}
+.skill-cat:first-child{margin-top: 0}
+.skill-tags{display: flex; flex-wrap: wrap; gap: 5px}
+.skill-tags span{
+  font-size: 12px; padding: 5px 12px; background: var(--bg-soft);
+  border: 1px solid var(--border); border-radius: 8px; color: var(--text-2);
+  font-weight: 500; transition: all .2s; letter-spacing: .1px;
+}
+.skill-tags span:hover{border-color: var(--gold); color: var(--gold); background: var(--gold-soft)}
+
+/* ═══════════ JOB ROLES ═══════════ */
+.role-card{
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px 18px; margin-bottom: 10px; transition: all .2s;
+  background: var(--bg-card);
+}
+.role-card:hover{border-color: var(--accent); box-shadow: var(--shadow-card-hover)}
+.role-head{display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 12px}
+.role-title{font-size: 14px; font-weight: 700; color: var(--text)}
+.role-pct{font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700}
+.role-pct.high{color: var(--teal)}
+.role-pct.mid{color: var(--gold)}
+.role-pct.low{color: var(--text-3)}
+.role-bar{height: 6px; background: var(--skill-bar-bg); border-radius: 99px; overflow: hidden; margin-bottom: 10px}
+.role-bar .fill{height: 100%; border-radius: 99px; transition: width .8s ease-out}
+.role-bar .fill.high{background: linear-gradient(90deg, var(--teal), #34D9B8)}
+.role-bar .fill.mid{background: linear-gradient(90deg, var(--gold), #E8B84A)}
+.role-bar .fill.low{background: var(--text-3)}
+.role-keywords{display: flex; flex-wrap: wrap; gap: 4px}
+.role-keywords span{font-size: 10.5px; padding: 3px 9px; border-radius: 6px; font-weight: 600; letter-spacing: .2px}
+.role-keywords .match{background: var(--teal-soft); color: var(--teal)}
+.role-keywords .miss{background: var(--amber-soft); color: var(--amber)}
+
+/* ═══════════ PERSONALITY ═══════════ */
+.persona-hero{
+  text-align: center; padding: 16px;
+  background: var(--purple-soft);
+  border-radius: 12px; margin-bottom: 14px;
+}
+.persona-hero .type{
+  font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700;
+  color: var(--purple); margin-bottom: 3px;
+}
+.persona-hero .src{font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700}
+.persona-grid{display: grid; grid-template-columns: 1fr 1fr; gap: 10px}
+.persona-cell{padding: 12px; background: var(--bg-soft); border-radius: 10px}
+.persona-cell .pl{font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); font-weight: 700; margin-bottom: 3px}
+.persona-cell .pv{font-size: 13px; font-weight: 500; color: var(--text-2); line-height: 1.5}
+
+/* ═══════════ CERTIFICATIONS ═══════════ */
+.cert-card{display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--divider); align-items: center}
+.cert-card:last-child{border-bottom: none}
+.cert-icon-box{
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  background: linear-gradient(145deg, var(--gold-soft), var(--gold));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+}
+.cert-icon-box svg{width: 18px; height: 18px; stroke-width: 1.8}
+.cert-name{font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 1px}
+.cert-issuer{font-size: 11.5px; color: var(--text-3); font-weight: 500}
+
+/* ═══════════ JOB PREFERENCES ═══════════ */
+.pref-grid{display: grid; grid-template-columns: 1fr 1fr; gap: 10px}
+.pref-cell{padding: 12px; background: var(--bg-soft); border-radius: 10px}
+.pref-cell .pl{font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); font-weight: 700; margin-bottom: 3px}
+.pref-cell .pv{font-size: 13.5px; font-weight: 600; color: var(--text)}
+
+/* ═══════════ COMPLETION NOTICE ═══════════ */
+.notice{
+  display: flex; gap: 16px;
+  background: var(--gold-soft);
+  border: 1px solid var(--gold); border-radius: 14px;
+  padding: 18px 22px; margin-bottom: 22px; align-items: flex-start;
+}
+[data-theme="dark"] .notice{
+  background: rgba(200,153,42,.08);
+  border-color: rgba(200,153,42,.3);
+}
+.notice .ic-warn{
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--gold); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.notice .ic-warn svg{width: 16px; height: 16px; stroke-width: 2.5}
+.notice .nt{font-size: 14px; font-weight: 700; color: var(--gold-2); margin-bottom: 4px}
+[data-theme="dark"] .notice .nt{color: #E8B84A}
+.notice .nd{font-size: 12.5px; color: var(--text-2); line-height: 1.6; margin-bottom: 10px}
+.notice .ntag{display: flex; flex-wrap: wrap; gap: 5px}
+.notice .ntag span{
+  font-size: 10.5px; padding: 4px 11px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 99px; color: var(--text-2); font-weight: 600;
+}
+
+/* ═══════════ TWO-COLUMN LAYOUT ═══════════ */
+.grid2{display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start}
+.grid2.single{grid-template-columns: 1fr; max-width: 720px; margin: 0 auto}
+.grid2 .col{display: flex; flex-direction: column}
+.grid2 .col .section{margin-bottom: 16px}
+.grid2 .col .section:last-child{margin-bottom: 0}
+
+/* ═══════════ SHARE BAR ═══════════ */
+.share-bar{
+  display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  padding: 20px 0 0; margin-top: 8px;
+}
+.share-btn{
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; padding: 8px 16px;
+  border-radius: 99px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text-2);
+  cursor: pointer; transition: all .25s; text-decoration: none;
+  letter-spacing: .2px; font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.share-btn:hover{border-color: var(--accent); color: var(--accent); box-shadow: var(--shadow-card)}
+.share-btn svg{width: 14px; height: 14px}
+.share-btn.wa{color: #25D366; border-color: #25D366}
+.share-btn.wa:hover{background: #25D366; color: #fff}
+.share-btn.tg{color: #229ED9; border-color: #229ED9}
+.share-btn.tg:hover{background: #229ED9; color: #fff}
+.share-btn.li{color: #0077B5; border-color: #0077B5}
+.share-btn.li:hover{background: #0077B5; color: #fff}
+.share-btn.cp.copied{background: var(--teal); border-color: var(--teal); color: #fff}
+
+/* ═══════════ FOOTER ═══════════ */
+.footer{text-align: center; padding: 28px 0 0; color: var(--text-3); font-size: 11.5px}
+.footer .brand{
+  font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600;
+  color: var(--text); margin-bottom: 3px; letter-spacing: -.2px;
+}
+.footer a{color: var(--accent); text-decoration: none; font-weight: 500}
+.footer a:hover{text-decoration: underline}
+.ds-badges{display: flex; gap: 5px; flex-wrap: wrap; margin: 10px 0; justify-content: center}
+.ds-badges span{
+  font-size: 10px; padding: 3px 10px; border-radius: 99px;
+  background: var(--bg-soft); color: var(--text-3); border: 1px solid var(--border);
+  font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+}
+.footer-sep{
+  width: 40px; height: 2px; background: var(--gold); margin: 12px auto;
+  border-radius: 99px; opacity: .5;
+}
+
+/* ═══════════ ANIMATIONS ═══════════ */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.section,.metric-card,.hero{animation: fadeUp .45s ease both}
+.metric-card:nth-child(2){animation-delay:.04s}
+.metric-card:nth-child(3){animation-delay:.08s}
+.metric-card:nth-child(4){animation-delay:.12s}
+.metric-card:nth-child(5){animation-delay:.16s}
+
+/* ═══════════ PRINT ═══════════ */
 @media print{
-  body{background:#fff;color:#000}
-  .theme-btn,.hero-links,.placeholder{display:none}
-  .section{box-shadow:none;border:1px solid #ddd}
+  body{background:#fff}
+  .theme-toggle,.share-bar{display:none}
+  .section,.metric-card,.hero{box-shadow:none;border:1px solid #ddd;animation:none}
+  .hero{background:#0B1628!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+
+/* ═══════════ RESPONSIVE ═══════════ */
+@media(max-width: 768px){
+  .hero{padding: 36px 22px 28px}
+  .hero-grid{grid-template-columns: 68px 1fr; gap: 14px}
+  .avatar{width: 68px; height: 68px; font-size: 24px; border-radius: 16px}
+  .ats-box{position: absolute; top: 20px; right: 20px}
+  .grid2,.persona-grid,.pref-grid{grid-template-columns: 1fr}
+  .metrics{grid-template-columns: repeat(2, 1fr)}
+  .section{padding: 20px 18px; border-radius: 14px}
+  .hero-info h1{font-size: 24px}
+  .hero-info .headline{font-size: 13px}
+  .wrap{padding: 0 16px 40px}
+}
+@media(max-width: 480px){
+  .hero{padding: 28px 18px 24px; border-radius: 0 0 18px 18px}
+  .hero-grid{grid-template-columns: 56px 1fr; gap: 12px}
+  .avatar{width: 56px; height: 56px; font-size: 20px; border-radius: 14px}
+  .hero-info h1{font-size: 20px}
+  .metrics{grid-template-columns: 1fr 1fr}
+  .section{padding: 16px 14px}
 }
 </style>
 </head>
 <body>
-<button class="theme-btn" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('profile-theme',document.documentElement.dataset.theme)}catch(e){}" title="Toggle theme">
-  <span id="theme-icon">☀</span>
+
+<!-- ═══ THEME TOGGLE ═══ -->
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <div class="knob">
+    <span class="sun"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+    <span class="moon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></span>
+  </div>
 </button>
-<script>try{const t=localStorage.getItem('profile-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 
 <div class="wrap">
 
-{# ════════════════════════════════════════════════════════════ #}
-{# 1. HERO SECTION                                            #}
-{# ════════════════════════════════════════════════════════════ #}
+<!-- ═══════════ HERO ═══════════ -->
 <div class="hero">
   <div class="hero-grid">
-    <div class="hero-avatar">
-      {% if student_photo_url %}<img src="{{ student_photo_url }}" alt="{{ student_name }}" onerror="this.style.display='none';this.parentNode.textContent='{{ student_name[0]|upper }}'">
-      {% else %}{{ student_name[0]|upper }}{% endif %}
+    <div class="avatar">
+      {% if student_photo_url %}
+        <img src="{{ student_photo_url }}" alt="{{ student_name }}">
+      {% else %}
+        {{ (student_name or 'S')[0] | upper }}
+      {% endif %}
     </div>
     <div class="hero-info">
-      <div class="hero-name">
-        {{ student_name }}
-        {% if is_fresher %}<span class="hero-badge badge-fresher">● Fresher</span>
-        {% else %}<span class="hero-badge badge-pro">● Working Professional</span>{% endif %}
-      </div>
-      <div class="hero-headline">{{ headline }}</div>
-      <div class="hero-meta">
+      <h1>
+        {{ student_name or 'Student' }}
+        {% if is_fresher %}<span class="fresher-badge">Fresher</span>{% endif %}
+        {% if is_working_professional %}<span class="pro-badge">Professional</span>{% endif %}
+      </h1>
+      <div class="headline">{{ headline or 'Professional' }}</div>
+      <div class="meta">
         {% if student_email %}<span>{{ student_email }}</span>{% endif %}
-        {% if student_phone %}<span>{{ student_phone }}</span>{% endif %}
         {% if student_location %}<span>{{ student_location }}</span>{% endif %}
+        {% if student_phone %}<span>{{ student_phone }}</span>{% endif %}
       </div>
       <div class="hero-links">
-        {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank">LinkedIn</a>{% endif %}
-        {% if github_url %}<a href="{{ github_url }}" target="_blank">GitHub</a>{% endif %}
-        {% if portfolio_url %}<a href="{{ portfolio_url }}" target="_blank">Portfolio</a>{% endif %}
+        {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank" rel="noopener">LinkedIn</a>{% endif %}
+        {% if github_url %}<a href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>{% endif %}
+        {% if portfolio_url %}<a href="{{ portfolio_url }}" target="_blank" rel="noopener">Portfolio</a>{% endif %}
       </div>
     </div>
-    {% if ats_data and ats_data.ats_score is defined and ats_data.ats_score > 15 %}
-    <div class="hero-ats">
-      <div class="num">{{ ats_data.ats_score }}</div>
+    {% if ats_data and ats_data.total_score and ats_data.total_score > 20 %}
+    <div class="ats-box">
+      {% set ats_class = 'high' if ats_data.total_score >= 70 else ('mid' if ats_data.total_score >= 40 else 'low') %}
+      <div class="score {{ ats_class }}">{{ ats_data.total_score }}</div>
       <div class="lbl">ATS Score</div>
     </div>
     {% endif %}
   </div>
 </div>
 
-{# ════════════════════════════════════════════════════════════ #}
-{# 2. PROFESSIONAL SUMMARY                                    #}
-{# ════════════════════════════════════════════════════════════ #}
+<!-- ═══════════ METRICS STRIP ═══════════ -->
+{% set total_assessments = (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) + (performance_data.total_case_studies or 0) %}
+{% if total_assessments > 0 or (performance_data and performance_data.completed_courses and performance_data.completed_courses > 0) %}
+<div class="metrics">
+  {% if performance_data and performance_data.overall_score and performance_data.overall_score > 0 %}
+  <div class="metric-card"><div class="v teal">{{ "%.0f"|format(performance_data.overall_score) }}%</div><div class="l">Overall Score</div></div>
+  {% endif %}
+  {% if performance_data and performance_data.best_test_score and performance_data.best_test_score > 0 %}
+  <div class="metric-card"><div class="v">{{ "%.0f"|format(performance_data.best_test_score) }}%</div><div class="l">Best Score</div></div>
+  {% endif %}
+  {% if performance_data and performance_data.completed_courses and performance_data.completed_courses > 0 %}
+  <div class="metric-card"><div class="v green">{{ performance_data.completed_courses }}</div><div class="l">Certified</div></div>
+  {% endif %}
+  {% if total_assessments > 0 %}
+  <div class="metric-card"><div class="v amber">{{ total_assessments }}</div><div class="l">Assessments</div></div>
+  {% endif %}
+  {% if performance_data and performance_data.total_hours and performance_data.total_hours > 0 %}
+  <div class="metric-card"><div class="v">{{ "%.0f"|format(performance_data.total_hours) }}h</div><div class="l">Training</div></div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ═══════════ COMPLETION NOTICE ═══════════ -->
+{% set has_education = education_data and education_data|length > 0 %}
+{% set has_experience = work_experience and work_experience|length > 0 %}
+{% set has_skills_data = skills_data and (skills_data.get('technical_skills', [])|length > 0 if skills_data is mapping else false) %}
+{% set missing_count = (0 if has_education else 1) + (0 if has_experience else 1) + (0 if has_skills_data else 1) %}
+{% if missing_count >= 2 %}
+<div class="notice">
+  <div class="ic-warn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  </div>
+  <div>
+    <div class="nt">Complete your profile for the full AI experience</div>
+    <div class="nd">Add these details in your LMS profile so the AI can generate a richer, more accurate profile:</div>
+    <div class="ntag">
+      {% if not has_education %}<span>Education</span>{% endif %}
+      {% if not has_experience %}<span>Work Experience</span>{% endif %}
+      {% if not has_skills_data %}<span>Skills</span>{% endif %}
+      <span>Resume PDF</span>
+      <span>LinkedIn URL</span>
+      <span>GitHub URL</span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ═══════════ PROFESSIONAL SUMMARY ═══════════ -->
 <div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">✦</div>
-    <div class="section-title">Professional Summary</div>
+  <div class="section-title">
+    <div class="ic" style="background:var(--gold-soft);color:var(--gold)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    </div>
+    Professional Summary
   </div>
   {% if professional_summary %}
-    {% set lines = professional_summary.split('\n') %}
-    {% for line in lines %}
-      {% set clean = line.strip().lstrip('•-▸● ') %}
-      {% if clean %}<div class="bullet">{{ clean }}</div>{% endif %}
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">✦</div>
-      <div class="placeholder-text">Complete your profile to generate an AI-powered summary</div>
-      <div class="placeholder-action">Add education, skills, and experience in your LMS profile</div>
-    </div>
-  {% endif %}
-</div>
-
-{# ════════════════════════════════════════════════════════════ #}
-{# ── LMS VERIFIED DATA SECTION ──                            #}
-{# ════════════════════════════════════════════════════════════ #}
-
-{# 3. LMS COURSE PROGRESS #}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--teal-soft);color:var(--teal)">📚</div>
-    <div class="section-title">Course Progress</div>
-    {% if total_courses > 0 %}<span class="section-badge" style="background:var(--teal-soft);color:var(--teal)">{{ total_courses }} enrolled</span>{% endif %}
-  </div>
-  {% if courses_data and courses_data|length > 0 %}
-    {% for c in courses_data %}
-    <div class="item-card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div class="item-title">{{ c.course_name or 'Course' }}</div>
-        <span class="score-sm" style="color:{% if (c.progress_percentage or 0) >= 100 %}var(--green){% elif (c.progress_percentage or 0) > 50 %}var(--accent){% else %}var(--gold){% endif %}">{{ c.progress_percentage or 0 }}%</span>
-      </div>
-      <div class="progress-track"><div class="progress-fill" style="width:{{ c.progress_percentage or 0 }}%;background:{% if (c.progress_percentage or 0) >= 100 %}var(--green){% elif (c.progress_percentage or 0) > 50 %}var(--accent){% else %}var(--gold){% endif %}"></div></div>
-      <div class="item-sub" style="margin-top:6px">
-        {% if c.completion_status == 'completed' %}<span class="tag tag-gold">✓ Completed</span>{% else %}<span class="tag" style="background:var(--accent-soft);color:var(--accent)">In Progress</span>{% endif %}
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">📚</div>
-      <div class="placeholder-text">No courses enrolled yet</div>
-      <div class="placeholder-action">Enroll in a course to start building your verified learning profile</div>
-    </div>
-  {% endif %}
-</div>
-
-{# 4. ASSESSMENT BEST SCORES #}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">📊</div>
-    <div class="section-title">Assessment Scores</div>
-    {% if best_test_scores|length > 0 %}<span class="section-badge" style="background:var(--gold-soft);color:var(--gold)">Best of {{ total_assessments }} taken</span>{% endif %}
-  </div>
-  {% if best_test_scores and best_test_scores|length > 0 %}
-    {% for ts in best_test_scores[:4] %}
-    <div class="item-card" style="display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div class="item-title">{{ ts.subject or ts.topic or ts.course_name or 'Assessment' }}</div>
-        <div class="item-sub">{% if ts.course_name %}{{ ts.course_name }}{% endif %}{% if ts.grade %} · Grade: {{ ts.grade }}{% endif %}</div>
-      </div>
-      <div class="score" style="color:{% if (ts.percentage or 0) >= 80 %}var(--green){% elif (ts.percentage or 0) >= 60 %}var(--gold){% else %}var(--red){% endif %}">{{ ts.percentage or ts.score or 0 }}%</div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">📊</div>
-      <div class="placeholder-text">No assessments taken yet</div>
-      <div class="placeholder-action">Take a quiz or test to showcase your knowledge</div>
-    </div>
-  {% endif %}
-</div>
-
-<div class="grid2">
-{# 5. BEST CASE STUDIES #}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">📋</div>
-    <div class="section-title">Case Studies</div>
-  </div>
-  {% if best_case_studies and best_case_studies|length > 0 %}
-    {% for cs in best_case_studies[:2] %}
-    <div class="item-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div class="item-title">{{ cs.title or 'Case Study' }}</div>
-        <div class="score-sm" style="color:var(--green)">{{ cs.score or 0 }}%</div>
-      </div>
-      <div class="item-sub">{{ cs.course_name or '' }}{% if cs.ai_grade %} · {{ cs.ai_grade }}{% endif %}</div>
-      {% if cs.ai_feedback %}<div class="item-desc" style="font-size:12px">{{ cs.ai_feedback[:150] }}{% if cs.ai_feedback|length > 150 %}...{% endif %}</div>{% endif %}
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">📋</div>
-      <div class="placeholder-text">No case studies yet</div>
-      <div class="placeholder-action">Submit a case study to demonstrate analytical skills</div>
-    </div>
-  {% endif %}
-</div>
-
-{# 6. BEST ASSIGNMENTS #}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">📝</div>
-    <div class="section-title">Assignments</div>
-  </div>
-  {% if best_assignments and best_assignments|length > 0 %}
-    {% for a in best_assignments[:2] %}
-    <div class="item-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div class="item-title">{{ a.title or 'Assignment' }}</div>
-        {% if a.score %}<div class="score-sm" style="color:var(--accent)">{{ a.score }}</div>{% endif %}
-      </div>
-      <div class="item-sub">{{ a.course_name or '' }}{% if a.status %} · {{ a.status }}{% endif %}</div>
-      {% if a.feedback %}<div class="item-desc" style="font-size:12px">{{ a.feedback[:120] }}{% if a.feedback|length > 120 %}...{% endif %}</div>{% endif %}
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">📝</div>
-      <div class="placeholder-text">No assignments yet</div>
-      <div class="placeholder-action">Complete assignments to show your work</div>
-    </div>
-  {% endif %}
-</div>
-</div>
-
-{# 7. CAPSTONE PROJECT #}
-{% if capstone_project %}
-<div class="section" style="border-left:3px solid var(--gold)">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">🎯</div>
-    <div class="section-title">Capstone Project</div>
-    <span class="section-badge" style="background:var(--gold-soft);color:var(--gold)">Featured</span>
-  </div>
-  <div class="item-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <div class="item-title" style="font-size:16px">{{ capstone_project.title or 'Capstone Project' }}</div>
-      {% if capstone_project.score %}<div class="score" style="color:var(--gold)">{{ capstone_project.score }}{% if capstone_project.max_score %}/{{ capstone_project.max_score }}{% endif %}</div>{% endif %}
-    </div>
-    {% if capstone_project.description %}<div class="item-desc">{{ capstone_project.description }}</div>{% endif %}
-    {% if capstone_project.tech_stack %}<div style="margin-top:8px">{% for t in capstone_project.tech_stack.split(',') %}<span class="tag tag-tech">{{ t.strip() }}</span>{% endfor %}</div>{% endif %}
-  </div>
-</div>
-{% else %}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">🎯</div>
-    <div class="section-title">Capstone Project</div>
-  </div>
-  <div class="placeholder">
-    <div class="placeholder-icon">🎯</div>
-    <div class="placeholder-text">No capstone project yet</div>
-    <div class="placeholder-action">This will be featured prominently once submitted</div>
-  </div>
-</div>
-{% endif %}
-
-{# 8. CERTIFICATES #}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">🏆</div>
-    <div class="section-title">Certificates</div>
-  </div>
-  {% if certifications_data and certifications_data|length > 0 %}
-    {% for cert in certifications_data %}
-    <div class="item-card" style="display:flex;align-items:center;gap:12px">
-      <div style="width:36px;height:36px;border-radius:50%;border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">🏆</div>
-      <div>
-        <div class="item-title">{{ cert.course_name or cert.name or 'Certificate' }}</div>
-        <div class="item-sub">{{ cert.certificate_id or '' }}{% if cert.issue_date %} · {{ cert.issue_date }}{% endif %}</div>
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">🏆</div>
-      <div class="placeholder-text">No certificates earned yet</div>
-      <div class="placeholder-action">Complete a course to earn your first certificate</div>
-    </div>
-  {% endif %}
-</div>
-
-{# 9. PERSONALITY & TRAITS #}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">🧠</div>
-    <div class="section-title">Personality & Work Style</div>
-  </div>
-  {% if personality_data and personality_data.personality_type %}
-    <div style="text-align:center;padding:12px 0">
-      <div style="font-size:28px;margin-bottom:6px">{{ personality_data.icon or '🧠' }}</div>
-      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text)">{{ personality_data.personality_type }}</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:4px;max-width:400px;margin-left:auto;margin-right:auto">{{ personality_data.desc or '' }}</div>
-    </div>
-    {% if personality_data.traits %}
-    <div class="grid2" style="margin-top:12px">
-      {% if personality_data.work_style %}<div class="item-card"><div class="item-sub">Work Style</div><div class="item-title" style="font-size:13px">{{ personality_data.work_style }}</div></div>{% endif %}
-      {% if personality_data.communication %}<div class="item-card"><div class="item-sub">Communication</div><div class="item-title" style="font-size:13px">{{ personality_data.communication }}</div></div>{% endif %}
-      {% if personality_data.leadership %}<div class="item-card"><div class="item-sub">Leadership</div><div class="item-title" style="font-size:13px">{{ personality_data.leadership }}</div></div>{% endif %}
-    </div>
-    {% endif %}
-    <div style="font-size:11px;color:var(--subtle);text-align:center;margin-top:10px">From Psychometric Assessment</div>
-  {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">🧠</div>
-      <div class="placeholder-text">Personality traits not available</div>
-      <div class="placeholder-action">Take the psychometric test to reveal your work personality</div>
-    </div>
-  {% endif %}
-</div>
-
-{# ════════════════════════════════════════════════════════════ #}
-{# ── EXTERNAL DATA — from Resume, LinkedIn, GitHub ──        #}
-{# ════════════════════════════════════════════════════════════ #}
-
-<div class="grid2">
-{# 10. EDUCATION #}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">🎓</div>
-    <div class="section-title">Education</div>
-  </div>
-  {% if education_data and education_data|length > 0 %}
-    {% for edu in education_data %}
-    <div class="timeline-item">
-      <div class="item-title">{{ edu.degree or '' }} {{ edu.field_of_study or '' }}</div>
-      <div class="item-sub" style="color:var(--accent)">{{ edu.institution or '' }}</div>
-      <div class="item-sub">{{ edu.year or '' }}{% if edu.percentage %} · {{ edu.percentage }}%{% endif %}</div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">🎓</div>
-      <div class="placeholder-text">Education not added</div>
-      <div class="placeholder-action">Add in LMS profile or upload resume</div>
-    </div>
-  {% endif %}
-</div>
-
-{# 11. WORK EXPERIENCE #}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--green-soft);color:var(--green)">💼</div>
-    <div class="section-title">Experience</div>
-  </div>
-  {% if work_experience and work_experience|length > 0 %}
-    {% for w in work_experience %}
-    <div class="timeline-item">
-      <div class="item-title">{{ w.title or w.role or 'Role' }}</div>
-      <div class="item-sub" style="color:var(--accent)">{{ w.company or '' }}</div>
-      <div class="item-sub">{{ w.duration or '' }}{% if w.start_date %} · {{ w.start_date }}{% endif %}</div>
-      {% if w.description %}<div class="item-desc">{{ w.description }}</div>{% endif %}
-    </div>
-    {% endfor %}
-  {% else %}
-    {% if is_fresher %}
-    <div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">
-      <span class="tag" style="background:var(--green-soft);color:var(--green)">Fresher</span>
-      <div style="margin-top:8px">Ready to begin professional career</div>
-    </div>
+    {% set has_bullets = '•' in professional_summary or professional_summary.startswith('-') %}
+    {% if has_bullets %}
+      <ul class="summary-bullets">
+        {% for line in professional_summary.split('\n') %}
+          {% set clean = line.strip().lstrip('•').lstrip('-').strip() %}
+          {% if clean %}<li>{{ clean }}</li>{% endif %}
+        {% endfor %}
+      </ul>
     {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">💼</div>
-      <div class="placeholder-text">No experience added</div>
-      <div class="placeholder-action">Upload resume or add on LinkedIn</div>
-    </div>
+      <p class="summary-text">{{ professional_summary }}</p>
     {% endif %}
-  {% endif %}
-</div>
-</div>
-
-{# 12. SKILLS #}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">⚡</div>
-    <div class="section-title">Skills & Competencies</div>
-  </div>
-  {% if skills_data %}
-    {% if skills_data.technical_skills %}
-    <div style="margin-bottom:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--subtle);font-weight:600;margin-bottom:6px">Technical</div>
-      {% for s in skills_data.technical_skills %}
-        <span class="tag tag-tech">{{ s.name if s.name is defined else s }}</span>
-      {% endfor %}
-    </div>{% endif %}
-    {% if skills_data.tools %}
-    <div style="margin-bottom:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--subtle);font-weight:600;margin-bottom:6px">Tools</div>
-      {% for s in skills_data.tools %}
-        <span class="tag tag-tool">{{ s.name if s.name is defined else s }}</span>
-      {% endfor %}
-    </div>{% endif %}
-    {% if skills_data.soft_skills %}
-    <div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--subtle);font-weight:600;margin-bottom:6px">Soft Skills</div>
-      {% for s in skills_data.soft_skills %}
-        <span class="tag tag-soft">{{ s.name if s.name is defined else s }}</span>
-      {% endfor %}
-    </div>{% endif %}
   {% else %}
-    <div class="placeholder">
-      <div class="placeholder-icon">⚡</div>
-      <div class="placeholder-text">No skills detected</div>
-      <div class="placeholder-action">Add key skills in LMS profile or upload resume</div>
-    </div>
+    <p class="summary-text" style="color:var(--text-3);font-style:italic">Professional summary will appear once profile data is available.</p>
   {% endif %}
 </div>
 
-{# 13. ELIGIBLE JOB ROLES #}
-{% if role_matches and role_matches|length > 0 %}
+<!-- ═══════════ CAPSTONE PROJECT ═══════════ -->
+{% if capstone_projects and capstone_projects|length > 0 %}
 <div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--teal-soft);color:var(--teal)">◎</div>
-    <div class="section-title">Eligible Job Roles</div>
-  </div>
-  {% for r in role_matches[:3] %}
-  <div class="role-card">
-    <div class="role-header">
-      <div class="role-name">{{ r.role_title }}</div>
-      <div class="score" style="color:var(--gold)">{{ r.match_percentage or r.score or 0 }}%</div>
+  <div class="section-title">
+    <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M16 8l-4 4-2-2"/><path d="M8 14l2 2 6-6"/></svg>
     </div>
-    <div class="progress-track"><div class="progress-fill" style="width:{{ r.match_percentage or r.score or 0 }}%;background:var(--accent)"></div></div>
-    {% if r.matched_keywords %}
-    <div style="margin-top:8px">
-      {% for kw in r.matched_keywords %}<span class="tag" style="background:var(--green-soft);color:var(--green);font-size:10px">✓ {{ kw }}</span>{% endfor %}
-      {% if r.missing_keywords %}{% for kw in r.missing_keywords[:3] %}<span class="tag" style="background:var(--gold-soft);color:var(--gold);font-size:10px">+ {{ kw }}</span>{% endfor %}{% endif %}
+    Capstone Project
+  </div>
+  {% for cp in capstone_projects[:1] %}
+  <div class="highlight-card green">
+    <div class="hc-head">
+      <div class="hc-title">{{ cp.title or cp.project_name or 'Capstone Project' }}{% if cp.status %}<span class="hc-status">{{ cp.status }}</span>{% endif %}</div>
+      {% if cp.score %}<div class="hc-score">{{ cp.score }}{% if cp.max_score %}/{{ cp.max_score }}{% endif %}</div>{% endif %}
     </div>
-    {% endif %}
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
-{# 14. PROJECTS #}
-{% if projects_data and projects_data|length > 0 %}
-<div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">🚀</div>
-    <div class="section-title">Projects</div>
-  </div>
-  {% for p in projects_data[:4] %}
-  <div class="item-card" style="border-left:2px solid var(--purple)">
-    <div class="item-title">{{ p.name or p.title or 'Project' }}</div>
-    {% if p.description %}<div class="item-desc">{{ p.description }}</div>{% endif %}
-    {% if p.technologies or p.languages %}
-    <div style="margin-top:6px">
-      {% for t in (p.technologies or p.languages or '').split(',') %}
-        {% if t.strip() %}<span class="tag tag-tech">{{ t.strip() }}</span>{% endif %}
-      {% endfor %}
+    {% if cp.description %}<div class="hc-desc">{{ cp.description[:300] }}</div>{% endif %}
+    {% if cp.technologies or cp.tech_stack %}
+    <div class="hc-tags">
+      {% for t in (cp.technologies or cp.tech_stack or '').split(',') %}<span>{{ t.strip() }}</span>{% endfor %}
     </div>
     {% endif %}
   </div>
@@ -528,55 +626,332 @@ a{color:var(--accent);text-decoration:none}
 </div>
 {% endif %}
 
-{# 15. JOB PREFERENCES #}
-{% if job_preferences and (job_preferences.preferred_role or job_preferences.work_mode or job_preferences.preferred_location) %}
+<!-- ═══════════ FEATURED CASE STUDIES ═══════════ -->
+{% if case_study_highlights and case_study_highlights|length > 0 %}
 <div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--teal-soft);color:var(--teal)">🎯</div>
-    <div class="section-title">Job Preferences</div>
+  <div class="section-title">
+    <div class="ic" style="background:var(--purple-soft);color:var(--purple)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    </div>
+    Featured Case Studies
   </div>
-  <div class="grid2">
-    {% if job_preferences.preferred_role %}<div class="item-card"><div class="item-sub">Target Role</div><div class="item-title" style="font-size:13px">{{ job_preferences.preferred_role }}</div></div>{% endif %}
-    {% if job_preferences.preferred_industry or job_preferences.industries %}<div class="item-card"><div class="item-sub">Industry</div><div class="item-title" style="font-size:13px">{{ job_preferences.preferred_industry or job_preferences.industries }}</div></div>{% endif %}
-    {% if job_preferences.work_mode %}<div class="item-card"><div class="item-sub">Work Mode</div><div class="item-title" style="font-size:13px">{{ job_preferences.work_mode }}</div></div>{% endif %}
-    {% if job_preferences.preferred_location %}<div class="item-card"><div class="item-sub">Location</div><div class="item-title" style="font-size:13px">{{ job_preferences.preferred_location }}</div></div>{% endif %}
+  {% for cs in case_study_highlights[:2] %}
+  <div class="highlight-card">
+    <div class="hc-head">
+      <div class="hc-title">{{ cs.title }}</div>
+      <div class="hc-score">{{ cs.score_pct }}%</div>
+    </div>
+    {% if cs.description %}<div class="hc-desc">{{ cs.description }}</div>{% endif %}
+    {% if cs.concepts %}
+    <div class="hc-tags">{% for co in cs.concepts %}<span>{{ co }}</span>{% endfor %}</div>
+    {% endif %}
   </div>
+  {% endfor %}
 </div>
 {% endif %}
 
-{# 16. SEMESTER RESULTS #}
+<!-- ═══════════ ACADEMIC RESULTS ═══════════ -->
 {% if semester_results and semester_results|length > 0 %}
 <div class="section">
-  <div class="section-head">
-    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">📊</div>
-    <div class="section-title">Academic Results</div>
+  <div class="section-title">
+    <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    </div>
+    Academic Results
   </div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
     {% for sr in semester_results[:6] %}
-    <div class="item-card" style="flex:1;min-width:120px;text-align:center">
-      <div class="score-sm" style="color:var(--accent)">{{ sr.cgpa or sr.percentage or sr.gpa or '–' }}</div>
-      <div class="item-sub">{{ sr.semester or sr.term or sr.label or 'Result' }}</div>
+    <div style="background:var(--bg-soft);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--accent)">
+        {{ sr.cgpa or sr.gpa or sr.percentage or sr.score or '—' }}{% if sr.percentage %}%{% endif %}
+      </div>
+      <div style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.8px;font-weight:700;margin-top:3px">
+        {{ sr.semester or sr.term or sr.label or 'Result' }}
+      </div>
     </div>
     {% endfor %}
   </div>
 </div>
 {% endif %}
 
-{# ════════════════════════════════════════════════════════════ #}
-{# FOOTER                                                      #}
-{# ════════════════════════════════════════════════════════════ #}
+<!-- ═══════════ TWO COLUMN GRID ═══════════ -->
+{% set has_left_content = (role_matches and role_matches|length > 0) or (education_data and education_data|length > 0) or (work_experience and work_experience|length > 0) %}
+<div class="grid2{% if not has_left_content %} single{% endif %}">
+
+  {% if has_left_content %}
+  <!-- LEFT COLUMN -->
+  <div class="col">
+
+    {% if education_data and education_data|length > 0 %}
+    <div class="section">
+      <div class="section-title">
+        <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></svg>
+        </div>
+        Education
+      </div>
+      {% for edu in education_data %}
+      <div class="timeline-card">
+        <div class="tc-title">{{ edu.degree or 'Degree' }}{% if edu.field_of_study %} — {{ edu.field_of_study }}{% endif %}</div>
+        {% if edu.institution %}<div class="tc-org">{{ edu.institution }}</div>{% endif %}
+        <div class="tc-meta">
+          {% if edu.year %}<span>{{ edu.year }}</span>{% endif %}
+          {% if edu.percentage %}<span>{{ edu.percentage }}</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if work_experience and work_experience|length > 0 %}
+    <div class="section">
+      <div class="section-title">
+        <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+        </div>
+        Experience
+      </div>
+      {% for exp in work_experience %}
+      <div class="timeline-card work">
+        <div class="tc-title">{{ exp.title or 'Role' }}</div>
+        {% if exp.company %}<div class="tc-org">{{ exp.company }}</div>{% endif %}
+        {% if exp.duration %}<div class="tc-meta"><span>{{ exp.duration }}</span></div>{% endif %}
+        {% if exp.description %}<div class="tc-desc">{{ exp.description }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if role_matches and role_matches|length > 0 %}
+    <div class="section">
+      <div class="section-title">
+        <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        Eligible Job Roles
+      </div>
+      {% for role in role_matches[:3] %}
+      {% set rclass = 'high' if role.match_percentage >= 70 else ('mid' if role.match_percentage >= 40 else 'low') %}
+      <div class="role-card">
+        <div class="role-head">
+          <div class="role-title">{{ role.role_title }}</div>
+          <div class="role-pct {{ rclass }}">{{ role.match_percentage }}%</div>
+        </div>
+        <div class="role-bar"><div class="fill {{ rclass }}" style="width:{{ role.match_percentage }}%"></div></div>
+        <div class="role-keywords">
+          {% for kw in role.matching_keywords[:5] %}<span class="match">{{ kw }}</span>{% endfor %}
+          {% for kw in (role.missing_keywords or [])[:2] %}<span class="miss">{{ kw }}</span>{% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </div>
+  {% endif %}
+
+  <!-- RIGHT COLUMN -->
+  <div class="col">
+
+    {% if skills_data and ((skills_data.get('technical_skills', [])|length > 0) or (skills_data.get('soft_skills', [])|length > 0) or (skills_data.get('tools', [])|length > 0)) %}
+    <div class="section">
+      <div class="section-title">
+        <div class="ic" style="background:var(--purple-soft);color:var(--purple)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        Skills &amp; Competencies
+      </div>
+      {% set tech = skills_data.get('technical_skills', []) %}
+      {% if tech %}
+      <div class="skill-cat">Technical</div>
+      <div class="skill-tags">
+        {% for sk in tech[:12] %}<span>{{ sk.name if sk.name is defined else sk }}</span>{% endfor %}
+      </div>
+      {% endif %}
+      {% set tools = skills_data.get('tools', []) %}
+      {% if tools %}
+      <div class="skill-cat">Tools</div>
+      <div class="skill-tags">
+        {% for sk in tools[:10] %}<span>{{ sk.name if sk.name is defined else sk }}</span>{% endfor %}
+      </div>
+      {% endif %}
+      {% set soft = skills_data.get('soft_skills', []) %}
+      {% if soft %}
+      <div class="skill-cat">Soft Skills</div>
+      <div class="skill-tags">
+        {% for sk in soft[:6] %}<span>{{ sk.name if sk.name is defined else sk }}</span>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if personality_data and personality_data.personality_type %}
+    <div class="section">
+      <div class="section-title">
+        <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a9 9 0 019 9c0 3.87-3.13 7-7 7h-2v4l-4-4A9 9 0 0112 2z"/></svg>
+        </div>
+        Personality &amp; Work Style
+      </div>
+      <div class="persona-hero">
+        <div class="type">{{ personality_data.personality_type }}</div>
+        <div class="src">Psychometric Assessment</div>
+      </div>
+      <div class="persona-grid">
+        {% if personality_data.traits %}<div class="persona-cell"><div class="pl">Key Traits</div><div class="pv">{{ personality_data.traits }}</div></div>{% endif %}
+        {% if personality_data.work_style %}<div class="persona-cell"><div class="pl">Work Style</div><div class="pv">{{ personality_data.work_style }}</div></div>{% endif %}
+        {% if personality_data.communication %}<div class="persona-cell"><div class="pl">Communication</div><div class="pv">{{ personality_data.communication }}</div></div>{% endif %}
+        {% if personality_data.leadership %}<div class="persona-cell"><div class="pl">Team Role</div><div class="pv">{{ personality_data.leadership }}</div></div>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if certifications_data and certifications_data|length > 0 %}
+    <div class="section">
+      <div class="section-title">
+        <div class="ic" style="background:var(--gold-soft);color:var(--gold)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+        </div>
+        Certifications
+      </div>
+      {% for cert in certifications_data[:5] %}
+      <div class="cert-card">
+        <div class="cert-icon-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7V4a2 2 0 012-2h8.5L20 7.5V20a2 2 0 01-2 2H6a2 2 0 01-2-2v-3"/><polyline points="14 2 14 8 20 8"/><path d="M4 15h9"/><path d="M10 12l3 3-3 3"/></svg>
+        </div>
+        <div>
+          <div class="cert-name">{{ cert.certificate_name or cert.name or 'Certificate' }}</div>
+          <div class="cert-issuer">
+            {% if cert.course_name %}{{ cert.course_name }}{% endif %}
+            {% if cert.issued_at %} · {{ cert.issued_at }}{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if job_preferences and (job_preferences.preferred_role or job_preferences.preferred_industry or job_preferences.work_mode) %}
+    <div class="section">
+      <div class="section-title">
+        <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        Job Preferences
+      </div>
+      <div class="pref-grid">
+        {% if job_preferences.preferred_role %}<div class="pref-cell"><div class="pl">Target Role</div><div class="pv">{{ job_preferences.preferred_role }}</div></div>{% endif %}
+        {% if job_preferences.preferred_industry %}<div class="pref-cell"><div class="pl">Industry</div><div class="pv">{{ job_preferences.preferred_industry }}</div></div>{% endif %}
+        {% if job_preferences.work_mode %}<div class="pref-cell"><div class="pl">Work Mode</div><div class="pv">{{ job_preferences.work_mode }}</div></div>{% endif %}
+        {% if job_preferences.preferred_location %}<div class="pref-cell"><div class="pl">Location</div><div class="pv">{{ job_preferences.preferred_location }}</div></div>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if projects_data and projects_data|length > 0 %}
+    <div class="section">
+      <div class="section-title">
+        <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+        </div>
+        Projects
+      </div>
+      {% for proj in projects_data[:4] %}
+      <div class="timeline-card" style="border-left-color:var(--purple)">
+        <div class="tc-title">{{ proj.title }}</div>
+        {% if proj.description %}<div class="tc-desc">{{ proj.description[:200] }}</div>{% endif %}
+        {% if proj.technologies_used %}
+        <div class="hc-tags" style="margin-top:8px">
+          {% set techs = proj.technologies_used %}
+          {% if techs is string %}{% for t in techs.split(',') %}<span>{{ t.strip() }}</span>{% endfor %}
+          {% elif techs is iterable %}{% for t in techs %}<span>{{ t }}</span>{% endfor %}{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- ═══════════ SHARE BAR ═══════════ -->
+{% if profile_url %}
+<div class="share-bar" id="shareBar">
+  <a class="share-btn wa" href="https://wa.me/?text={{ (student_name or 'Check out') }}%27s%20AI%20Profile%20%E2%80%94%20{{ profile_url | urlencode }}" target="_blank" rel="noopener" title="Share via WhatsApp">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+    WhatsApp
+  </a>
+  <a class="share-btn tg" href="https://t.me/share/url?url={{ profile_url | urlencode }}&text={{ (student_name or 'Student') }}%27s%20AI%20Profile" target="_blank" rel="noopener" title="Share via Telegram">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0a12 12 0 00-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+    Telegram
+  </a>
+  <a class="share-btn li" href="https://www.linkedin.com/sharing/share-offsite/?url={{ profile_url | urlencode }}" target="_blank" rel="noopener" title="Share on LinkedIn">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+    LinkedIn
+  </a>
+  <button class="share-btn cp" onclick="copyProfileLink(this)" title="Copy profile link">
+    <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="display:none"><polyline points="20 6 9 17 4 12"/></svg>
+    <span>Copy Link</span>
+  </button>
+</div>
+{% endif %}
+
+<!-- ═══════════ FOOTER ═══════════ -->
 <div class="footer">
-  <div class="footer-title">Professional Profile</div>
-  <div class="footer-sub">AI-powered profile from verified credentials, assessments & psychometric data</div>
-  <div class="source-tags">
+  <div class="brand">Professional Profile</div>
+  <p>AI-generated from verified credentials, assessments &amp; psychometric data</p>
+  {% if data_sources %}
+  <div class="ds-badges">
     {% for src in data_sources %}
-    <span class="source-tag" style="background:var(--accent-soft);color:var(--accent)">{{ src }}</span>
+    <span>{% if src == 'lms' %}LMS{% elif src == 'resume' %}Resume{% elif src == 'github' %}GitHub{% elif src == 'linkedin' %}LinkedIn{% elif src == 'lms_profile' %}Profile{% else %}{{ src }}{% endif %}</span>
     {% endfor %}
   </div>
-  {% if profile_url %}<div style="margin-top:10px;font-size:11px;color:var(--subtle)"><a href="{{ profile_url }}">{{ profile_url }}</a></div>{% endif %}
-  <div style="font-size:11px;color:var(--subtle);margin-top:6px">Powered by Upskillize · © 2026</div>
+  {% endif %}
+  <div class="footer-sep"></div>
+  {% if profile_url %}<p><a href="{{ profile_url }}">{{ profile_url }}</a></p>{% endif %}
+  <p style="margin-top:6px;font-size:10.5px;color:var(--text-4);letter-spacing:.3px">Powered by Upskillize · Profile IQ · &copy; 2026</p>
 </div>
 
 </div>
+
+<script>
+/* Theme */
+function toggleTheme(){
+  const h=document.documentElement;
+  const n=h.getAttribute('data-theme')==='dark'?'light':'dark';
+  h.setAttribute('data-theme',n);
+  try{localStorage.setItem('profile-theme',n)}catch(e){}
+}
+try{
+  const s=localStorage.getItem('profile-theme');
+  if(s)document.documentElement.setAttribute('data-theme',s);
+  else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+}catch(e){}
+
+/* Copy link */
+function copyProfileLink(btn){
+  const url='{{ profile_url or "" }}';
+  if(!url)return;
+  navigator.clipboard.writeText(url).then(()=>{
+    btn.classList.add('copied');
+    btn.querySelector('.copy-icon').style.display='none';
+    btn.querySelector('.check-icon').style.display='block';
+    btn.querySelector('span').textContent='Copied!';
+    setTimeout(()=>{
+      btn.classList.remove('copied');
+      btn.querySelector('.copy-icon').style.display='block';
+      btn.querySelector('.check-icon').style.display='none';
+      btn.querySelector('span').textContent='Copy Link';
+    },2500);
+  }).catch(()=>{
+    prompt('Copy this URL:',url);
+  });
+}
+</script>
+
 </body>
 </html>

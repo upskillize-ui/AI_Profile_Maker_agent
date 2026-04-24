@@ -94,10 +94,12 @@ async def generate_profile(
             "profile_url": f"{AGENT_BASE}/api/v1/profile/public/{existing.slug}",
             "download_url": f"{AGENT_BASE}/api/v1/profile/download/{existing.slug}",
         }
-
-    # ── Case 2: profile exists + force_regenerate → try partial regen ──
+# ── Case 2: profile exists + force_regenerate → full regen ──
     if existing and existing.status == ProfileStatus.COMPLETED and body.force_regenerate:
-        return await _partial_regenerate(student_id, existing, db)
+        existing.status = ProfileStatus.GENERATING
+        db.flush()
+        return await _full_generate(student_id, existing, db)
+    
 
     # ── Case 3: no profile yet (or previous failed) → full generation ──
     if not existing:
