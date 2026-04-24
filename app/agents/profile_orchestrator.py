@@ -19,6 +19,7 @@ from typing import Dict, Any, List, Optional
 from app.agents.summary_agent import SummaryAgent
 from app.agents.skills_agent import SkillsAgent
 from app.agents.achievement_engine import AchievementEngine
+from app.agents.ai_polisher import AIPolisher
 from app.agents.role_matcher import RoleMatcher
 from app.services.resume_parser import ResumeParser
 from app.services.github_fetcher import GitHubFetcher
@@ -52,6 +53,7 @@ class ProfileOrchestrator:
         self.summary_agent = SummaryAgent()
         self.skills_agent = SkillsAgent()
         self.achievement_engine = AchievementEngine()
+        self.ai_polisher = AIPolisher()
         self.role_matcher = RoleMatcher()
         self.resume_parser = ResumeParser()
         self.github_fetcher = GitHubFetcher()
@@ -182,6 +184,31 @@ class ProfileOrchestrator:
         performance = self._performance(merged_data)
         # Embed _meta inside performance_data so it gets saved to the existing JSON column
         # — no DB schema change needed.
+
+
+# ── Step 9: AI Polish — enhance projects, experience, headline ──
+        try:
+            polished = self.ai_polisher.polish_all(student_data, merged_data)
+            if polished.get("polished_projects"):
+                projects_list = merged_data.get("projects", [])[:5]
+                for i, pp in enumerate(polished["polished_projects"]):
+                    if i < len(projects_list):
+                        if pp.get("title"):
+                            projects_list[i]["name"] = pp["title"]
+                            projects_list[i]["title"] = pp["title"]
+                        if pp.get("description"):
+                            projects_list[i]["description"] = pp["description"]
+            if polished.get("polished_experience"):
+                work_list = merged_data.get("work_experience", [])
+                for i, pe in enumerate(polished["polished_experience"]):
+                    if i < len(work_list) and pe.get("description"):
+                        work_list[i]["description"] = pe["description"]
+            if polished.get("polished_headline") and polished.get("ai_polished"):
+                achievements["headline"] = polished["polished_headline"]
+            logger.info(f"AI Polisher: {'AI-enhanced' if polished.get('ai_polished') else 'rule-based'}")
+        except Exception as e:
+            logger.warning(f"AI Polisher failed (non-fatal): {e}")
+
         performance["_meta"] = {
             "section_hashes": section_hashes,
             "last_full_regen": time.strftime("%Y-%m-%dT%H:%M:%S"),
