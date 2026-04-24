@@ -1,9 +1,9 @@
 """
-API Routes — REVISED v2
+API Routes — v3
 ═══════════════════════════
-KEY FIX: Case 2 (force_regenerate=True) now calls _partial_regenerate
-instead of _full_generate. This prevents data loss when external
-fetches (resume/GitHub/LinkedIn) fail during regeneration.
+KEY FIX: force_regenerate=True now does full generate with POST-GENERATION
+data-loss guard. Compares new profile richness vs DB. If 30%+ fewer items,
+ABORTs and keeps old profile (only refreshes template HTML).
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -59,6 +59,50 @@ def _derive_program(student_data: dict) -> str:
     return "Upskillize Program"
 
 
+def _count_db_richness(profile: StudentProfile) -> int:
+    """Count data items from existing DB columns — for data-loss detection."""
+    count = 0
+    if profile.professional_summary: count += 1
+    skills = profile.skills_data or {}
+    if isinstance(skills, dict):
+        count += len(skills.get("technical_skills", []))
+        count += len(skills.get("tools", []))
+        count += len(skills.get("soft_skills", []))
+    count += len(profile.projects_data or [])
+    count += len(profile.certifications_data or [])
+    count += len(profile.case_studies_data or [])
+    if (profile.personality_data or {}).get("personality_type"): count += 1
+    perf = profile.performance_data or {}
+    if perf.get("overall_score", 0) > 0: count += 1
+    if perf.get("total_tests", 0) > 0: count += 1
+    if perf.get("completed_courses", 0) > 0: count += 1
+    return count
+
+
+def _count_profile_data_richness(pd: dict) -> int:
+    """Count data items in newly generated profile_data dict."""
+    count = 0
+    if pd.get("professional_summary"): count += 1
+    skills = pd.get("skills_data", {})
+    if isinstance(skills, dict):
+        count += len(skills.get("technical_skills", []))
+        count += len(skills.get("tools", []))
+        count += len(skills.get("soft_skills", []))
+    count += len(pd.get("projects_data", []))
+    count += len(pd.get("certifications_data", []))
+    count += len(pd.get("case_studies_data", []))
+    count += len(pd.get("education_data", []))
+    count += len(pd.get("work_experience", []))
+    count += len(pd.get("role_matches", []))
+    count += len(pd.get("top_achievements", []))
+    if pd.get("personality_data", {}).get("personality_type"): count += 1
+    perf = pd.get("performance_data", {})
+    if perf.get("overall_score", 0) > 0: count += 1
+    if perf.get("total_tests", 0) > 0: count += 1
+    if perf.get("completed_courses", 0) > 0: count += 1
+    return count
+
+
 # ═══════════════════════════════════════════
 # PROFILE ENDPOINTS
 # ═══════════════════════════════════════════
@@ -82,11 +126,9 @@ async def generate_profile(
             "download_url": f"{AGENT_BASE}/api/v1/profile/download/{existing.slug}",
         }
 
-    # ── Case 2: profile exists + force_regenerate → PARTIAL regen (safe) ──
-    # FIX: Was calling _full_generate which wiped data when fetches failed.
-    # Now calls _partial_regenerate which preserves old data on fetch failure.
+    # ── Case 2: profile exists + force_regenerate → full regen with safety ──
     if existing and existing.status == ProfileStatus.COMPLETED and body.force_regenerate:
-        return await _partial_regenerate(student_id, existing, db)
+        return await _safe_regenerate(student_id, existing, db)
 
     # ── Case 3: no profile yet (or previous failed) → full generation ──
     if not existing:
@@ -170,120 +212,139 @@ async def _full_generate(student_id: int, existing: StudentProfile, db: Session)
         raise HTTPException(500, f"Profile generation failed: {str(e)}")
 
 
-async def _partial_regenerate(student_id: int, existing: StudentProfile, db: Session) -> dict:
-    """Partial regeneration — only rebuild sections whose source data changed.
-    Preserves old data when external fetches fail."""
+async def _safe_regenerate(student_id: int, existing: StudentProfile, db: Session) -> dict:
+    """Full regeneration with DATA-LOSS SAFETY GUARD.
+
+    Runs a complete fresh generation, then compares the new profile's
+    data richness against the existing DB profile. If the new profile
+    has 30%+ fewer data items, ABORTS and keeps the old profile,
+    only refreshing the HTML template.
+    """
     try:
         start = time.time()
+
+        # ── Measure old richness BEFORE regeneration ──
+        old_richness = _count_db_richness(existing)
+        logger.info(f"Safe regen student {student_id}: old richness = {old_richness}")
 
         collector = DataCollector(db)
         student_data = await collector.collect_all(student_id)
 
-        # Reconstruct existing profile_data from the DB columns
-        existing_profile_data = {
-            "professional_summary":  existing.professional_summary or "",
-            "skills_data":           existing.skills_data or {},
-            "performance_data":      existing.performance_data or {},
-            "journey_data":          existing.journey_data or {},
-            "personality_data":      existing.personality_data or {},
-            "case_studies_data":     existing.case_studies_data or [],
-            "testgen_data":          existing.testgen_data or {},
-            "projects_data":         existing.projects_data or [],
-            "certifications_data":   existing.certifications_data or [],
-            "ats_keywords":          existing.ats_keywords or [],
-            "headline":              existing.student_headline or "Professional",
-            "education_data":        [],
-            "work_experience":       [],
-            "role_matches":          [],
-            "ats_data":              {},
-            "top_achievements":      [],
-            "case_study_highlights": [],
-            "test_highlights":       [],
-        }
-
-        existing_meta = (existing.performance_data or {}).get("_meta", {})
-
         orchestrator = ProfileOrchestrator()
-        result = await orchestrator.regenerate_partial(
-            student_data=student_data,
-            existing_profile_data=existing_profile_data,
-            existing_meta=existing_meta,
-        )
+        profile_data = await orchestrator.generate_profile(student_data)
 
-        updated_sections = result["updated_sections"]
-        was_no_op        = result["was_no_op"]
-        new_profile_data = result["profile_data"]
+        # ── Measure new richness ──
+        new_richness = _count_profile_data_richness(profile_data)
+        logger.info(f"Safe regen student {student_id}: new richness = {new_richness}")
 
-        # ── Always re-render HTML (template may have changed) ──
+        personal = student_data.get("personal", {})
+        name = (personal.get("full_name") or "Student").strip()
+        slug = slugify(f"{name}-{student_id}")
+
+        # ── DATA-LOSS CHECK ──
+        if old_richness >= 5 and new_richness < old_richness * 0.7:
+            logger.error(
+                f"DATA LOSS DETECTED student {student_id}: "
+                f"old={old_richness}, new={new_richness}. Keeping old profile."
+            )
+
+            # Re-render HTML with old DB data + fresh LMS passthroughs
+            old_profile_data = {
+                "professional_summary":  existing.professional_summary or "",
+                "skills_data":           existing.skills_data or {},
+                "performance_data":      existing.performance_data or {},
+                "journey_data":          existing.journey_data or {},
+                "personality_data":      existing.personality_data or {},
+                "case_studies_data":     existing.case_studies_data or [],
+                "testgen_data":          existing.testgen_data or {},
+                "projects_data":         existing.projects_data or [],
+                "certifications_data":   existing.certifications_data or [],
+                "ats_keywords":          existing.ats_keywords or [],
+                "headline":              existing.student_headline or "Professional",
+                "education_data":        profile_data.get("education_data", []),
+                "work_experience":       profile_data.get("work_experience", []),
+                "role_matches":          profile_data.get("role_matches", []),
+                "ats_data":              profile_data.get("ats_data", {}),
+                "top_achievements":      profile_data.get("top_achievements", []),
+                "case_study_highlights": profile_data.get("case_study_highlights", []),
+                "test_highlights":       profile_data.get("test_highlights", []),
+                "data_sources":          profile_data.get("data_sources", ["lms"]),
+            }
+
+            renderer = ProfileRenderer()
+            html = renderer.render(
+                student_data=student_data,
+                profile_data=old_profile_data,
+                slug=slug,
+                visibility=existing.visibility.value if existing.visibility else "public",
+            )
+
+            existing.slug = slug
+            existing.rendered_html = html
+            existing.generation_time_seconds = round(time.time() - start, 2)
+            db.commit()
+            CacheService.invalidate_profile(slug)
+            CacheService.set_profile_html(slug, html)
+
+            return {
+                "message": "Profile refreshed with latest template (data preserved).",
+                "slug": slug,
+                "status": "completed",
+                "profile_url": f"{AGENT_BASE}/api/v1/profile/public/{slug}",
+                "download_url": f"{AGENT_BASE}/api/v1/profile/download/{slug}",
+                "updated_sections": [],
+                "was_no_op": True,
+                "regen_time": round(time.time() - start, 2),
+            }
+
+        # ── No data loss — save new profile ──
         renderer = ProfileRenderer()
         html = renderer.render(
             student_data=student_data,
-            profile_data=new_profile_data,
-            slug=existing.slug,
+            profile_data=profile_data,
+            slug=slug,
             visibility=existing.visibility.value if existing.visibility else "public",
         )
 
-        # ── Update DB columns for changed sections ──
-        section_to_columns = {
-            "summary":      ["professional_summary"],
-            "skills":       ["skills_data", "ats_keywords"],
-            "personality":  ["personality_data"],
-            "projects":     ["projects_data"],
-        }
-
-        if not was_no_op:
-            changed_columns = set()
-            for section in updated_sections:
-                for col in section_to_columns.get(section, []):
-                    changed_columns.add(col)
-
-            if "professional_summary" in changed_columns:
-                existing.professional_summary = new_profile_data.get("professional_summary", "")
-            if "skills_data" in changed_columns:
-                existing.skills_data = new_profile_data.get("skills_data", {})
-            if "ats_keywords" in changed_columns:
-                existing.ats_keywords = new_profile_data.get("ats_keywords", [])
-            if "personality_data" in changed_columns:
-                existing.personality_data = new_profile_data.get("personality_data", {})
-            if "projects_data" in changed_columns:
-                existing.projects_data = new_profile_data.get("projects_data", [])
-
-        # Always refresh: performance_data (new hashes), headline, html
-        existing.performance_data = new_profile_data.get("performance_data", {})
-        existing.student_headline = new_profile_data.get("headline", existing.student_headline)
+        existing.slug = slug
+        existing.student_name = name
+        existing.student_email = personal.get("email", "")
+        photo = personal.get("photo_url", "") or ""
+        existing.student_photo_url = photo[:255] if len(photo) > 255 else photo
+        existing.student_headline = profile_data.get("headline", "Professional")
+        existing.program_name = _derive_program(student_data)
+        existing.professional_summary = profile_data.get("professional_summary", "")
+        existing.skills_data = profile_data.get("skills_data", {})
+        existing.performance_data = profile_data.get("performance_data", {})
+        existing.journey_data = profile_data.get("journey_data", {})
+        existing.personality_data = profile_data.get("personality_data", {})
+        existing.case_studies_data = profile_data.get("case_studies_data", [])
+        existing.testgen_data = profile_data.get("testgen_data", {})
+        existing.projects_data = profile_data.get("projects_data", [])
+        existing.certifications_data = profile_data.get("certifications_data", [])
+        existing.ats_keywords = profile_data.get("ats_keywords", [])
         existing.rendered_html = html
+        existing.status = ProfileStatus.COMPLETED
         existing.generation_time_seconds = round(time.time() - start, 2)
+        existing.ai_model_used = profile_data.get("ai_model_used", "rule-based-v6")
 
         db.commit()
         db.refresh(existing)
-        CacheService.invalidate_profile(existing.slug)
-        CacheService.set_profile_html(existing.slug, html)
-
-        if was_no_op:
-            return {
-                "message": "Profile refreshed with latest template.",
-                "slug": existing.slug,
-                "status": "completed",
-                "profile_url":  f"{AGENT_BASE}/api/v1/profile/public/{existing.slug}",
-                "download_url": f"{AGENT_BASE}/api/v1/profile/download/{existing.slug}",
-                "updated_sections": [],
-                "regen_time": result["regen_time_seconds"],
-                "was_no_op": True,
-            }
+        CacheService.invalidate_profile(slug)
+        CacheService.set_profile_html(slug, html)
 
         return {
-            "message": f"Profile updated — refreshed {len(updated_sections)} section(s).",
+            "message": "Profile regenerated successfully!",
             "slug": existing.slug,
             "status": "completed",
-            "profile_url":  f"{AGENT_BASE}/api/v1/profile/public/{existing.slug}",
+            "profile_url": f"{AGENT_BASE}/api/v1/profile/public/{existing.slug}",
             "download_url": f"{AGENT_BASE}/api/v1/profile/download/{existing.slug}",
-            "updated_sections": updated_sections,
-            "regen_time": result["regen_time_seconds"],
-            "was_no_op": False,
+            "generation_time": existing.generation_time_seconds,
+            "updated_sections": "all",
         }
 
     except Exception as e:
-        logger.error(f"Partial regeneration failed for student {student_id}: {e}")
+        logger.error(f"Safe regeneration failed for student {student_id}: {e}")
         raise HTTPException(500, f"Regeneration failed: {str(e)}")
 
 

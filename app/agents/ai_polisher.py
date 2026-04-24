@@ -1,16 +1,19 @@
 """
-AI Profile Polisher — v1
+AI Profile Polisher — v2
 ════════════════════════
 Single Claude Haiku call that transforms raw student data into
 recruiter-impressive, professionally articulated content.
 
+v2 FIX: Removed "Add quantifiable impact where reasonable" instruction
+that caused the AI to invent fake metrics like "serving 500+ users",
+"reduced processing time by 40%", etc.
+
 What it polishes:
   1. Project titles & descriptions (GitHub ugliness → professional)
-  2. Work experience descriptions (generic → articulated with impact)
+  2. Work experience descriptions (generic → articulated)
   3. Skills grouping & prioritization
   4. Headline optimization
   5. Education formatting
-  6. Bio/About rewriting
 
 Cost: ~$0.003 per profile (one Haiku call, ~400 input + ~600 output tokens)
 Fallback: If no API key, returns data unchanged (zero cost)
@@ -24,13 +27,11 @@ from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# ── Check for API key ──
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 HAS_API = bool(ANTHROPIC_API_KEY.strip())
 
 
 def _title_case_fallback(title: str) -> str:
-    """Rule-based project title cleanup when no AI available."""
     if not title:
         return ""
     acronyms = {"lms", "api", "crm", "cms", "erp", "ui", "ux", "ai", "ml",
@@ -51,7 +52,6 @@ def _title_case_fallback(title: str) -> str:
 
 
 def _clean_description_fallback(desc: str) -> str:
-    """Rule-based description cleanup when no AI available."""
     if not desc:
         return ""
     boilerplate = [
@@ -71,7 +71,6 @@ def _clean_description_fallback(desc: str) -> str:
 
 
 class AIPolisher:
-    """Enhances all profile data using Claude Haiku AI."""
 
     def __init__(self):
         self.has_api = HAS_API
@@ -84,7 +83,6 @@ class AIPolisher:
                 self.has_api = False
 
     def _call_haiku(self, system_prompt: str, user_prompt: str) -> Optional[str]:
-        """Make a single Claude Haiku API call."""
         if not self.has_api or not self._client:
             return None
         try:
@@ -110,11 +108,6 @@ class AIPolisher:
             return None
 
     def polish_all(self, student_data: Dict[str, Any], merged_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Polish ALL profile content in a single AI call.
-        Returns a dict with polished versions of each section.
-        If AI unavailable, returns rule-based fallback.
-        """
         personal = student_data.get("personal", {}) or {}
         projects = merged_data.get("projects", []) or []
         work_exp = merged_data.get("work_experience", []) or []
@@ -131,8 +124,6 @@ class AIPolisher:
             for e in education if e.get("degree")
         )
 
-        # ── Build the AI prompt ──
-        # Pack all raw data into a compact format for one call
         raw_projects = []
         for p in projects[:5]:
             raw_projects.append({
@@ -151,25 +142,18 @@ class AIPolisher:
             })
 
         raw_skills = [s.get("name", "") for s in tech_skills[:15] if s.get("name")]
-
         course_names = [c.get("course_name", "") for c in courses if c.get("course_name")]
 
-        # ── Attempt AI polish ──
         if self.has_api and (raw_projects or raw_experience or raw_skills):
             result = self._ai_polish(
-                name=name,
-                designation=designation,
-                bio=bio,
-                edu_summary=edu_summary,
-                raw_projects=raw_projects,
-                raw_experience=raw_experience,
-                raw_skills=raw_skills,
+                name=name, designation=designation, bio=bio,
+                edu_summary=edu_summary, raw_projects=raw_projects,
+                raw_experience=raw_experience, raw_skills=raw_skills,
                 course_names=course_names,
             )
             if result:
                 return result
 
-        # ── Fallback: rule-based polish ──
         return self._rule_based_polish(
             raw_projects=raw_projects,
             raw_experience=raw_experience,
@@ -178,18 +162,22 @@ class AIPolisher:
 
     def _ai_polish(self, name, designation, bio, edu_summary,
                    raw_projects, raw_experience, raw_skills, course_names) -> Optional[Dict]:
-        """Single AI call to polish everything."""
 
+        # ══════════════════════════════════════════════════════
+        # v2 FIX: Removed "Add quantifiable impact" instruction
+        # that caused fake metrics like "serving 500+ users"
+        # ══════════════════════════════════════════════════════
         system = """You are a professional profile writer for a career platform.
-You receive raw student/professional data and REWRITE it to be impressive, 
-recruiter-ready, and professionally articulated.
+You receive raw student/professional data and REWRITE it to be clean,
+professional, and recruiter-ready.
 
-Rules:
-- Never invent facts. Only enhance what's given.
-- Use action verbs: Built, Developed, Implemented, Designed, Engineered, Led, Optimized
-- Add quantifiable impact where reasonable (e.g., "serving 500+ users")
+STRICT RULES:
+- NEVER invent facts, metrics, numbers, user counts, percentages, or any data not in the input.
+- NEVER add fake quantifiable claims like "serving 500+ users", "reduced time by 40%", "processing 1000+ records".
+- If no description is provided, write a SHORT generic one based only on the title and tech stack.
+- Use action verbs: Built, Developed, Implemented, Designed, Engineered
 - Clean ugly code-style names: "Lms_portal" → "Learning Management Portal"
-- Make descriptions concise but impactful (1-2 sentences each)
+- Make descriptions concise (1-2 sentences each) using ONLY information from the input.
 - Group skills logically: Languages, Frameworks, Databases, Tools
 - Respond ONLY with valid JSON, no markdown fences, no explanation."""
 
@@ -212,10 +200,10 @@ SKILLS (raw): {', '.join(raw_skills) if raw_skills else 'None'}
 Return this exact JSON structure:
 {{
   "projects": [
-    {{"title": "Cleaned Professional Title", "description": "Impressive 1-2 sentence description with action verbs"}}
+    {{"title": "Cleaned Professional Title", "description": "Clean 1-2 sentence description using ONLY facts from the input"}}
   ],
   "experience": [
-    {{"role": "role", "company": "company", "description": "Impressive description with action verbs and impact"}}
+    {{"role": "role", "company": "company", "description": "Professional description using ONLY facts from the input"}}
   ],
   "skills_grouped": {{
     "Languages": ["Python", "JavaScript"],
@@ -223,7 +211,7 @@ Return this exact JSON structure:
     "Databases": ["MySQL", "MongoDB"],
     "Tools": ["Git", "Docker", "VS Code"]
   }},
-  "headline": "Optimized 2-3 role headline like: Full Stack Developer | Python Engineer | React Specialist",
+  "headline": "2-3 role headline based on courses and skills, e.g.: Credit Analyst | Banking Operations | Risk Assessment",
   "bio_enhanced": "2-3 sentence professional bio if original bio was provided, else empty string"
 }}"""
 
@@ -232,7 +220,6 @@ Return this exact JSON structure:
             return None
 
         try:
-            # Strip markdown fences if present
             cleaned = raw_response.strip()
             if cleaned.startswith("```"):
                 cleaned = re.sub(r'^```\w*\n?', '', cleaned)
@@ -252,7 +239,6 @@ Return this exact JSON structure:
             return None
 
     def _rule_based_polish(self, raw_projects, raw_experience, raw_skills) -> Dict:
-        """Fallback: clean up data without AI."""
         polished_projects = []
         for p in raw_projects:
             polished_projects.append({
@@ -268,13 +254,6 @@ Return this exact JSON structure:
                 "description": w.get("desc", ""),
             })
 
-        # Basic skill grouping by common categories
-        languages = []
-        frameworks = []
-        databases = []
-        tools = []
-        other = []
-
         lang_keywords = {"python", "java", "javascript", "typescript", "c++", "c#",
                          "ruby", "go", "rust", "php", "swift", "kotlin", "r", "scala",
                          "html", "css", "sql", "dart", "perl"}
@@ -289,30 +268,21 @@ Return this exact JSON structure:
                          "vs code", "vscode", "android studio", "heroku", "netlify",
                          "render", "vercel", "nginx"}
 
+        languages, frameworks, databases, tools, other = [], [], [], [], []
         for skill in raw_skills:
             s_lower = skill.lower().strip()
-            if s_lower in lang_keywords:
-                languages.append(skill)
-            elif s_lower in framework_keywords:
-                frameworks.append(skill)
-            elif s_lower in db_keywords:
-                databases.append(skill)
-            elif s_lower in tool_keywords:
-                tools.append(skill)
-            else:
-                other.append(skill)
+            if s_lower in lang_keywords: languages.append(skill)
+            elif s_lower in framework_keywords: frameworks.append(skill)
+            elif s_lower in db_keywords: databases.append(skill)
+            elif s_lower in tool_keywords: tools.append(skill)
+            else: other.append(skill)
 
         skills_grouped = {}
-        if languages:
-            skills_grouped["Languages"] = languages
-        if frameworks:
-            skills_grouped["Frameworks"] = frameworks
-        if databases:
-            skills_grouped["Databases"] = databases
-        if tools:
-            skills_grouped["Tools"] = tools
-        if other:
-            skills_grouped["Other"] = other
+        if languages: skills_grouped["Languages"] = languages
+        if frameworks: skills_grouped["Frameworks"] = frameworks
+        if databases: skills_grouped["Databases"] = databases
+        if tools: skills_grouped["Tools"] = tools
+        if other: skills_grouped["Other"] = other
 
         return {
             "polished_projects": polished_projects,
