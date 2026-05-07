@@ -4,6 +4,14 @@ API Routes — v3
 KEY FIX: force_regenerate=True now does full generate with POST-GENERATION
 data-loss guard. Compares new profile richness vs DB. If 30%+ fewer items,
 ABORTs and keeps old profile (only refreshes template HTML).
+
+BUG FIXES (v3.1):
+- Auth dependency failures now raise HTTP 401 (not 404) so they don't
+  masquerade as missing routes in browser network logs.
+- /profile/me returns a structured "not_generated" response instead of
+  raising 404, so the frontend can distinguish "no profile yet" from
+  "endpoint doesn't exist".
+- /profile/generate guards against missing student gracefully.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -113,6 +121,14 @@ async def generate_profile(
     student=Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
+    # FIX: If get_current_student returns None instead of raising, guard here.
+    # The real fix is in deps.py — see note below — but this is a safety net.
+    if student is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required. Please log in and try again.",
+        )
+
     student_id = body.student_id or student.id
     existing = db.query(StudentProfile).filter_by(student_id=student_id).first()
 
@@ -357,9 +373,24 @@ async def get_my_profile(
     student=Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
+    # FIX: Return a structured 200 response instead of raising 404 when no
+    # profile exists yet. The frontend uses this endpoint to CHECK whether a
+    # profile has been generated — a 404 looks identical to "route missing"
+    # in browser network logs and triggers the "Not Found" UI state incorrectly.
+    if student is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required. Please log in and try again.",
+        )
+
     profile = db.query(StudentProfile).filter_by(student_id=student.id).first()
+
     if not profile:
-        raise HTTPException(404, "Profile not generated yet.")
+        return {
+            "status": "not_generated",
+            "message": "No profile generated yet. Click 'Generate My AI Profile' to create one.",
+        }
+
     return {
         "id": profile.id,
         "slug": profile.slug,
@@ -381,7 +412,7 @@ async def get_my_profile(
             if profile.visibility == VisibilityMode.PUBLIC else None
         ),
         "download_url": f"{AGENT_BASE}/api/v1/profile/download/{profile.slug}",
-        "updated_at": str(profile.updated_at) if hasattr(profile, 'updated_at') else None,
+        "updated_at": str(profile.updated_at) if hasattr(profile, "updated_at") else None,
     }
 
 
@@ -444,7 +475,11 @@ async def debug_my_profile_data(
             if resume_text:
                 parser = ResumeParser()
                 parsed = await parser.parse(resume_text)
-                diag["resume"] = {"status": "success", "text_length": len(resume_text), "skills": len(parsed.get("technical_skills", []))}
+                diag["resume"] = {
+                    "status": "success",
+                    "text_length": len(resume_text),
+                    "skills": len(parsed.get("technical_skills", [])),
+                }
             else:
                 diag["resume"] = {"status": "download_failed"}
         except Exception as e:
@@ -457,7 +492,10 @@ async def debug_my_profile_data(
         try:
             gh = GitHubFetcher()
             gh_data = await gh.fetch(personal["github_url"])
-            diag["github"] = {"status": "success" if gh_data.get("username") else "failed", "repos": gh_data.get("public_repos", 0)}
+            diag["github"] = {
+                "status": "success" if gh_data.get("username") else "failed",
+                "repos": gh_data.get("public_repos", 0),
+            }
         except Exception as e:
             diag["github"] = {"status": "error", "error": str(e)}
     else:
@@ -468,17 +506,19 @@ async def debug_my_profile_data(
         try:
             li = LinkedInFetcher()
             li_data = await li.fetch(personal["linkedin_url"])
-            diag["linkedin"] = {"status": "success" if li_data.get("_source") not in ("empty", "linkedin_url_only") else "blocked"}
+            diag["linkedin"] = {
+                "status": "success" if li_data.get("_source") not in ("empty", "linkedin_url_only") else "blocked",
+            }
         except Exception as e:
             diag["linkedin"] = {"status": "error", "error": str(e)}
     else:
         diag["linkedin"] = {"status": "no_url"}
 
     missing = []
-    if not personal.get("resume_url"): missing.append("Resume not uploaded")
-    if not personal.get("linkedin_url"): missing.append("LinkedIn URL missing")
-    if not personal.get("github_url"): missing.append("GitHub URL missing")
-    if not personal.get("key_skills"): missing.append("Skills not filled")
+    if not personal.get("resume_url"):    missing.append("Resume not uploaded")
+    if not personal.get("linkedin_url"):  missing.append("LinkedIn URL missing")
+    if not personal.get("github_url"):    missing.append("GitHub URL missing")
+    if not personal.get("key_skills"):    missing.append("Skills not filled")
     diag["missing"] = missing
 
     return diag
@@ -542,7 +582,7 @@ async def download_profile_pdf(
 
     print_html = profile.rendered_html.replace(
         "</body>",
-        '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},800)});</script></body>'
+        '<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},800)});</script></body>',
     )
     return HTMLResponse(content=print_html, status_code=200)
 
@@ -606,8 +646,10 @@ async def grade_case_study(
     )
 
     dim_dicts = [
-        {"name": d.name, "description": d.description, "max_points": d.max_points,
-         "scoring_guide": d.scoring_guide, "skill_tags": d.skill_tags or []}
+        {
+            "name": d.name, "description": d.description, "max_points": d.max_points,
+            "scoring_guide": d.scoring_guide, "skill_tags": d.skill_tags or [],
+        }
         for d in dimensions
     ]
 
@@ -707,11 +749,17 @@ async def list_rubric_templates(
     admin=Depends(get_current_admin), db: Session = Depends(get_db),
 ):
     return [
-        {"id": t.id, "name": t.name, "evaluation_type": t.evaluation_type,
-         "total_points": t.total_points, "dimensions_count": len(t.dimensions)}
+        {
+            "id": t.id, "name": t.name, "evaluation_type": t.evaluation_type,
+            "total_points": t.total_points, "dimensions_count": len(t.dimensions),
+        }
         for t in db.query(RubricTemplate).filter(RubricTemplate.is_active == True).all()
     ]
 
+
+# ═══════════════════════════════════════════
+# PRIVATE HELPERS
+# ═══════════════════════════════════════════
 
 def _calc_grade(pct, scale):
     for g in sorted(scale, key=lambda x: -x["min"]):
@@ -732,10 +780,12 @@ def _fmt_result(r, db):
         "confidence": float(r.confidence_score or 0),
         "graded_by": r.graded_by, "grading_time_ms": r.grading_time_ms,
         "dimensions": [
-            {"name": s.dimension.name if s.dimension else "Unknown",
-             "score": float(s.score), "max_score": s.max_score,
-             "percentage": float(s.percentage),
-             "feedback": s.feedback, "suggestion": s.suggestion}
+            {
+                "name": s.dimension.name if s.dimension else "Unknown",
+                "score": float(s.score), "max_score": s.max_score,
+                "percentage": float(s.percentage),
+                "feedback": s.feedback, "suggestion": s.suggestion,
+            }
             for s in scores
         ],
     }

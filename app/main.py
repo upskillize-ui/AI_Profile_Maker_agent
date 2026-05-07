@@ -32,6 +32,8 @@ app.add_middleware(
 )
 
 # Register routes
+# NOTE: No prefix here — router already declares prefix="/api/v1" internally.
+# Adding a prefix here would double it → /api/v1/api/v1/... (broken).
 app.include_router(router)
 
 

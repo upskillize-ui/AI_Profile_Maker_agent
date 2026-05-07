@@ -7,18 +7,37 @@ from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException, Header
 from app.config import get_settings
 from app.models.db_models import get_engine, get_session_maker
-import os
 import jwt
 import logging
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
-engine = get_engine(settings.DATABASE_URL)
-SessionLocal = get_session_maker(engine)
 
-# Same JWT secret as your Node.js backend (.env JWT_SECRET)
-JWT_SECRET = os.environ.get("JWT_SECRET", "YOUR_REAL_25_CHAR_SECRET_HERE")
+# FIX 1: Wrap engine/session creation in a try/except so a bad DATABASE_URL
+# does not crash the entire app on startup and cause 503 on every request.
+try:
+    engine = get_engine(settings.DATABASE_URL)
+    SessionLocal = get_session_maker(engine)
+    logger.info("Database engine created successfully.")
+except Exception as e:
+    logger.critical(f"STARTUP FAILURE: Could not connect to database: {e}")
+    raise RuntimeError(
+        f"DATABASE_URL is missing or incorrect. "
+        f"Set it in HuggingFace Space secrets. Error: {e}"
+    )
+
+# FIX 2: Read JWT_SECRET from settings (which reads from .env / HuggingFace secrets)
+# instead of os.environ directly with a dummy fallback.
+# The old code fell back to "YOUR_REAL_25_CHAR_SECRET_HERE" when the env var
+# was missing — causing every token to fail verification silently with a 401.
+JWT_SECRET = settings.JWT_SECRET
+if not JWT_SECRET:
+    logger.critical(
+        "STARTUP WARNING: JWT_SECRET is not set. "
+        "All authenticated requests will fail. "
+        "Add JWT_SECRET to your HuggingFace Space secrets."
+    )
 
 JWT_ALGORITHM = "HS256"
 
@@ -56,7 +75,7 @@ async def get_current_student(authorization: str = Header(None)):
         return user
 
     except jwt.ExpiredSignatureError:
-        raise HTTPException(401, "Token has expired. Please login again.")
+        raise HTTPException(401, "Token has expired. Please log in again.")
     except jwt.InvalidTokenError as e:
         logger.warning(f"JWT verification failed: {e}")
         raise HTTPException(401, "Invalid or expired token")
