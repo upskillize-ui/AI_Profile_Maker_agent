@@ -479,26 +479,63 @@ class DataCollector:
     # ─── Assignments ─────────────────────────────────────
 
     def _get_assignments(self, student_id: int) -> List[Dict]:
-        try:
-            rows = self.db.execute(
-                text("""
-                    SELECT
-                        asub.id, asub.grade AS score, asub.feedback,
-                        asub.status, asub.submitted_at, a.title,
-                        a.total_marks AS max_score, a.course_id,
-                        c.course_name
-                    FROM assignment_submissions asub
-                    JOIN assignments a ON a.id = asub.assignment_id
-                    LEFT JOIN courses c ON c.id = a.course_id
-                    WHERE asub.student_id = :sid
-                    ORDER BY asub.submitted_at
-                """),
-                {"sid": student_id},
-            ).mappings().all()
-            return clean_data([dict(r) for r in rows])
-        except Exception as e:
-            logger.warning(f"assignments failed: {e}")
-            return []
+        """Fetch graded assignment submissions.
+ 
+        Joins rubric_results — that's where the real graded percentage,
+        grade letter, feedback, and competency tags live. The legacy
+        assignment_submissions.grade column is always 0 in this LMS,
+        so we never trust it as the primary score.
+        """
+        primary_query = """
+            SELECT
+                asub.id,
+                COALESCE(rr.total_score, asub.grade, 0) AS score,
+                COALESCE(rr.max_score, a.total_marks, 100) AS max_score,
+                rr.percentage AS rubric_pct,
+                rr.grade AS rubric_grade,
+                rr.grade_label,
+                COALESCE(rr.overall_feedback, asub.feedback) AS feedback,
+                rr.strengths AS strengths,
+                rr.top_competencies AS top_competencies,
+                asub.status, asub.submitted_at, a.title,
+                a.course_id, c.course_name
+            FROM assignment_submissions asub
+            JOIN assignments a ON a.id = asub.assignment_id
+            LEFT JOIN courses c ON c.id = a.course_id
+            LEFT JOIN rubric_results rr
+                   ON rr.submission_id = asub.id
+                  AND rr.evaluation_type = 'assignment'
+                  AND rr.student_id = asub.student_id
+            WHERE asub.student_id = :sid
+            ORDER BY rr.percentage DESC, asub.submitted_at DESC
+        """
+ 
+        fallback_query = """
+            SELECT
+                asub.id, asub.grade AS score, asub.feedback,
+                asub.status, asub.submitted_at, a.title,
+                a.total_marks AS max_score, a.course_id,
+                c.course_name
+            FROM assignment_submissions asub
+            JOIN assignments a ON a.id = asub.assignment_id
+            LEFT JOIN courses c ON c.id = a.course_id
+            WHERE asub.student_id = :sid
+            ORDER BY asub.submitted_at
+        """
+ 
+        for label, query in (("primary+rubric", primary_query),
+                             ("legacy", fallback_query)):
+            try:
+                rows = self.db.execute(text(query), {"sid": student_id}).mappings().all()
+                if label == "legacy":
+                    logger.info("assignments fetched via legacy fallback (no rubric data)")
+                return clean_data([dict(r) for r in rows])
+            except Exception as e:
+                logger.info(f"assignments {label} query failed: {e}")
+                continue
+ 
+        logger.warning("All assignments queries failed — returning empty list")
+        return []
 
     # ─── Quiz Scores ─────────────────────────────────────
 

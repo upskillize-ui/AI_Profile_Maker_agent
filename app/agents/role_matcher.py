@@ -15,7 +15,7 @@ A student with zero LMS courses can still match roles via
 resume/education, but at a capped 50% max — ensuring LMS
 engagement is always the primary signal.
 """
-
+from app.agents.course_intelligence import CourseIntelligence
 import logging
 from typing import Dict, List, Any, Set
 
@@ -133,7 +133,7 @@ ROLE_DATABASE = {
         "min_score": 35,
     },
     # ── Technology ──
-    "Full Stack Developer - BFSI": {
+    "Full Stack Developer": {
         "category": "Technology",
         "keywords": {
             "full stack", "python", "javascript", "react", "node.js",
@@ -267,6 +267,11 @@ COURSE_KEYWORD_MAP = {
 
 
 class RoleMatcher:
+
+    def __init__(self):
+        self.course_intel = CourseIntelligence()
+
+
     """Course-first role matching. LMS data drives roles, background is supplementary.
 
     v5 — Weighted scoring:
@@ -481,6 +486,148 @@ class RoleMatcher:
     # ─── Main matching ───
 
     def match_roles(self, student_data: Dict[str, Any]) -> List[Dict]:
+        """Find top matching roles.
+ 
+        v6 — DYNAMIC. Uses CourseIntelligence to derive roles + skills from
+        whatever courses the student is enrolled in (any course, any name —
+        no hardcoded course list). Falls back to the legacy ROLE_DATABASE
+        scan when AI is unavailable AND there are no enrolled courses.
+        """
+        courses = student_data.get("courses", []) or []
+ 
+        # ── Dynamic path: AI-derived course intelligence ──
+        if courses:
+            try:
+                intel = self.course_intel.analyze(courses)
+                if intel and intel.get("roles"):
+                    return self._match_dynamic(student_data, intel)
+            except Exception as e:
+                logger.warning(f"CourseIntel match failed, falling back to static: {e}")
+ 
+        # ── Legacy path: hardcoded ROLE_DATABASE iteration ──
+        return self._match_static_legacy(student_data)
+ 
+    def _match_dynamic(self, student_data: Dict[str, Any], intel: Dict) -> List[Dict]:
+        """Score AI-derived roles against this student's signals."""
+        derived_roles  = intel.get("roles", [])
+        derived_skills = set(s.lower() for s in intel.get("skills", []))
+        domain         = intel.get("domain", "Professional")
+ 
+        bg_keywords    = self._extract_background_keywords(student_data)
+        lms_keywords   = self._extract_lms_keywords(student_data)
+        all_keywords   = bg_keywords | lms_keywords
+        education      = student_data.get("education", [])
+        work_experience = student_data.get("work_experience", [])
+        computed       = student_data.get("computed", {})
+        completion_pts = self._completion_score(computed)
+ 
+        matches = []
+        for role_title in derived_roles:
+            # ── LMS score (50 pts) ── present because role is course-derived
+            lms_score = 50
+ 
+            # ── Background skill overlap (15 pts) ──
+            overlap = len(derived_skills & {k.lower() for k in bg_keywords})
+            bg_score = min(15, int(15 * (overlap / max(1, len(derived_skills)))))
+ 
+            # ── Education fit (15 pts) — accept any graduate by default ──
+            edu_score = 12 if education else 0
+ 
+            # ── Work fit (10 pts) — keyword presence in work history ──
+            work_text = " ".join(
+                f"{(w.get('title') or '')} {(w.get('description') or '')}"
+                for w in work_experience
+            ).lower()
+            work_hits = sum(1 for s in derived_skills if s in work_text)
+            work_score = min(10, work_hits * 3)
+ 
+            # ── Completion volume (10 pts) ──
+            comp_score = completion_pts
+ 
+            total = lms_score + bg_score + edu_score + work_score + comp_score
+            final_match = max(0, min(95, total))
+ 
+            matched_kw = sorted(derived_skills & {k.lower() for k in all_keywords})
+            missing_kw = sorted(derived_skills - {k.lower() for k in all_keywords})[:5]
+ 
+            matches.append({
+                "role_title":       role_title,
+                "category":         domain,
+                "match_percentage": final_match,
+                "matching_keywords": matched_kw[:6],
+                "missing_keywords":  missing_kw,
+                "total_matched":    len(matched_kw),
+                "total_required":   len(derived_skills),
+                "lms_driven":       True,
+                "score_breakdown": {
+                    "lms_courses": lms_score,
+                    "background":  bg_score,
+                    "education":   edu_score,
+                    "experience":  work_score,
+                    "completion":  comp_score,
+                },
+                "recommendation": (
+                    f"Sharpen {missing_kw[0]}" if missing_kw
+                    else "Strong fit on current data"
+                ),
+            })
+ 
+        matches.sort(key=lambda x: x["match_percentage"], reverse=True)
+        return matches[:5]
+ 
+    def _match_static_legacy(self, student_data: Dict[str, Any]) -> List[Dict]:
+        """Original ROLE_DATABASE scan. Kept as a safety net for when
+        no courses are enrolled or AI is fully unavailable."""
+        lms_keywords = self._extract_lms_keywords(student_data)
+        bg_keywords = self._extract_background_keywords(student_data)
+        all_keywords = lms_keywords | bg_keywords
+        computed = student_data.get("computed", {})
+        education = student_data.get("education", [])
+        work_experience = student_data.get("work_experience", [])
+ 
+        has_lms_courses = len(student_data.get("courses", [])) > 0
+        completion_pts = self._completion_score(computed)
+ 
+        matches = []
+        for role_name, role_info in ROLE_DATABASE.items():
+            role_keywords = role_info["keywords"]
+            lms_score = self._lms_keyword_score(lms_keywords, role_keywords)
+            bg_score = self._background_keyword_score(bg_keywords, role_keywords)
+            edu_score = self._education_fit_score(role_info.get("education", []), education)
+            work_score = self._work_fit_score(role_keywords, work_experience)
+            comp_score = completion_pts
+ 
+            total = lms_score + bg_score + edu_score + work_score + comp_score
+            if lms_score == 0 and bg_score == 0 and edu_score == 0 and work_score == 0:
+                continue
+            if not has_lms_courses:
+                total = min(50, total)
+            final_match = max(0, min(99, total))
+ 
+            if final_match >= role_info.get("min_score", 25):
+                matched_kw = all_keywords & role_keywords
+                missing_kw = role_keywords - all_keywords
+                matches.append({
+                    "role_title": role_name,
+                    "category":   role_info["category"],
+                    "match_percentage": final_match,
+                    "matching_keywords": sorted(list(matched_kw)),
+                    "missing_keywords":  sorted(list(missing_kw))[:5],
+                    "total_matched":  len(matched_kw),
+                    "total_required": len(role_keywords),
+                    "lms_driven":     lms_score > 0,
+                    "score_breakdown": {
+                        "lms_courses": lms_score,
+                        "background":  bg_score,
+                        "education":   edu_score,
+                        "experience":  work_score,
+                        "completion":  comp_score,
+                    },
+                    "recommendation": self._get_recommendation(missing_kw, role_name),
+                })
+ 
+        matches.sort(key=lambda x: (x["lms_driven"], x["match_percentage"]), reverse=True)
+        return matches[:5]
         """Find top matching roles — LMS courses are PRIMARY signal."""
         lms_keywords = self._extract_lms_keywords(student_data)
         bg_keywords = self._extract_background_keywords(student_data)

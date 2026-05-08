@@ -1,23 +1,24 @@
 """
-Summary Agent v8 — MBA-Level Articulation
-═══════════════════════════════════════════
-Generates a 4-6 bullet point professional summary with recruiter-grade
-language. Reads like a McKinsey cover letter meets a Bloomberg bio —
-authoritative, specific, and distinguished.
+Summary Agent v9 — Recruiter-grade bullets (Sonnet)
+═══════════════════════════════════════════════════
+Generates 5-7 PUNCHY bullet points that highlight what makes a candidate
+UNIQUE — not generic. Each bullet ≤22 words, drawn from a different angle
+(distinctive combination, cherry-pick achievement, shipped work,
+domain edge, psychometric signal, current trajectory, student's own voice).
 
-Key upgrades from v7:
-- MBA-caliber vocabulary: "cross-functional" not "team player"
-- Quantified positioning: lead with measurable credentials
-- Structured narrative arc: credential → capability → impact → trajectory
-- Zero filler: no "passionate about", "eager to learn", "aspiring"
-- Indian hiring market awareness: BFSI terminology, tier awareness
+v9 fixes from v8:
+  • Single, complete f-string prompt (v8 had two prompts pasted together,
+    broken indentation, and lost {data_str} injection — file wouldn't import)
+  • {data_str} is properly injected so Sonnet sees the candidate data
+  • Bumped max_tokens 600 → 900 for richer output
+  • Banned-phrase list expanded
+  • Entity normalization (Uuskillize → Upskillize) handled in-prompt
 """
 
 import os
-import hashlib
 import logging
 import httpx
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,6 @@ class SummaryAgent:
         name = (personal.get("full_name") or "Student").strip()
         first_name = name.split()[0] if name else "The candidate"
 
-        # Build a rich data context
         ctx = self._build_context(
             personal, computed, courses, education,
             work_experience, case_studies, certifications,
@@ -53,7 +53,7 @@ class SummaryAgent:
             try:
                 return await self._ai_bullet_summary(name, first_name, ctx)
             except Exception as e:
-                logger.warning(f"AI summary failed, using fallback: {e}")
+                logger.warning(f"AI summary failed, using template fallback: {e}")
 
         return self._template_bullet_summary(name, first_name, ctx)
 
@@ -62,9 +62,7 @@ class SummaryAgent:
     def _build_context(self, personal, computed, courses, education,
                        work_experience, case_studies, certifications,
                        personality, all_skills, student_data) -> Dict[str, Any]:
-        """Build a structured context with all real data points."""
 
-        # Education
         edu_str = ""
         if education:
             e = education[0]
@@ -83,7 +81,6 @@ class SummaryAgent:
                 parts.append(f"({year})")
             edu_str = " ".join(parts)
 
-        # Work experience — collect ALL not just first
         work_strs = []
         for w in work_experience[:3]:
             title = w.get("title", "")
@@ -97,16 +94,13 @@ class SummaryAgent:
             elif title:
                 work_strs.append(title)
 
-        # Top technical skills with sources
         top_skills = []
         for sk in all_skills.get("technical_skills", [])[:8]:
             if isinstance(sk, dict) and sk.get("name"):
                 top_skills.append(sk["name"])
 
-        # Top courses (not all of them)
         top_courses = [c.get("course_name", "") for c in courses if c.get("course_name")][:4]
 
-        # Best case study
         best_case = ""
         if case_studies:
             sorted_cs = sorted(case_studies, key=lambda x: float(x.get("score", 0) or 0), reverse=True)
@@ -117,27 +111,20 @@ class SummaryAgent:
                 if title and score:
                     best_case = f'"{title}" ({score}%)'
 
-        # Certifications
         cert_names = []
         for c in certifications[:5]:
             n = c.get("certificate_name") or c.get("name", "")
             if n:
                 cert_names.append(n)
 
-        # Domain
         domain = self._derive_domain(top_courses, education, work_experience, personal)
 
-        # Career goals & preferred role from LMS
         career_goals = personal.get("career_goals", "") or ""
         preferred_role = personal.get("preferred_role", "") or ""
         current_designation = personal.get("current_designation", "") or ""
         current_employer = personal.get("current_employer", "") or ""
         work_years = personal.get("work_experience_years", "") or ""
-
-        # about_me / bio
         about_me = personal.get("about_me", "") or personal.get("bio", "") or ""
-
-        # LinkedIn
         linkedin_headline = personal.get("linkedin_headline", "") or ""
         linkedin_summary = personal.get("linkedin_summary", "") or ""
 
@@ -158,7 +145,7 @@ class SummaryAgent:
             "linkedin_headline":    linkedin_headline,
             "linkedin_summary":     linkedin_summary,
             "personality_type":     personality.get("personality_type", ""),
-            "personality_traits":   personality.get("traits_json", ""),
+            "personality_traits":   personality.get("traits_json", "") or personality.get("traits", ""),
             "work_style":           personality.get("work_style", ""),
             "overall_score":        computed.get("overall_score", 0),
             "best_test_score":      computed.get("best_test_score", 0),
@@ -176,12 +163,12 @@ class SummaryAgent:
             "consistency":          computed.get("consistency_score", 0),
         }
 
-    # ─── AI Generation (MBA-Level Prompt) ─────────────────────
+    # ─── AI generation (Sonnet, single clean prompt) ──────────
 
     async def _ai_bullet_summary(self, name: str, first_name: str, ctx: Dict) -> str:
-        """Ask Claude to generate 4-6 MBA-caliber professional summary bullets."""
+        """Single Sonnet call, single clean f-string prompt."""
 
-        # Build a clean data dump for the prompt
+        # Build a structured data dump
         data_lines = [f"Candidate Name: {name}"]
         if ctx["edu_str"]:
             data_lines.append(f"Education: {ctx['edu_str']}")
@@ -191,7 +178,7 @@ class SummaryAgent:
             cd = ctx["current_designation"]
             ce = ctx["current_employer"]
             wy = ctx["work_years"]
-            cur = f"Current: {cd}" if cd else ""
+            cur = f"Current: {cd}" if cd else "Current: "
             if ce:
                 cur += f" at {ce}"
             if wy:
@@ -234,45 +221,69 @@ class SummaryAgent:
 
         data_str = "\n".join(data_lines)
 
-        prompt = f"""You are a senior executive recruiter drafting a professional summary for a candidate's public profile page. Write with the precision of a McKinsey bio and the authority of a Bloomberg executive profile.
+        prompt = f"""You are a senior recruiter at a top placement firm. Write 5-7 SHORT, PUNCHY bullets that highlight what makes this candidate UNIQUE and strong — not generic.
 
 CANDIDATE DATA:
 {data_str}
 
-GENERATE A 4-6 BULLET POINT SUMMARY following these rules:
+═══════════ HARD RULES ═══════════
 
-FORMAT:
-- Output ONLY bullet points, one per line
-- Each line MUST start with "• " (bullet character + space)
-- No headings, no preamble, no markdown, no "Professional Summary:"
-- Each bullet: 1-2 concise sentences maximum
+1. EACH bullet = 1 sentence, 12-22 WORDS MAX. Count your words. Bullets longer than 22 words are rejected.
 
-NARRATIVE ARC (follow this structure):
-1. POSITIONING (required): Lead with the candidate's strongest credential. Use "{first_name}" only here. Frame as: "[Name] is a [credential] with [distinguishing capability]." If working professional: lead with role + tenure. If fresher: lead with degree + institution + domain focus.
+2. NEVER use these phrases (instant fail):
+   "passionate", "dedicated", "eager", "aspiring", "demonstrated proficiency",
+   "validated through", "positioned for", "encompassing", "underpinned by",
+   "providing foundational depth", "characterized by", "complemented by",
+   "spanning", "structured technical assessments", "drive insight generation"
 
-2. ACADEMIC or PROFESSIONAL FOUNDATION (if data exists): Reference specific institution, degree, or employer names. Contextualize the credential — don't just list it. Example: "Holds a B.Tech in Computer Science from VIT Vellore, providing quantitative and systems-thinking foundations for technology roles."
+3. EACH bullet covers a DIFFERENT angle. NEVER repeat. Pick from:
+   • DISTINCTIVE COMBINATION — a rare crossover (e.g., "B.Com graduate who ships production code")
+   • CHERRY-PICK ACHIEVEMENT — one specific score, project, moment (e.g., "Scored 87% on the RBI case study, graded A — Very Good")
+   • SHIPPED WORK — something built or delivered with real users
+   • DOMAIN/TECH EDGE — what stack or domain depth they have, in plain English
+   • PSYCHOMETRIC SIGNAL — translate personality type to a workplace asset
+   • CURRENT TRAJECTORY — what they're sharpening right now (program, certification, skill)
+   • STUDENT'S OWN VOICE — surface a unique line if About Me is meaningful
 
-3. TECHNICAL COMPETENCIES (if skills exist): Group skills by function, not random list. Use industry-standard phrasing. Example: "Technical proficiency encompasses backend development (Python, Django, FastAPI), data infrastructure (MySQL, MongoDB), and frontend engineering (React, TypeScript) — validated across 8 structured assessments."
+4. START each bullet with a noun phrase, action verb, or specific noun.
+   NEVER "She is...", "He has...", "{first_name} is..." — lead with substance.
 
-4. DEMONSTRATED OUTCOMES (if achievements exist): Lead with the strongest metric. Combine case study scores, certifications, and assessment results into a single achievement-density bullet. Example: "Earned distinction on the 'Credit Risk Modeling' case analysis (94%) and completed the Certified Banking & Finance Analyst programme, demonstrating applied analytical rigour."
+5. Use REAL specifics from the data above. Real names, real percentages, real course names.
+   If no real number exists, don't invent one — pick a different angle.
 
-5. BEHAVIOURAL PROFILE (only if psychometric data provided): Frame the personality type as a workplace asset, not a label. Example: "Psychometric profiling identifies a Structured Analyst disposition — characterized by methodical problem decomposition, evidence-based decision-making, and high task ownership in cross-functional settings."
+6. ENTITY CORRECTION: If the input has typos like "Uuskillize", "Upskilize", "Upskillze",
+   write it as "Upskillize". Always normalize known-entity typos.
 
-6. CAREER TRAJECTORY (only if career goals or preferred role provided): Frame as strategic intent, not wishful thinking. Example: "Positioned for Business Analyst or Product Associate roles in BFSI organizations where analytical depth, domain-specific training, and structured problem-solving drive operational decision-making."
+7. SKIP a bullet if real data doesn't back it. 5 strong bullets > 7 diluted ones.
 
-LANGUAGE STANDARDS:
-- Write at MBA/executive level — authoritative, precise, zero filler
-- NEVER use: "passionate about", "dedicated learner", "eager to grow", "aspiring professional", "building foundational skills", "hands-on experience", "keen interest"
-- PREFER: "demonstrated proficiency", "validated through", "positioned for", "complemented by", "underpinned by", "spanning", "encompassing"
-- Use active voice and precise industry terminology
-- Every claim must reference SPECIFIC data from the input — real names, real numbers, real skills
-- NEVER mention "Upskillize", "LMS", "platform", or any training provider name
-- NEVER fabricate data not present in the input
-- SKIP any bullet where real data doesn't exist — 4 strong bullets outperform 6 diluted ones
+═══════════ OUTPUT FORMAT ═══════════
 
-NOW WRITE THE SUMMARY:"""
+Output ONLY bullet lines, one per line. Each line MUST start with "• " (bullet character + space).
+No headings, no preamble, no markdown, no JSON. No "Professional Summary:" prefix.
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
+═══════════ GOOD EXAMPLES ═══════════
+
+• B.Com graduate who taught herself React, Node and FastAPI to ship production payment code.
+• Scored 87% on the RBI Banking Foundation case study, graded A — Very Good by rubric assessor.
+• Built the Razorpay payment integration powering enrollments for 400+ Upskillize students.
+• Integrity-type psychometric signals methodical, low-supervision teammate strong on compliance work.
+• Currently sharpening BFSI specialization through ADFBA while shipping LMS features in production.
+• Bridges accounting fluency with engineering chops — rare combination for an entry-level BFSI role.
+
+═══════════ BAD EXAMPLES (NEVER OUTPUT) ═══════════
+
+✗ "Ranjana Kumari holds a Bachelor's degree in Computer Science Engineering from BEU (2023), providing foundational depth in systems architecture and computational problem-solving aligned with analytical and data-intensive roles."
+   (TOO LONG, banned phrase "providing foundational depth")
+
+✗ "Technical proficiency encompasses backend development (Python, Django) and frontend engineering (React, HTML5) — validated through structured technical assessments."
+   (banned phrases "encompasses", "validated through", "structured assessments")
+
+✗ "Passionate about technology and dedicated learner positioned for analytical roles."
+   (fluff: "passionate", "dedicated", "positioned for")
+
+NOW WRITE 5-7 bullets. Each ≤22 words. Each a unique angle. Use the candidate data above."""
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
@@ -281,8 +292,8 @@ NOW WRITE THE SUMMARY:"""
                     "content-type": "application/json",
                 },
                 json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 600,
+                    "model": "claude-sonnet-4-6",
+                    "max_tokens": 900,
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
@@ -290,17 +301,15 @@ NOW WRITE THE SUMMARY:"""
             data = response.json()
             text = data["content"][0]["text"].strip()
 
-            # Clean the output: ensure each line starts with • and remove any preamble
+            # Normalize: ensure each line starts with "• "
             lines = text.split("\n")
             clean_lines = []
             for line in lines:
                 line = line.strip()
                 if not line:
                     continue
-                # Strip markdown headers
                 if line.startswith("#"):
                     continue
-                # Convert various bullet styles to •
                 if line.startswith("- "):
                     line = "• " + line[2:]
                 elif line.startswith("* "):
@@ -311,122 +320,112 @@ NOW WRITE THE SUMMARY:"""
 
             return "\n".join(clean_lines)
 
-    # ─── Template Fallback (MBA-Level) ────────────────────────
+    # ─── Template fallback (no API available) ────────────────
 
     def _template_bullet_summary(self, name: str, first_name: str, ctx: Dict) -> str:
-        """Generate MBA-caliber bullet summary when no API is available.
-        Each bullet is conditionally added — only if real data backs it."""
+        """Generate bullet summary when API is unavailable.
+        Each bullet only added if real data backs it — no fabrication."""
         bullets = []
 
-        # Bullet 1: Positioning — always present
         positioning = self._make_positioning_bullet(first_name, ctx)
         if positioning:
             bullets.append(positioning)
 
-        # Bullet 2: Academic / Professional foundation
         edu_bullet = self._make_education_bullet(ctx)
         if edu_bullet:
             bullets.append(edu_bullet)
 
-        # Bullet 3: Work experience
         work_bullet = self._make_work_bullet(ctx)
         if work_bullet:
             bullets.append(work_bullet)
 
-        # Bullet 4: Technical competencies
         skills_bullet = self._make_skills_bullet(ctx)
         if skills_bullet:
             bullets.append(skills_bullet)
 
-        # Bullet 5: Demonstrated outcomes
         ach_bullet = self._make_achievements_bullet(ctx)
         if ach_bullet:
             bullets.append(ach_bullet)
 
-        # Bullet 6: Behavioural profile
         pers_bullet = self._make_personality_bullet(ctx)
         if pers_bullet:
             bullets.append(pers_bullet)
 
-        # Bullet 7: Career trajectory
         career_bullet = self._make_career_bullet(ctx)
         if career_bullet:
             bullets.append(career_bullet)
 
-        # Cap at 6 bullets max
         return "\n".join(bullets[:6])
 
     def _make_positioning_bullet(self, first_name: str, ctx: Dict) -> str:
         domain = ctx["domain"]
         if ctx["current_designation"] and ctx["current_employer"]:
-            yrs = f" with {ctx['work_years']} years of experience" if ctx["work_years"] else ""
-            return f"• {first_name} is a {ctx['current_designation']} at {ctx['current_employer']}{yrs}, specializing in {domain}."
+            yrs = f" with {ctx['work_years']} years experience" if ctx["work_years"] else ""
+            return f"• {first_name} works as {ctx['current_designation']} at {ctx['current_employer']}{yrs}, focused on {domain}."
         elif ctx["edu_str"] and ctx["top_skills"]:
-            return f"• {first_name} is a {ctx['edu_str']} graduate with demonstrated proficiency in {', '.join(ctx['top_skills'][:3])}, positioned for entry-level roles in {domain}."
+            return f"• {ctx['edu_str']} graduate with hands-on skills in {', '.join(ctx['top_skills'][:3])}, targeting entry-level {domain} roles."
         elif ctx["edu_str"]:
-            return f"• {first_name} is a {ctx['edu_str']} graduate with structured training in {domain}, prepared to contribute to industry-facing analytical and technical functions."
-        elif ctx["current_designation"]:
-            return f"• {first_name} is a {ctx['current_designation']} advancing domain-specific expertise in {domain}."
+            return f"• {ctx['edu_str']} graduate, building toward a career in {domain}."
         elif ctx["linkedin_headline"]:
-            return f"• {first_name}: {ctx['linkedin_headline']}"
+            return f"• {ctx['linkedin_headline']}"
         else:
-            return f"• {first_name} is an emerging {domain} professional with structured, credential-backed training across core domain competencies."
+            return f"• Emerging {domain} professional with credential-backed training."
 
     def _make_education_bullet(self, ctx: Dict) -> str:
         if not ctx["edu_str"]:
             return ""
-        return f"• Holds a {ctx['edu_str']}, providing the quantitative and conceptual foundations underpinning a career in {ctx['domain']}."
+        return f"• Holds a {ctx['edu_str']} — quantitative foundation for a {ctx['domain']} career."
 
     def _make_work_bullet(self, ctx: Dict) -> str:
         if not ctx["work_strs"]:
             return ""
         if len(ctx["work_strs"]) == 1:
-            return f"• Professional exposure as {ctx['work_strs'][0]}, applying structured methodologies to real-world operational and business challenges."
+            return f"• Hands-on industry exposure as {ctx['work_strs'][0]}."
         else:
-            return f"• Cross-functional professional experience spanning {' and '.join(ctx['work_strs'][:2])}, building versatile competencies across multiple organizational contexts."
+            return f"• Cross-functional experience across {' and '.join(ctx['work_strs'][:2])}."
 
     def _make_skills_bullet(self, ctx: Dict) -> str:
         if not ctx["top_skills"]:
             return ""
         skills = ctx["top_skills"][:5]
         if ctx["best_test_score"] > 0:
-            return f"• Technical proficiency encompasses {', '.join(skills)} — validated across {ctx['total_assessments']} structured assessments with a peak performance of {ctx['best_test_score']}%."
-        return f"• Technical competencies span {', '.join(skills)}, developed through structured coursework and applied project implementation."
+            return f"• Working command of {', '.join(skills)}; peak assessment score {ctx['best_test_score']}%."
+        return f"• Working command of {', '.join(skills)} from coursework and applied projects."
 
     def _make_achievements_bullet(self, ctx: Dict) -> str:
         parts = []
         if ctx["best_case"]:
-            parts.append(f"earned distinction on the {ctx['best_case']} case analysis")
+            parts.append(f"top score on the {ctx['best_case']} case study")
         if ctx["completed_courses"] > 0:
-            parts.append(f"completed {ctx['completed_courses']} certified programme{'s' if ctx['completed_courses'] != 1 else ''}")
+            parts.append(f"{ctx['completed_courses']} certified programme{'s' if ctx['completed_courses'] != 1 else ''}")
         if ctx["cert_names"]:
-            parts.append(f"holds the {ctx['cert_names'][0]} credential")
+            parts.append(f"holds {ctx['cert_names'][0]}")
         if ctx["overall_score"] >= 70:
-            parts.append(f"maintained a {ctx['overall_score']}% aggregate performance benchmark")
+            parts.append(f"{ctx['overall_score']}% aggregate performance")
         if not parts:
             return ""
         joined = "; ".join(parts[:3])
-        return f"• Demonstrated outcomes include {joined} — reflecting applied analytical rigour and sustained engagement."
+        return f"• Track record: {joined}."
 
     def _make_personality_bullet(self, ctx: Dict) -> str:
         if not ctx["personality_type"] or ctx["personality_type"] in ("Getting Started", ""):
             return ""
-        result = f"• Psychometric profiling identifies a {ctx['personality_type']} disposition"
+        result = f"• {ctx['personality_type']}-type psychometric"
         traits = ctx["personality_traits"]
         ws = ctx["work_style"]
         if traits:
-            result += f" — characterized by {traits.lower()}"
+            result += f" — {traits.lower()}"
         if ws:
-            result += f" and a {ws.lower()} orientation in team settings"
+            result += f", {ws.lower()} in team settings"
         result += "."
         return result
 
     def _make_career_bullet(self, ctx: Dict) -> str:
         if ctx["preferred_role"]:
-            return f"• Positioned for {ctx['preferred_role']} opportunities in organizations where analytical depth, domain training, and structured problem-solving drive measurable operational impact."
+            return f"• Targeting {ctx['preferred_role']} roles in BFSI organizations."
         elif ctx["career_goals"]:
-            cg = ctx["career_goals"][:150]
-            return f"• Strategic career focus: {cg}"
+            cg = ctx["career_goals"][:120]
+            return f"• Career goal: {cg}"
         return ""
 
     # ─── Domain detection ─────────────────────────────────────

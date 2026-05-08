@@ -14,6 +14,8 @@ Headline priority:
 import hashlib
 import logging
 from typing import Dict, List, Any, Optional
+from app.agents.course_intelligence import CourseIntelligence
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,9 @@ def _hash_pick(name: str, items: list, offset: int = 0) -> str:
 
 class AchievementEngine:
 
+    def __init__(self):
+        self.course_intel = CourseIntelligence()
+
     def generate_all(self, student_data: Dict[str, Any], role_matches: list = None) -> Dict[str, Any]:
         name = (student_data.get("personal", {}).get("full_name") or "Student").strip()
         computed = student_data.get("computed", {})
@@ -62,6 +67,39 @@ class AchievementEngine:
     # ─── Dynamic Headline — COURSE-FIRST ─────────────────
 
     def _generate_headline(self, d: Dict, role_matches: list = None) -> str:
+        """Headline = top 2-3 job titles, derived dynamically from courses.
+ 
+        v5 — fully dynamic. Uses CourseIntelligence to derive roles from
+        enrolled courses regardless of name (no hardcoded course list).
+        """
+        # ── Priority 1: scored role matches from RoleMatcher ──
+        if role_matches and len(role_matches) > 0:
+            top_roles = [r["role_title"] for r in role_matches[:3]]
+            seen, unique = set(), []
+            for r in top_roles:
+                if r.lower() not in seen:
+                    seen.add(r.lower()); unique.append(r)
+            return " | ".join(unique)
+ 
+        # ── Priority 2: derive directly from enrolled courses (any course) ──
+        courses = d.get("courses", []) or []
+        if courses:
+            try:
+                intel = self.course_intel.analyze(courses)
+                if intel.get("roles"):
+                    return " | ".join(intel["roles"][:3])
+            except Exception as e:
+                logger.info(f"course_intel headline derivation failed: {e}")
+ 
+        # ── Priority 3: current designation ──
+        personal = d.get("personal", {}) or {}
+        designation = (personal.get("current_designation") or "").strip()
+        employer    = (personal.get("current_employer")    or "").strip()
+        if designation:
+            return f"{designation} at {employer}" if employer else designation
+ 
+        # ── Priority 4: generic ──
+        return "Financial Services Professional"
         """Generate headline with LMS courses as PRIMARY signal.
 
         Priority order:

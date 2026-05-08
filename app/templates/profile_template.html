@@ -11,14 +11,14 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <style>
   :root{
     --ink:#0B1628; --ink-2:#1a2744;
     --gold:#C8992A; --gold-2:#F5B800;
     --teal:#0F6E56; --teal-soft:#E1F5EE; --teal-bd:#9FE1CB;
-    --orange:#E8521A; --orange-soft:#FFF6F1;
+    --orange:#E8521A;
     --cream:#FAF7F0; --cream-2:#EDE7D8;
     --paper:#FFFFFF;
     --body:#1F2937; --body-2:#475569; --hint:#6B7280; --faint:#94A3B8;
@@ -33,19 +33,19 @@
   body{font-family:var(--sans);background:var(--cream);color:var(--body);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
   a{color:inherit;text-decoration:none}
   a:hover{color:var(--gold)}
-  .page{max-width:880px;margin:0 auto;padding:0 0 64px}
+  .page{max-width:880px;margin:0 auto;padding:0 0 56px}
 
   /* ── Hero ── */
-  .hero{background:var(--ink);color:var(--cream);padding:32px 36px 28px;border-radius:0 0 14px 14px;position:relative;overflow:hidden}
-  .hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;margin-bottom:20px}
-  .hero-grid{display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center}
-  .hero-photo{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,var(--gold) 0%,var(--gold-2) 100%);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-weight:600;font-size:38px;color:var(--ink);overflow:hidden;box-shadow:0 0 0 3px rgba(200,153,42,0.25);flex-shrink:0}
+  .hero{background:var(--ink);color:var(--cream);padding:30px 36px 26px;border-radius:0 0 14px 14px;position:relative;overflow:hidden}
+  .hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;margin-bottom:18px}
+  .hero-grid{display:grid;grid-template-columns:auto 1fr auto;gap:22px;align-items:center}
+  .hero-photo{width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,var(--gold) 0%,var(--gold-2) 100%);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-weight:600;font-size:34px;color:var(--ink);overflow:hidden;box-shadow:0 0 0 3px rgba(200,153,42,0.22);flex-shrink:0}
   .hero-photo img{width:100%;height:100%;object-fit:cover}
   .hero-info{min-width:0}
-  .hero-info .name{font-family:var(--serif);font-weight:600;font-size:32px;line-height:1.05;letter-spacing:-1px;color:var(--cream);margin-bottom:4px}
-  .hero-info .name .badge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.16em;text-transform:uppercase;padding:3px 8px;border-radius:3px;background:rgba(200,153,42,0.15);color:var(--gold);border:1px solid rgba(200,153,42,0.4);margin-left:10px;vertical-align:8px}
-  .hero-info .headline{font-family:var(--serif);font-style:italic;font-weight:500;font-size:16px;color:var(--gold);margin:0 0 10px;line-height:1.3}
-  .hero-info .top-match{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:rgba(250,247,240,0.65);margin-bottom:12px;text-transform:uppercase}
+  .hero-info .name{font-family:var(--serif);font-weight:600;font-size:30px;line-height:1.1;letter-spacing:-0.6px;color:var(--cream);margin-bottom:4px}
+  .hero-info .name .badge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.16em;text-transform:uppercase;padding:3px 8px;border-radius:3px;background:rgba(200,153,42,0.15);color:var(--gold);border:1px solid rgba(200,153,42,0.4);margin-left:10px;vertical-align:6px}
+  .hero-info .headline{font-size:14.5px;font-weight:500;color:var(--gold);margin:2px 0 10px;line-height:1.4}
+  .hero-info .top-match{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:rgba(250,247,240,0.65);margin-bottom:11px;text-transform:uppercase}
   .hero-info .top-match b{color:var(--gold);font-weight:500}
   .hero-info .contact{font-size:12px;color:rgba(250,247,240,0.65);line-height:1.7}
   .hero-info .contact b{color:var(--cream);font-weight:500}
@@ -53,19 +53,22 @@
   .hero-info .contact a:hover{color:var(--gold);border-color:var(--gold)}
   .hero-info .contact .sep{color:rgba(250,247,240,0.3);margin:0 7px}
   .hero-ats{text-align:right;padding-left:18px;border-left:1px solid rgba(200,153,42,0.25);min-width:90px;flex-shrink:0}
-  .hero-ats .num{font-family:var(--serif);font-weight:600;font-size:42px;line-height:1;color:var(--gold)}
+  .hero-ats .num{font-family:var(--serif);font-weight:600;font-size:40px;line-height:1;color:var(--gold)}
   .hero-ats .num span{font-size:18px;color:rgba(250,247,240,0.5);font-weight:500}
   .hero-ats .lbl{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:rgba(250,247,240,0.55);text-transform:uppercase;margin-top:6px}
 
   /* ── Section frame ── */
-  .section{background:var(--paper);border:1px solid var(--rule);border-radius:12px;margin:14px 36px 0;padding:22px 26px 24px}
-  .sec-eyebrow{display:flex;align-items:center;gap:14px;margin-bottom:4px}
+  .section{background:var(--paper);border:1px solid var(--rule);border-radius:12px;margin:12px 36px 0;padding:20px 26px 22px}
+  .sec-eyebrow{display:flex;align-items:center;gap:14px;margin-bottom:14px}
   .sec-mark{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;font-weight:500;flex-shrink:0}
   .sec-rule{flex:1;height:1px;background:var(--cream-2)}
-  .sec-h{font-family:var(--serif);font-style:italic;font-weight:500;font-size:20px;color:var(--ink);line-height:1.25;margin:6px 0 16px;letter-spacing:-0.3px}
   .sec-sub{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--hint);text-transform:uppercase}
 
-  /* ── Professional summary ── */
+  /* ── Bullet summary ── */
+  .summary-bullets{list-style:none;padding:0;margin:0}
+  .summary-bullets li{font-size:13.5px;line-height:1.7;color:var(--ink);padding:0 0 9px 22px;position:relative;border-bottom:1px dashed var(--cream-2);margin-bottom:9px}
+  .summary-bullets li:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+  .summary-bullets li::before{content:"✦";position:absolute;left:0;top:0;color:var(--gold);font-size:11px;font-weight:500;line-height:1.7}
   .summary-text{font-size:13.5px;line-height:1.75;color:var(--body);max-width:680px}
 
   /* ── Courses (compact) ── */
@@ -79,7 +82,7 @@
 
   /* ── Best till date ── */
   .best-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:10px}
-  .best-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;border-top:3px solid var(--gold)}
+  .best-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:15px 17px;display:flex;flex-direction:column;gap:7px;border-top:3px solid var(--gold)}
   .best-card.alt{border-top-color:var(--teal)}
   .best-card.alt2{border-top-color:var(--orange)}
   .best-tag{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;font-weight:500}
@@ -90,22 +93,23 @@
   .best-pct.teal{color:var(--good)}
   .best-pct.mid{color:var(--mid)}
   .best-pct.low{color:var(--low)}
-  .best-title{font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.4}
+  .best-title{font-size:13px;font-weight:600;color:var(--ink);line-height:1.4}
   .best-meta{font-family:var(--mono);font-size:10px;letter-spacing:0.05em;color:var(--hint)}
-  .best-desc{font-size:11.5px;color:var(--body-2);line-height:1.55;font-style:italic;font-family:var(--serif)}
+  .best-desc{font-size:11.5px;color:var(--body-2);line-height:1.55}
+  .best-grade{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:0.16em;text-transform:uppercase;font-weight:500;padding:2px 7px;border-radius:3px;background:var(--paper);border:1px solid var(--rule);color:var(--body-2);margin-top:2px;align-self:flex-start}
 
   /* ── Capstone ── */
-  .capstone{background:var(--ink);color:var(--cream);padding:22px 24px;border-radius:10px}
-  .capstone-h{font-family:var(--serif);font-style:italic;font-weight:500;font-size:18px;color:var(--gold);margin-bottom:8px}
+  .capstone{background:var(--ink);color:var(--cream);padding:20px 22px;border-radius:10px}
+  .capstone-h{font-size:16px;font-weight:600;color:var(--gold);margin-bottom:8px}
   .capstone-meta{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:rgba(250,247,240,0.55);text-transform:uppercase;margin-bottom:10px}
   .capstone-desc{font-size:13px;color:rgba(250,247,240,0.85);line-height:1.65;margin-bottom:12px}
   .capstone-tech{display:flex;flex-wrap:wrap;gap:6px}
   .capstone-tech span{font-family:var(--mono);font-size:10px;padding:3px 8px;background:rgba(200,153,42,0.12);border:1px solid rgba(200,153,42,0.35);color:var(--gold);border-radius:3px}
 
   /* ── Personality ── */
-  .persona-type{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:16px 20px;margin-bottom:10px}
+  .persona-type{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:14px 18px;margin-bottom:10px}
   .persona-type .pl{font-family:var(--mono);font-size:9px;letter-spacing:0.16em;color:var(--hint);text-transform:uppercase}
-  .persona-type .pv{font-family:var(--serif);font-style:italic;font-weight:500;font-size:20px;color:var(--ink);margin-top:2px}
+  .persona-type .pv{font-size:18px;font-weight:600;color:var(--ink);margin-top:3px}
   .persona-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .persona-cell{background:var(--cream);border:1px solid var(--cream-2);border-radius:8px;padding:11px 14px}
   .persona-cell .pl{font-family:var(--mono);font-size:9px;letter-spacing:0.16em;color:var(--gold);text-transform:uppercase;margin-bottom:5px}
@@ -138,14 +142,14 @@
 
   /* ── Hobbies ── */
   .hobbies-row{display:flex;flex-wrap:wrap;gap:6px}
-  .hobbies-row span{font-family:var(--serif);font-style:italic;font-size:13px;padding:5px 12px;background:var(--cream);border:1px solid var(--cream-2);color:var(--ink);border-radius:99px}
+  .hobbies-row span{font-size:12.5px;font-weight:500;padding:5px 12px;background:var(--cream);border:1px solid var(--cream-2);color:var(--ink);border-radius:99px}
 
   /* ── Empty state ── */
   .empty{background:var(--cream);border:1px dashed var(--cream-2);border-radius:10px;padding:18px 20px;text-align:center;color:var(--hint);font-size:12.5px;line-height:1.6}
   .empty b{color:var(--ink);font-weight:600}
 
   /* ── Footer ── */
-  .footer{margin:28px 36px 0;padding:18px 0 0;border-top:1px solid var(--cream-2);text-align:center}
+  .footer{margin:24px 36px 0;padding:18px 0 0;border-top:1px solid var(--cream-2);text-align:center}
   .footer-mark{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:var(--hint);text-transform:uppercase;margin-bottom:6px}
   .footer-mark .gold{color:var(--gold);font-weight:500}
   .footer-sources{display:inline-flex;gap:6px;margin-top:4px;flex-wrap:wrap;justify-content:center}
@@ -163,30 +167,27 @@
 
   /* ── Mobile ── */
   @media (max-width:720px){
-    .hero{padding:24px 20px}
-    .hero-grid{grid-template-columns:auto 1fr;gap:16px}
-    .hero-ats{grid-column:1/-1;border-left:none;border-top:1px solid rgba(200,153,42,0.25);padding:14px 0 0;text-align:left;margin-top:6px}
-    .hero-info .name{font-size:24px}
-    .section{margin:12px 18px 0;padding:18px 18px 20px}
+    .hero{padding:22px 18px}
+    .hero-grid{grid-template-columns:auto 1fr;gap:14px}
+    .hero-ats{grid-column:1/-1;border-left:none;border-top:1px solid rgba(200,153,42,0.25);padding:12px 0 0;text-align:left;margin-top:6px}
+    .hero-info .name{font-size:22px}
+    .section{margin:10px 16px 0;padding:16px 16px 18px}
     .courses-mini{grid-template-columns:1fr 1fr}
     .best-grid{grid-template-columns:1fr}
     .skills-grid{grid-template-columns:1fr}
     .proj-grid{grid-template-columns:1fr}
     .persona-grid{grid-template-columns:1fr}
-    .footer{margin:24px 18px 0}
+    .footer{margin:20px 16px 0}
   }
 </style>
 </head>
 
 <body>
 
-{# ─────────────────────────────────────────────
-   Validation — junk lookup table.
-   Any value matching these (case-insensitive, trimmed) is dropped.
-───────────────────────────────────────────── #}
+{# ── Junk filter for inline validation ── #}
 {% set JUNK = ['', 'test', 'asdf', 'asdfg', 'asdfgh', 'qwerty', 'abc', 'abcd', 'tbd', 'tba', 'n/a', 'na', '-', '--', '...', 'xxx', 'yyy', 'zzz', 'none', 'null', 'undefined', '0', '1', '2', '.', ',', 'sample', 'example', 'lorem', 'ipsum'] %}
 
-{# Pre-compute which sections to render #}
+{# Pre-compute booleans #}
 {% set has_summary    = professional_summary and (professional_summary|trim)|length > 20 %}
 {% set has_courses    = courses_data and courses_data|length > 0 %}
 {% set has_personality = personality_data and personality_data.personality_type %}
@@ -198,13 +199,11 @@
 {% set has_edu        = education_data and education_data|length > 0 %}
 {% set ats_score      = (ats_data.total_score if ats_data and ats_data.total_score else 0) %}
 
-{# Pick the SINGLE best item for each evaluation type #}
 {% set best_test = best_test_scores[0] if best_test_scores and best_test_scores|length > 0 else None %}
 {% set best_asgn = best_assignments[0] if best_assignments and best_assignments|length > 0 else None %}
 {% set best_case = best_case_studies[0] if best_case_studies and best_case_studies|length > 0 else (case_study_highlights[0] if case_study_highlights and case_study_highlights|length > 0 else None) %}
 {% set has_any_best = best_test or best_asgn or best_case %}
 
-{# Top role match — chip in hero #}
 {% set top_role = role_matches[0] if role_matches and role_matches|length > 0 else None %}
 
 <div class="page">
@@ -253,15 +252,39 @@
     </div>
   </div>
 
-  {# ════════════ 01 PROFESSIONAL SUMMARY ════════════ #}
+  {# ════════════ 01 PROFESSIONAL SUMMARY (bullet) ════════════ #}
   {% if has_summary %}
   <div class="section">
     <div class="sec-eyebrow">
       <span class="sec-mark">01 / Professional summary</span>
       <span class="sec-rule"></span>
+      <span class="sec-sub">Strongest signals</span>
     </div>
-    <h2 class="sec-h">In one read.</h2>
-    <p class="summary-text">{{ professional_summary|trim }}</p>
+    {% set raw = professional_summary|trim %}
+    {% if '•' in raw %}
+      {# Inline bullet format — split on • char #}
+      {% set parts = raw.split('•') %}
+      <ul class="summary-bullets">
+        {% for part in parts %}
+          {% set clean = part|trim %}
+          {% if clean and clean|length > 5 %}
+            <li>{{ clean }}</li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    {% elif '\n' in raw and (raw.split('\n')|length) >= 3 %}
+      {# Newline-separated bullets #}
+      <ul class="summary-bullets">
+        {% for line in raw.split('\n') %}
+          {% set clean = line|trim|lstrip('-')|lstrip('*')|trim %}
+          {% if clean and clean|length > 5 %}
+            <li>{{ clean }}</li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="summary-text">{{ raw }}</p>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -273,7 +296,6 @@
       <span class="sec-rule"></span>
       <span class="sec-sub">{{ completed_courses or 0 }}/{{ total_courses or courses_data|length }} completed</span>
     </div>
-    <h2 class="sec-h">Programs taken at Upskillize.</h2>
     <div class="courses-mini">
       {% set ns = namespace(seen=[]) %}
       {% for course in courses_data[:12] %}
@@ -301,28 +323,24 @@
       <span class="sec-rule"></span>
       <span class="sec-sub">Top assignment · assessment · case study</span>
     </div>
-    <h2 class="sec-h">Highest-scoring work — across categories.</h2>
     <div class="best-grid">
 
-      {# Best assignment #}
+      {# Best assignment — uses rubric_pct if present, falls back to score/max_score #}
       {% if best_asgn %}
-      {% set a_score = best_asgn.score or 0 %}
-      {% set a_max = best_asgn.max_score or 100 %}
-      {% set a_pct = (a_score / a_max * 100) if a_max > 0 else 0 %}
+      {% set a_pct = best_asgn.rubric_pct if best_asgn.rubric_pct else ((best_asgn.score / best_asgn.max_score * 100) if best_asgn.max_score and best_asgn.max_score > 0 else 0) %}
       {% set ac = 'teal' if a_pct >= 70 else ('mid' if a_pct >= 40 else 'low') %}
       <div class="best-card">
         <div class="best-tag">Assignment</div>
         <div class="best-pct {{ ac }}">{{ "%.0f"|format(a_pct) }}<span class="u">%</span></div>
+        {% if best_asgn.rubric_grade or best_asgn.grade_label %}
+        <div class="best-grade">Grade {{ best_asgn.rubric_grade or '' }}{% if best_asgn.grade_label %} · {{ best_asgn.grade_label }}{% endif %}</div>
+        {% endif %}
         <div class="best-title">{{ best_asgn.title or 'Assignment' }}</div>
-        {% if best_asgn.course_name or best_asgn.module_name %}
-        <div class="best-meta">
-          {% if best_asgn.course_name %}{{ best_asgn.course_name }}{% endif %}{% if best_asgn.course_name and best_asgn.module_name %} · {% endif %}{% if best_asgn.module_name %}{{ best_asgn.module_name }}{% endif %}
-        </div>
+        {% if best_asgn.course_name %}
+        <div class="best-meta">{{ best_asgn.course_name }}</div>
         {% endif %}
         {% if best_asgn.feedback and (best_asgn.feedback|trim)|length > 5 %}
-        <div class="best-desc">{{ (best_asgn.feedback|trim)[:140] }}</div>
-        {% elif best_asgn.description and (best_asgn.description|trim)|length > 5 %}
-        <div class="best-desc">{{ (best_asgn.description|trim)[:140] }}</div>
+        <div class="best-desc">{{ (best_asgn.feedback|trim)[:160] }}</div>
         {% endif %}
       </div>
       {% endif %}
@@ -334,14 +352,12 @@
       <div class="best-card alt">
         <div class="best-tag">Assessment</div>
         <div class="best-pct {{ tc }}">{{ "%.0f"|format(t_pct) }}<span class="u">%</span></div>
+        {% if best_test.grade %}<div class="best-grade">Grade {{ best_test.grade }}</div>{% endif %}
         <div class="best-title">{{ best_test.subject or best_test.topic or 'Assessment' }}</div>
         {% if best_test.course_name or best_test.module_name %}
         <div class="best-meta">
           {% if best_test.course_name %}{{ best_test.course_name }}{% endif %}{% if best_test.course_name and best_test.module_name %} · {% endif %}{% if best_test.module_name %}{{ best_test.module_name }}{% endif %}
         </div>
-        {% endif %}
-        {% if best_test.grade %}
-        <div class="best-desc">Grade <b style="font-style:normal;font-family:var(--sans);font-weight:600">{{ best_test.grade }}</b> on this module test.</div>
         {% endif %}
       </div>
       {% endif %}
@@ -359,6 +375,7 @@
       <div class="best-card alt2">
         <div class="best-tag">Case study</div>
         <div class="best-pct {{ csc }}">{{ "%.0f"|format(cs_pct) }}<span class="u">%</span></div>
+        {% if best_case.ai_grade %}<div class="best-grade">Grade {{ best_case.ai_grade }}</div>{% endif %}
         <div class="best-title">{{ best_case.title or 'Case Study' }}</div>
         {% if best_case.course_name or best_case.topic %}
         <div class="best-meta">
@@ -367,8 +384,6 @@
         {% endif %}
         {% if best_case.concepts and best_case.concepts|length > 0 %}
         <div class="best-desc">Covered {{ best_case.concepts[:3]|join(', ') }}.</div>
-        {% elif best_case.ai_grade %}
-        <div class="best-desc">Assessor grade <b style="font-style:normal;font-family:var(--sans);font-weight:600">{{ best_case.ai_grade }}</b>.</div>
         {% endif %}
       </div>
       {% endif %}
@@ -386,7 +401,6 @@
       <span class="sec-rule"></span>
       {% if cp.score %}<span class="sec-sub">{{ cp.score }}{% if cp.max_score %}/{{ cp.max_score }}{% endif %}</span>{% endif %}
     </div>
-    <h2 class="sec-h">The flagship deliverable.</h2>
     <div class="capstone">
       <div class="capstone-h">{{ cp.title or cp.project_name or 'Capstone Project' }}</div>
       {% if cp.course_name or cp.status %}
@@ -431,7 +445,6 @@
       <span class="sec-rule"></span>
       <span class="sec-sub">Psychometric verified</span>
     </div>
-    <h2 class="sec-h">Decoded for recruiters.</h2>
     {% if has_personality %}
       <div class="persona-type">
         <div class="pl">Type</div>
@@ -459,7 +472,6 @@
       <span class="sec-rule"></span>
       <span class="sec-sub">From resume &amp; LinkedIn</span>
     </div>
-    <h2 class="sec-h">Roles held.</h2>
     <div class="tl">
       {% set ens = namespace(seen=[]) %}
       {% for exp in work_experience[:5] %}
@@ -486,7 +498,6 @@
       <span class="sec-rule"></span>
       <span class="sec-sub">From resume · GitHub</span>
     </div>
-    <h2 class="sec-h">Built and shipped.</h2>
     <div class="proj-grid">
       {% set pns = namespace(seen=[]) %}
       {% for proj in projects_data[:6] %}
@@ -536,7 +547,6 @@
       <span class="sec-rule"></span>
       <span class="sec-sub">Technical · Soft · Tools</span>
     </div>
-    <h2 class="sec-h">Capabilities — verified across sources.</h2>
     <div class="skills-grid">
 
       {% set tech = skills_data.get('technical_skills', []) %}
@@ -595,7 +605,6 @@
       <span class="sec-mark">09 / Hobbies &amp; interests</span>
       <span class="sec-rule"></span>
     </div>
-    <h2 class="sec-h">Outside work.</h2>
     <div class="hobbies-row">
       {% set hns = namespace(seen=[]) %}
       {% for h in hobbies_data %}
@@ -617,7 +626,6 @@
       <span class="sec-rule"></span>
       <span class="sec-sub">From resume · LinkedIn · LMS</span>
     </div>
-    <h2 class="sec-h">Academic background.</h2>
     <div class="tl">
       {% set ens = namespace(seen=[]) %}
       {% for edu in education_data[:5] %}
