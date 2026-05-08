@@ -1,668 +1,535 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ student_name or 'Student' }} — Upskillize Profile</title>
-<meta name="description" content="Verified profile of {{ student_name or 'Student' }} — Upskillize Profile IQ.">
-<meta property="og:title" content="{{ student_name or 'Student' }} — Upskillize Profile">
-<meta property="og:description" content="{{ headline or 'Professional Profile' }}">
-<meta property="og:url" content="{{ profile_url or '' }}">
+import { useState, useEffect, useRef } from "react";
+import { Sparkles, ExternalLink, RefreshCw, Share2, Check, Lock, Globe, Copy, X } from "lucide-react";
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+const AGENT_URL = import.meta.env.VITE_AGENT_URL || "https://upskill25-ai-enhancer.hf.space";
 
-<style>
-  :root{
-    --ink:#0B1628; --ink-2:#1a2744;
-    --gold:#C8992A; --gold-2:#F5B800;
-    --teal:#0F6E56; --teal-soft:#E1F5EE; --teal-bd:#9FE1CB;
-    --orange:#E8521A;
-    --cream:#FAF7F0; --cream-2:#EDE7D8;
-    --paper:#FFFFFF;
-    --body:#1F2937; --body-2:#475569; --hint:#6B7280; --faint:#94A3B8;
-    --rule:#E5E7EB; --rule-2:#F1F5F9;
-    --good:#0F6E56; --mid:#B47914; --low:#A32D2D;
-    --serif:'Playfair Display', Georgia, serif;
-    --sans:'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    --mono:'DM Mono', ui-monospace, monospace;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-  body{font-family:var(--sans);background:var(--cream);color:var(--body);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-  a{color:inherit;text-decoration:none}
-  a:hover{color:var(--gold)}
-  .page{max-width:880px;margin:0 auto;padding:0 0 56px}
+const S = {
+  root: { fontFamily: "inherit" },
 
-  /* ── Hero ── */
-  .hero{background:var(--ink);color:var(--cream);padding:30px 36px 26px;border-radius:0 0 14px 14px;position:relative;overflow:hidden}
-  .hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;margin-bottom:18px}
-  .hero-grid{display:grid;grid-template-columns:auto 1fr auto;gap:22px;align-items:center}
-  .hero-photo{width:84px;height:84px;border-radius:50%;background:linear-gradient(135deg,var(--gold) 0%,var(--gold-2) 100%);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-weight:600;font-size:34px;color:var(--ink);overflow:hidden;box-shadow:0 0 0 3px rgba(200,153,42,0.22);flex-shrink:0}
-  .hero-photo img{width:100%;height:100%;object-fit:cover}
-  .hero-info{min-width:0}
-  .hero-info .name{font-family:var(--serif);font-weight:600;font-size:30px;line-height:1.1;letter-spacing:-0.6px;color:var(--cream);margin-bottom:4px}
-  .hero-info .name .badge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.16em;text-transform:uppercase;padding:3px 8px;border-radius:3px;background:rgba(200,153,42,0.15);color:var(--gold);border:1px solid rgba(200,153,42,0.4);margin-left:10px;vertical-align:6px}
-  .hero-info .headline{font-size:14.5px;font-weight:500;color:var(--gold);margin:2px 0 10px;line-height:1.4}
-  .hero-info .top-match{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:rgba(250,247,240,0.65);margin-bottom:11px;text-transform:uppercase}
-  .hero-info .top-match b{color:var(--gold);font-weight:500}
-  .hero-info .contact{font-size:12px;color:rgba(250,247,240,0.65);line-height:1.7}
-  .hero-info .contact b{color:var(--cream);font-weight:500}
-  .hero-info .contact a{color:var(--cream);border-bottom:1px solid rgba(250,247,240,0.25);padding-bottom:1px}
-  .hero-info .contact a:hover{color:var(--gold);border-color:var(--gold)}
-  .hero-info .contact .sep{color:rgba(250,247,240,0.3);margin:0 7px}
-  .hero-ats{text-align:right;padding-left:18px;border-left:1px solid rgba(200,153,42,0.25);min-width:90px;flex-shrink:0}
-  .hero-ats .num{font-family:var(--serif);font-weight:600;font-size:40px;line-height:1;color:var(--gold)}
-  .hero-ats .num span{font-size:18px;color:rgba(250,247,240,0.5);font-weight:500}
-  .hero-ats .lbl{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:rgba(250,247,240,0.55);text-transform:uppercase;margin-top:6px}
+  // ── Generate screen ──
+  genWrap: { display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 24px 40px", textAlign: "center" },
+  genIcon: {
+    width: 76, height: 76, borderRadius: "50%",
+    background: "linear-gradient(135deg, #1E3A5F 0%, #2563EB 100%)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    marginBottom: 20, flexShrink: 0,
+    boxShadow: "0 8px 24px rgba(37,99,235,.28)",
+  },
+  genTitle: { fontSize: 20, fontWeight: 800, color: "#0f172a", marginBottom: 10, letterSpacing: "-0.3px" },
+  genDesc: { fontSize: 14, color: "#6b7280", maxWidth: 500, margin: "0 auto 22px", lineHeight: 1.65 },
+  chipRow: { display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6, marginBottom: 28 },
+  chip: { fontSize: 12, padding: "5px 13px", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 20, color: "#475569", fontWeight: 500 },
+  genBtn: {
+    fontSize: 15, padding: "14px 36px", borderRadius: 12,
+    background: "#1E3A5F", color: "#fff", border: "none",
+    cursor: "pointer", fontWeight: 700,
+    display: "inline-flex", alignItems: "center", gap: 9,
+    transition: "opacity .2s, transform .1s",
+  },
+  spinner: {
+    width: 22, height: 22, borderRadius: "50%",
+    border: "3px solid #e5e7eb", borderTop: "3px solid #2563EB",
+    animation: "upSpin 1s linear infinite", margin: "0 auto 10px",
+  },
+  genProgress: { marginTop: 22 },
+  genProgressText: { fontSize: 13, color: "#9ca3af", marginTop: 8 },
 
-  /* ── Section frame ── */
-  .section{background:var(--paper);border:1px solid var(--rule);border-radius:12px;margin:12px 36px 0;padding:20px 26px 22px}
-  .sec-eyebrow{display:flex;align-items:center;gap:14px;margin-bottom:14px}
-  .sec-mark{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;font-weight:500;flex-shrink:0}
-  .sec-rule{flex:1;height:1px;background:var(--cream-2)}
-  .sec-sub{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--hint);text-transform:uppercase}
+  // ── Error ──
+  errBox: { background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "10px 16px", maxWidth: 480, margin: "0 auto 16px" },
+  errText: { fontSize: 13, color: "#dc2626", margin: 0 },
 
-  /* ── Bullet summary ── */
-  .summary-bullets{list-style:none;padding:0;margin:0}
-  .summary-bullets li{font-size:13.5px;line-height:1.7;color:var(--ink);padding:0 0 9px 22px;position:relative;border-bottom:1px dashed var(--cream-2);margin-bottom:9px}
-  .summary-bullets li:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
-  .summary-bullets li::before{content:"✦";position:absolute;left:0;top:0;color:var(--gold);font-size:11px;font-weight:500;line-height:1.7}
-  .summary-text{font-size:13.5px;line-height:1.75;color:var(--body);max-width:680px}
+  // ── Ready screen ──
+  readyWrap: { display: "flex", flexDirection: "column", gap: 0 },
+  readyHeader: {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    padding: "4px 0 14px", borderBottom: "1px solid #f1f5f9", marginBottom: 14,
+    flexWrap: "wrap", gap: 10,
+  },
+  readyLeft: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  readyDot: { width: 10, height: 10, borderRadius: "50%", background: "#10b981", flexShrink: 0, boxShadow: "0 0 0 3px rgba(16,185,129,.15)" },
+  readyTitle: { fontSize: 14, fontWeight: 700, color: "#064e3b", margin: 0, lineHeight: 1.2 },
+  readySub: { fontSize: 11, color: "#9ca3af", margin: 0, marginTop: 1 },
+  openLink: { fontSize: 12, color: "#2563EB", textDecoration: "none", display: "flex", alignItems: "center", gap: 4, fontWeight: 500, whiteSpace: "nowrap" },
 
-  /* ── Courses (compact) ── */
-  .courses-mini{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px}
-  .course-mini{background:var(--cream);border:1px solid var(--cream-2);border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
-  .course-mini .nm{font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.35;flex:1}
-  .course-mini .st{font-family:var(--mono);font-size:8.5px;letter-spacing:0.14em;text-transform:uppercase;font-weight:500;padding:2px 7px;border-radius:3px;flex-shrink:0}
-  .course-mini .st.completed{background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal-bd)}
-  .course-mini .st.in-progress{background:rgba(200,153,42,0.12);color:var(--gold);border:1px solid rgba(200,153,42,0.4)}
-  .course-mini .st.enrolled{background:var(--paper);color:var(--body-2);border:1px solid var(--rule)}
+  // Visibility badge
+  visBadge: (vis) => ({
+    display: "inline-flex", alignItems: "center", gap: 5,
+    fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
+    background: vis === "public" ? "#f0fdf4" : "#fffbeb",
+    border: 1px solid ${vis === "public" ? "#bbf7d0" : "#fde68a"},
+    color: vis === "public" ? "#166534" : "#92400e",
+    cursor: "pointer", transition: "all .2s",
+  }),
 
-  /* ── Best till date ── */
-  .best-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:10px}
-  .best-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:15px 17px;display:flex;flex-direction:column;gap:7px;border-top:3px solid var(--gold)}
-  .best-card.alt{border-top-color:var(--teal)}
-  .best-card.alt2{border-top-color:var(--orange)}
-  .best-tag{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;font-weight:500}
-  .best-card.alt .best-tag{color:var(--teal)}
-  .best-card.alt2 .best-tag{color:var(--orange)}
-  .best-pct{font-family:var(--serif);font-weight:600;font-size:30px;line-height:1;color:var(--ink)}
-  .best-pct .u{font-size:14px;color:var(--faint);font-weight:500}
-  .best-pct.teal{color:var(--good)}
-  .best-pct.mid{color:var(--mid)}
-  .best-pct.low{color:var(--low)}
-  .best-title{font-size:13px;font-weight:600;color:var(--ink);line-height:1.4}
-  .best-meta{font-family:var(--mono);font-size:10px;letter-spacing:0.05em;color:var(--hint)}
-  .best-desc{font-size:11.5px;color:var(--body-2);line-height:1.55}
-  .best-grade{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:0.16em;text-transform:uppercase;font-weight:500;padding:2px 7px;border-radius:3px;background:var(--paper);border:1px solid var(--rule);color:var(--body-2);margin-top:2px;align-self:flex-start}
+  // Inline status banner
+  statusBanner: (kind) => ({
+    display: "flex", alignItems: "center", gap: 8,
+    fontSize: 12, fontWeight: 500,
+    padding: "8px 14px", borderRadius: 8, marginBottom: 12,
+    background: kind === "info" ? "#eff6ff" : "#f0fdf4",
+    border: 1px solid ${kind === "info" ? "#bfdbfe" : "#bbf7d0"},
+    color: kind === "info" ? "#1e40af" : "#166534",
+  }),
 
-  /* ── Capstone ── */
-  .capstone{background:var(--ink);color:var(--cream);padding:20px 22px;border-radius:10px}
-  .capstone-h{font-size:16px;font-weight:600;color:var(--gold);margin-bottom:8px}
-  .capstone-meta{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:rgba(250,247,240,0.55);text-transform:uppercase;margin-bottom:10px}
-  .capstone-desc{font-size:13px;color:rgba(250,247,240,0.85);line-height:1.65;margin-bottom:12px}
-  .capstone-tech{display:flex;flex-wrap:wrap;gap:6px}
-  .capstone-tech span{font-family:var(--mono);font-size:10px;padding:3px 8px;background:rgba(200,153,42,0.12);border:1px solid rgba(200,153,42,0.35);color:var(--gold);border-radius:3px}
+  // Iframe shell
+  iframeShell: {
+    borderRadius: 14, overflow: "hidden",
+    border: "1px solid #e2e8f0",
+    height: 680,
+    position: "relative",
+    background: "#09111f",
+  },
+  iframe: { width: "100%", height: "100%", border: "none", display: "block" },
 
-  /* ── Personality ── */
-  .persona-type{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:14px 18px;margin-bottom:10px}
-  .persona-type .pl{font-family:var(--mono);font-size:9px;letter-spacing:0.16em;color:var(--hint);text-transform:uppercase}
-  .persona-type .pv{font-size:18px;font-weight:600;color:var(--ink);margin-top:3px}
-  .persona-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .persona-cell{background:var(--cream);border:1px solid var(--cream-2);border-radius:8px;padding:11px 14px}
-  .persona-cell .pl{font-family:var(--mono);font-size:9px;letter-spacing:0.16em;color:var(--gold);text-transform:uppercase;margin-bottom:5px}
-  .persona-cell .pv{font-size:12px;color:var(--body);line-height:1.55}
+  // Bottom action bar
+  actionBar: {
+    display: "flex", gap: 10, marginTop: 14,
+    padding: "14px 0 0",
+    borderTop: "1px solid #f1f5f9",
+    position: "relative",
+  },
+  regenBtn: {
+    flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
+    fontSize: 14, padding: "12px 20px", borderRadius: 10,
+    border: "1.5px solid #e2e8f0", background: "#fff",
+    color: "#374151", cursor: "pointer", fontWeight: 600,
+    transition: "all .2s",
+  },
+  shareBtn: {
+    flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
+    fontSize: 14, padding: "12px 20px", borderRadius: 10,
+    border: "none", background: "#1E3A5F",
+    color: "#fff", cursor: "pointer", fontWeight: 700,
+    transition: "all .2s",
+    position: "relative",
+  },
+  regenOverlay: {
+    position: "absolute", inset: 0, zIndex: 10,
+    background: "rgba(9,17,31,.75)",
+    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14,
+    backdropFilter: "blur(4px)",
+  },
+  regenSpinner: {
+    width: 40, height: 40, borderRadius: "50%",
+    border: "4px solid rgba(255,255,255,.15)", borderTop: "4px solid #e8a020",
+    animation: "upSpin 1s linear infinite",
+  },
+  regenText: { fontSize: 14, color: "#fff", fontWeight: 500 },
+  regenSubtext: { fontSize: 11, color: "rgba(255,255,255,.6)", marginTop: 4 },
 
-  /* ── Timeline cards (Experience, Education) ── */
-  .tl{display:flex;flex-direction:column;gap:8px}
-  .tl-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:13px 16px;border-left:3px solid var(--gold)}
-  .tl-card.edu{border-left-color:var(--teal)}
-  .tl-title{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:2px}
-  .tl-org{font-size:13px;color:var(--body);margin-bottom:4px}
-  .tl-meta{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--hint);text-transform:uppercase;margin-bottom:6px}
-  .tl-meta span+span:before{content:"·";margin:0 6px;color:var(--faint)}
-  .tl-desc{font-size:12.5px;color:var(--body-2);line-height:1.6}
+  // Share popover
+  sharePopover: {
+    position: "absolute", bottom: "100%", right: 0,
+    marginBottom: 8, background: "#fff",
+    border: "1px solid #e2e8f0", borderRadius: 12,
+    boxShadow: "0 8px 32px rgba(0,0,0,.12)",
+    padding: 6, minWidth: 200, zIndex: 50,
+  },
+  shareItem: {
+    display: "flex", alignItems: "center", gap: 10,
+    fontSize: 13, fontWeight: 600, padding: "10px 14px",
+    borderRadius: 8, border: "none", background: "transparent",
+    color: "#374151", cursor: "pointer", transition: "all .15s",
+    textDecoration: "none", width: "100%", textAlign: "left",
+    fontFamily: "inherit",
+  },
 
-  /* ── Projects ── */
-  .proj-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .proj-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:14px 16px}
-  .proj-title{font-size:13.5px;font-weight:600;color:var(--ink);margin-bottom:5px}
-  .proj-desc{font-size:12px;color:var(--body-2);line-height:1.6;margin-bottom:9px}
-  .proj-tech{display:flex;flex-wrap:wrap;gap:5px}
-  .proj-tech span{font-family:var(--mono);font-size:10px;padding:2px 7px;background:var(--paper);border:1px solid var(--rule);color:var(--body-2);border-radius:3px}
+  // Loading check
+  loadingWrap: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", gap: 14 },
+  loadingSpinner: { width: 28, height: 28, borderRadius: "50%", border: "3px solid #e5e7eb", borderTop: "3px solid #1E3A5F", animation: "upSpin 1s linear infinite" },
+  loadingText: { fontSize: 13, color: "#9ca3af" },
+};
 
-  /* ── Skills ── */
-  .skills-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:12px}
-  .skill-col{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:13px 16px}
-  .skill-h{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:0.16em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--cream-2)}
-  .skill-list{display:flex;flex-wrap:wrap;gap:5px}
-  .skill-list span{font-size:11px;font-weight:500;padding:4px 9px;background:var(--paper);border:1px solid var(--rule);color:var(--body);border-radius:99px}
+const CHIPS = ["📄 Resume", "💼 LinkedIn", "💻 GitHub", "📚 Courses", "📝 Scores", "🏷️ ATS Match"];
 
-  /* ── Hobbies ── */
-  .hobbies-row{display:flex;flex-wrap:wrap;gap:6px}
-  .hobbies-row span{font-size:12.5px;font-weight:500;padding:5px 12px;background:var(--cream);border:1px solid var(--cream-2);color:var(--ink);border-radius:99px}
+const SECTION_LABELS = {
+  summary:      "Professional Summary",
+  skills:       "Skills",
+  roles:        "Job Role Matches",
+  achievements: "Achievements",
+  personality:  "Work Profile",
+  projects:     "Projects",
+  education:    "Education",
+  experience:   "Experience",
+};
 
-  /* ── Empty state ── */
-  .empty{background:var(--cream);border:1px dashed var(--cream-2);border-radius:10px;padding:18px 20px;text-align:center;color:var(--hint);font-size:12.5px;line-height:1.6}
-  .empty b{color:var(--ink);font-weight:600}
+export default function AIEnhancer({ showMsg }) {
+  const [aiProfile, setAiProfile]   = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [checking, setChecking]     = useState(true);
+  const [shared, setShared]         = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [error, setError]           = useState("");
+  const [regenStatus, setRegenStatus] = useState(null);
+  const iframeRef = useRef(null);
+  const shareRef = useRef(null);
 
-  /* ── Footer ── */
-  .footer{margin:24px 36px 0;padding:18px 0 0;border-top:1px solid var(--cream-2);text-align:center}
-  .footer-mark{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:var(--hint);text-transform:uppercase;margin-bottom:6px}
-  .footer-mark .gold{color:var(--gold);font-weight:500}
-  .footer-sources{display:inline-flex;gap:6px;margin-top:4px;flex-wrap:wrap;justify-content:center}
-  .footer-sources span{font-family:var(--mono);font-size:9px;letter-spacing:0.14em;padding:3px 8px;background:var(--cream);border:1px solid var(--cream-2);color:var(--body-2);border-radius:99px;text-transform:uppercase}
-  .footer-link{font-family:var(--mono);font-size:10px;color:var(--gold);margin-top:10px;display:block;word-break:break-all}
+  const getToken = () => localStorage.getItem("token");
 
-  /* ── Print ── */
-  @media print{
-    body{background:#fff}
-    .page{max-width:none;padding:0}
-    .hero,.section,.footer{margin-left:0;margin-right:0}
-    .section{break-inside:avoid;page-break-inside:avoid}
-    .hero{border-radius:0}
-  }
+  // ── Close share menu on outside click ──
+  useEffect(() => {
+    const handler = (e) => {
+      if (shareRef.current && !shareRef.current.contains(e.target)) {
+        setShowShareMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-  /* ── Mobile ── */
-  @media (max-width:720px){
-    .hero{padding:22px 18px}
-    .hero-grid{grid-template-columns:auto 1fr;gap:14px}
-    .hero-ats{grid-column:1/-1;border-left:none;border-top:1px solid rgba(200,153,42,0.25);padding:12px 0 0;text-align:left;margin-top:6px}
-    .hero-info .name{font-size:22px}
-    .section{margin:10px 16px 0;padding:16px 16px 18px}
-    .courses-mini{grid-template-columns:1fr 1fr}
-    .best-grid{grid-template-columns:1fr}
-    .skills-grid{grid-template-columns:1fr}
-    .proj-grid{grid-template-columns:1fr}
-    .persona-grid{grid-template-columns:1fr}
-    .footer{margin:20px 16px 0}
-  }
-</style>
-</head>
+  // ── Auto-load existing profile on mount ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(${AGENT_URL}/api/v1/profile/me, {
+          headers: { Authorization: Bearer ${getToken()} },
+        });
+        if (res.ok) {
+          const d = await res.json();
+          if (d?.slug && d?.status === "completed") {
+            setAiProfile({
+              slug:         d.slug,
+              url:          ${AGENT_URL}/api/v1/profile/public/${d.slug},
+              download_url: ${AGENT_URL}/api/v1/profile/download/${d.slug},
+              visibility:   d.visibility || "public",
+              views:        d.views || 0,
+              updated_at:   d.updated_at || null,
+            });
+          }
+        }
+      } catch {}
+      setChecking(false);
+    })();
+  }, []);
 
-<body>
+  // ── Generate (first time) ──
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setError("");
+    setRegenStatus(null);
+    try {
+      const res = await fetch(${AGENT_URL}/api/v1/profile/generate, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: Bearer ${getToken()} },
+        body: JSON.stringify({ force_regenerate: false }),
+      });
+      const data = await res.json();
+      if (res.ok && data.slug) {
+        setAiProfile({
+          slug:         data.slug,
+          url:          ${AGENT_URL}/api/v1/profile/public/${data.slug},
+          download_url: ${AGENT_URL}/api/v1/profile/download/${data.slug},
+          visibility:   "public",
+          views:        0,
+          updated_at:   new Date().toISOString(),
+        });
+      } else {
+        setError(data.detail || "Failed to generate profile.");
+      }
+    } catch {
+      setError("Could not connect to AI agent. Please try again.");
+    }
+    setGenerating(false);
+  };
 
-{# ── Junk filter for inline validation ── #}
-{% set JUNK = ['', 'test', 'asdf', 'asdfg', 'asdfgh', 'qwerty', 'abc', 'abcd', 'tbd', 'tba', 'n/a', 'na', '-', '--', '...', 'xxx', 'yyy', 'zzz', 'none', 'null', 'undefined', '0', '1', '2', '.', ',', 'sample', 'example', 'lorem', 'ipsum'] %}
+  // ── Regenerate ──
+  const handleRegenerate = async () => {
+    setGenerating(true);
+    setError("");
+    setRegenStatus(null);
+    try {
+      const res = await fetch(${AGENT_URL}/api/v1/profile/generate, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: Bearer ${getToken()} },
+        body: JSON.stringify({ force_regenerate: true }),
+      });
+      const data = await res.json();
 
-{# Pre-compute booleans #}
-{% set has_summary    = professional_summary and (professional_summary|trim)|length > 20 %}
-{% set has_courses    = courses_data and courses_data|length > 0 %}
-{% set has_personality = personality_data and personality_data.personality_type %}
-{% set has_capstone   = capstone_project or (capstone_projects and capstone_projects|length > 0) %}
-{% set has_work       = work_experience and work_experience|length > 0 %}
-{% set has_projects   = projects_data and projects_data|length > 0 %}
-{% set has_skills     = skills_data and ((skills_data.get('technical_skills', [])|length > 0) or (skills_data.get('soft_skills', [])|length > 0) or (skills_data.get('tools', [])|length > 0)) %}
-{% set has_hobbies    = hobbies_data and hobbies_data|length > 0 %}
-{% set has_edu        = education_data and education_data|length > 0 %}
-{% set ats_score      = (ats_data.total_score if ats_data and ats_data.total_score else 0) %}
+      if (!res.ok) {
+        setError(data.detail || "Regeneration failed.");
+        setGenerating(false);
+        return;
+      }
 
-{% set best_test = best_test_scores[0] if best_test_scores and best_test_scores|length > 0 else None %}
-{% set best_asgn = best_assignments[0] if best_assignments and best_assignments|length > 0 else None %}
-{% set best_case = best_case_studies[0] if best_case_studies and best_case_studies|length > 0 else (case_study_highlights[0] if case_study_highlights and case_study_highlights|length > 0 else None) %}
-{% set has_any_best = best_test or best_asgn or best_case %}
+      const updated = data.updated_sections;
 
-{% set top_role = role_matches[0] if role_matches and role_matches|length > 0 else None %}
+      if (Array.isArray(updated) && updated.length === 0) {
+        setRegenStatus({
+          kind: "info",
+          text: "Profile is already up to date — no new data found.",
+        });
+        if (showMsg) showMsg("info", "Already up to date");
+        setGenerating(false);
+        setTimeout(() => setRegenStatus(null), 5000);
+        return;
+      }
 
-<div class="page">
+      const newUrl = ${AGENT_URL}/api/v1/profile/public/${data.slug};
+      setAiProfile(prev => ({
+        ...prev,
+        slug:         data.slug,
+        url:          newUrl,
+        download_url: ${AGENT_URL}/api/v1/profile/download/${data.slug},
+        updated_at:   new Date().toISOString(),
+      }));
 
-  {# ════════════ HERO ════════════ #}
-  <div class="hero">
-    <div class="hero-eyebrow">✦&nbsp;&nbsp;Upskillize · Profile IQ · Verified Credentials</div>
-    <div class="hero-grid">
+      if (iframeRef.current) {
+        iframeRef.current.src = newUrl + "?t=" + Date.now();
+      }
 
-      <div class="hero-photo">
-        {% if student_photo_url %}
-          <img src="{{ student_photo_url }}" alt="{{ student_name }}">
-        {% else %}
-          {{ (student_name or 'S')[0]|upper }}
-        {% endif %}
+      let bannerText;
+      if (Array.isArray(updated)) {
+        const labels = updated.map(s => SECTION_LABELS[s] || s);
+        if (labels.length === 1) {
+          bannerText = Updated: ${labels[0]};
+        } else if (labels.length <= 3) {
+          bannerText = Updated: ${labels.join(", ")};
+        } else {
+          bannerText = Updated ${labels.length} sections;
+        }
+      } else {
+        bannerText = "Profile fully regenerated";
+      }
+      setRegenStatus({ kind: "success", text: bannerText });
+      if (showMsg) showMsg("success", bannerText);
+      setTimeout(() => setRegenStatus(null), 6000);
+    } catch {
+      setError("Connection failed.");
+    }
+    setGenerating(false);
+  };
+
+  // ── Toggle visibility ──
+  const handleToggle = async () => {
+    if (!aiProfile) return;
+    const newVis = aiProfile.visibility === "public" ? "private" : "public";
+    try {
+      const res = await fetch(${AGENT_URL}/api/v1/profile/toggle-visibility, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: Bearer ${getToken()} },
+        body: JSON.stringify({ visibility: newVis }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiProfile(prev => ({ ...prev, visibility: data.visibility }));
+      }
+    } catch {}
+  };
+
+  // ── Share actions ──
+  const handleCopyLink = async () => {
+    if (!aiProfile) return;
+    try {
+      await navigator.clipboard.writeText(aiProfile.url);
+      setShared(true);
+      setShowShareMenu(false);
+      setTimeout(() => setShared(false), 2200);
+      if (showMsg) showMsg("success", "Profile link copied!");
+    } catch {
+      if (showMsg) showMsg("error", "Could not copy link.");
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!aiProfile) return;
+    window.open(https://wa.me/?text=${encodeURIComponent("Check out my AI Profile — " + aiProfile.url)}, "_blank");
+    setShowShareMenu(false);
+  };
+
+  const handleShareTelegram = () => {
+    if (!aiProfile) return;
+    window.open(https://t.me/share/url?url=${encodeURIComponent(aiProfile.url)}&text=${encodeURIComponent("My AI Profile")}, "_blank");
+    setShowShareMenu(false);
+  };
+
+  const handleShareLinkedIn = () => {
+    if (!aiProfile) return;
+    window.open(https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(aiProfile.url)}, "_blank");
+    setShowShareMenu(false);
+  };
+
+  const fmtDate = (iso) => {
+    if (!iso) return null;
+    try { return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); }
+    catch { return null; }
+  };
+
+  // 1) Initial check loading
+  if (checking) {
+    return (
+      <div style={S.loadingWrap}>
+        <style>{@keyframes upSpin{to{transform:rotate(360deg)}}}</style>
+        <div style={S.loadingSpinner} />
+        <p style={S.loadingText}>Checking your profile…</p>
       </div>
+    );
+  }
 
-      <div class="hero-info">
-        <div class="name">
-          {{ student_name or 'Student' }}{% if is_fresher %}<span class="badge">Fresher</span>{% elif is_working_professional %}<span class="badge">Professional</span>{% endif %}
-        </div>
-        {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
-        {% if top_role %}
-        <div class="top-match">Top match — <b>{{ top_role.role_title }} · {{ top_role.match_percentage }}%</b></div>
-        {% endif %}
-        <div class="contact">
-          {% if student_location %}<b>{{ student_location }}</b>{% endif %}
-          {% if student_email %}{% if student_location %}<span class="sep">·</span>{% endif %}<a href="mailto:{{ student_email }}">{{ student_email }}</a>{% endif %}
-          {% if student_phone %}<span class="sep">·</span><a href="tel:{{ student_phone }}">{{ student_phone }}</a>{% endif %}
-          {% if linkedin_url or github_url or portfolio_url %}
-          <br>
-          {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank" rel="noopener">LinkedIn</a>{% endif %}
-          {% if github_url %}{% if linkedin_url %}<span class="sep">·</span>{% endif %}<a href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>{% endif %}
-          {% if portfolio_url %}{% if linkedin_url or github_url %}<span class="sep">·</span>{% endif %}<a href="{{ portfolio_url }}" target="_blank" rel="noopener">Portfolio</a>{% endif %}
-          {% endif %}
-        </div>
-      </div>
-
-      {% if ats_score and ats_score > 20 %}
-      <div class="hero-ats">
-        <div class="num">{{ ats_score }}<span>/100</span></div>
-        <div class="lbl">ATS Score</div>
-      </div>
-      {% endif %}
-
-    </div>
-  </div>
-
-  {# ════════════ 01 PROFESSIONAL SUMMARY (bullet) ════════════ #}
-  {% if has_summary %}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">01 / Professional summary</span>
-      <span class="sec-rule"></span>
-      <span class="sec-sub">Strongest signals</span>
-    </div>
-    {% set raw = professional_summary|trim %}
-    {% if '•' in raw %}
-      {# Inline bullet format — split on • char #}
-      {% set parts = raw.split('•') %}
-      <ul class="summary-bullets">
-        {% for part in parts %}
-          {% set clean = part|trim %}
-          {% if clean and clean|length > 5 %}
-            <li>{{ clean }}</li>
-          {% endif %}
-        {% endfor %}
-      </ul>
-    {% elif '\n' in raw and (raw.split('\n')|length) >= 3 %}
-      {# Newline-separated bullets #}
-      <ul class="summary-bullets">
-        {% for line in raw.split('\n') %}
-          {% set clean = line|trim|lstrip('-')|lstrip('*')|trim %}
-          {% if clean and clean|length > 5 %}
-            <li>{{ clean }}</li>
-          {% endif %}
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p class="summary-text">{{ raw }}</p>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  {# ════════════ 02 COURSES (compact) ════════════ #}
-  {% if has_courses %}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">02 / Courses enrolled</span>
-      <span class="sec-rule"></span>
-      <span class="sec-sub">{{ completed_courses or 0 }}/{{ total_courses or courses_data|length }} completed</span>
-    </div>
-    <div class="courses-mini">
-      {% set ns = namespace(seen=[]) %}
-      {% for course in courses_data[:12] %}
-        {% set cnm = (course.course_name or '')|trim %}
-        {% if cnm|length > 1 and cnm|lower not in JUNK and cnm|lower not in ns.seen %}
-          {% set _ = ns.seen.append(cnm|lower) %}
-          {% set cs_status = course.completion_status or course.status or 'enrolled' %}
-          <div class="course-mini">
-            <span class="nm">{{ cnm }}</span>
-            <span class="st {{ 'completed' if cs_status == 'completed' else ('in-progress' if cs_status in ('in_progress', 'active', 'started') else 'enrolled') }}">
-              {{ 'Done' if cs_status == 'completed' else ('Active' if cs_status in ('in_progress', 'active', 'started') else 'Enrolled') }}
-            </span>
+  // 2) No profile — generate screen
+  if (!aiProfile) {
+    return (
+      <div style={S.root}>
+        <style>{@keyframes upSpin{to{transform:rotate(360deg)}}}</style>
+        <div style={S.genWrap}>
+          <div style={S.genIcon}><Sparkles size={34} color="#fff" /></div>
+          <h3 style={S.genTitle}>AI Profile Builder</h3>
+          <p style={S.genDesc}>
+            Builds a professional, recruiter-ready profile from your resume, LinkedIn, GitHub,
+            courses, scores, and psychometric data — with ATS keywords and job role matching.
+          </p>
+          <div style={S.chipRow}>
+            {CHIPS.map(t => <span key={t} style={S.chip}>{t}</span>)}
           </div>
-        {% endif %}
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  {# ════════════ 03 BEST TILL DATE ════════════ #}
-  {% if has_any_best %}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">03 / Best till date</span>
-      <span class="sec-rule"></span>
-      <span class="sec-sub">Top assignment · assessment · case study</span>
-    </div>
-    <div class="best-grid">
-
-      {# Best assignment — uses rubric_pct if present, falls back to score/max_score #}
-      {% if best_asgn %}
-      {% set a_pct = best_asgn.rubric_pct if best_asgn.rubric_pct else ((best_asgn.score / best_asgn.max_score * 100) if best_asgn.max_score and best_asgn.max_score > 0 else 0) %}
-      {% set ac = 'teal' if a_pct >= 70 else ('mid' if a_pct >= 40 else 'low') %}
-      <div class="best-card">
-        <div class="best-tag">Assignment</div>
-        <div class="best-pct {{ ac }}">{{ "%.0f"|format(a_pct) }}<span class="u">%</span></div>
-        {% if best_asgn.rubric_grade or best_asgn.grade_label %}
-        <div class="best-grade">Grade {{ best_asgn.rubric_grade or '' }}{% if best_asgn.grade_label %} · {{ best_asgn.grade_label }}{% endif %}</div>
-        {% endif %}
-        <div class="best-title">{{ best_asgn.title or 'Assignment' }}</div>
-        {% if best_asgn.course_name %}
-        <div class="best-meta">{{ best_asgn.course_name }}</div>
-        {% endif %}
-        {% if best_asgn.feedback and (best_asgn.feedback|trim)|length > 5 %}
-        <div class="best-desc">{{ (best_asgn.feedback|trim)[:160] }}</div>
-        {% endif %}
-      </div>
-      {% endif %}
-
-      {# Best assessment / test #}
-      {% if best_test %}
-      {% set t_pct = best_test.percentage or best_test.score or 0 %}
-      {% set tc = 'teal' if t_pct >= 70 else ('mid' if t_pct >= 40 else 'low') %}
-      <div class="best-card alt">
-        <div class="best-tag">Assessment</div>
-        <div class="best-pct {{ tc }}">{{ "%.0f"|format(t_pct) }}<span class="u">%</span></div>
-        {% if best_test.grade %}<div class="best-grade">Grade {{ best_test.grade }}</div>{% endif %}
-        <div class="best-title">{{ best_test.subject or best_test.topic or 'Assessment' }}</div>
-        {% if best_test.course_name or best_test.module_name %}
-        <div class="best-meta">
-          {% if best_test.course_name %}{{ best_test.course_name }}{% endif %}{% if best_test.course_name and best_test.module_name %} · {% endif %}{% if best_test.module_name %}{{ best_test.module_name }}{% endif %}
-        </div>
-        {% endif %}
-      </div>
-      {% endif %}
-
-      {# Best case study #}
-      {% if best_case %}
-      {% if best_case_studies %}
-        {% set cs_score = best_case.score or best_case.ai_score or 0 %}
-        {% set cs_max = best_case.max_score or 100 %}
-        {% set cs_pct = (cs_score / cs_max * 100) if cs_max > 0 else 0 %}
-      {% else %}
-        {% set cs_pct = best_case.score_pct or 0 %}
-      {% endif %}
-      {% set csc = 'teal' if cs_pct >= 70 else ('mid' if cs_pct >= 40 else 'low') %}
-      <div class="best-card alt2">
-        <div class="best-tag">Case study</div>
-        <div class="best-pct {{ csc }}">{{ "%.0f"|format(cs_pct) }}<span class="u">%</span></div>
-        {% if best_case.ai_grade %}<div class="best-grade">Grade {{ best_case.ai_grade }}</div>{% endif %}
-        <div class="best-title">{{ best_case.title or 'Case Study' }}</div>
-        {% if best_case.course_name or best_case.topic %}
-        <div class="best-meta">
-          {% if best_case.course_name %}{{ best_case.course_name }}{% endif %}{% if best_case.course_name and best_case.topic %} · {% endif %}{% if best_case.topic %}{{ best_case.topic }}{% endif %}
-        </div>
-        {% endif %}
-        {% if best_case.concepts and best_case.concepts|length > 0 %}
-        <div class="best-desc">Covered {{ best_case.concepts[:3]|join(', ') }}.</div>
-        {% endif %}
-      </div>
-      {% endif %}
-
-    </div>
-  </div>
-  {% endif %}
-
-  {# ════════════ 04 CAPSTONE ════════════ #}
-  {% if has_capstone %}
-  {% set cp = capstone_project if capstone_project else capstone_projects[0] %}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">04 / Capstone project</span>
-      <span class="sec-rule"></span>
-      {% if cp.score %}<span class="sec-sub">{{ cp.score }}{% if cp.max_score %}/{{ cp.max_score }}{% endif %}</span>{% endif %}
-    </div>
-    <div class="capstone">
-      <div class="capstone-h">{{ cp.title or cp.project_name or 'Capstone Project' }}</div>
-      {% if cp.course_name or cp.status %}
-      <div class="capstone-meta">
-        {% if cp.course_name %}{{ cp.course_name }}{% endif %}{% if cp.course_name and cp.status %} · {% endif %}{% if cp.status %}{{ cp.status }}{% endif %}
-      </div>
-      {% endif %}
-      {% if cp.description and (cp.description|trim)|length > 10 %}
-      <div class="capstone-desc">{{ cp.description[:320]|trim }}</div>
-      {% endif %}
-      {% if cp.technologies or cp.tech_stack %}
-      <div class="capstone-tech">
-        {% set techs = cp.technologies or cp.tech_stack %}
-        {% set tns = namespace(seen=[]) %}
-        {% if techs is string %}
-          {% for t in techs.split(',') %}
-            {% set tt = t|trim %}
-            {% if tt|length > 1 and tt|lower not in JUNK and tt|lower not in tns.seen %}
-              {% set _ = tns.seen.append(tt|lower) %}
-              <span>{{ tt }}</span>
-            {% endif %}
-          {% endfor %}
-        {% elif techs is iterable %}
-          {% for t in techs %}
-            {% set tt = (t|string|trim) %}
-            {% if tt|length > 1 and tt|lower not in JUNK and tt|lower not in tns.seen %}
-              {% set _ = tns.seen.append(tt|lower) %}
-              <span>{{ tt }}</span>
-            {% endif %}
-          {% endfor %}
-        {% endif %}
-      </div>
-      {% endif %}
-    </div>
-  </div>
-  {% endif %}
-
-  {# ════════════ 05 PERSONALITY ════════════ #}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">05 / Personality &amp; work style</span>
-      <span class="sec-rule"></span>
-      <span class="sec-sub">Psychometric verified</span>
-    </div>
-    {% if has_personality %}
-      <div class="persona-type">
-        <div class="pl">Type</div>
-        <div class="pv">{{ personality_data.personality_type }}</div>
-      </div>
-      <div class="persona-grid">
-        {% if personality_data.traits and (personality_data.traits|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Key traits</div><div class="pv">{{ personality_data.traits|trim }}</div></div>{% endif %}
-        {% if personality_data.work_style and (personality_data.work_style|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Work style</div><div class="pv">{{ personality_data.work_style|trim }}</div></div>{% endif %}
-        {% if personality_data.communication and (personality_data.communication|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Communication</div><div class="pv">{{ personality_data.communication|trim }}</div></div>{% endif %}
-        {% if personality_data.leadership and (personality_data.leadership|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Team role</div><div class="pv">{{ personality_data.leadership|trim }}</div></div>{% endif %}
-      </div>
-    {% else %}
-      <div class="empty">
-        <b>Psychometric not yet completed.</b><br>
-        Take the test on the LMS to unlock work-style decoding.
-      </div>
-    {% endif %}
-  </div>
-
-  {# ════════════ 06 EXPERIENCE ════════════ #}
-  {% if has_work %}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">06 / Experience</span>
-      <span class="sec-rule"></span>
-      <span class="sec-sub">From resume &amp; LinkedIn</span>
-    </div>
-    <div class="tl">
-      {% set ens = namespace(seen=[]) %}
-      {% for exp in work_experience[:5] %}
-        {% set k = ((exp.title or '')|trim|lower) ~ '|' ~ ((exp.company or '')|trim|lower) %}
-        {% if k|length > 2 and k not in ens.seen %}
-          {% set _ = ens.seen.append(k) %}
-          <div class="tl-card">
-            <div class="tl-title">{{ exp.title or 'Role' }}</div>
-            {% if exp.company %}<div class="tl-org">{{ exp.company }}</div>{% endif %}
-            {% if exp.duration %}<div class="tl-meta"><span>{{ exp.duration }}</span></div>{% endif %}
-            {% if exp.description and (exp.description|trim)|length > 5 %}<div class="tl-desc">{{ (exp.description|trim)[:220] }}</div>{% endif %}
-          </div>
-        {% endif %}
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  {# ════════════ 07 PROJECTS ════════════ #}
-  {% if has_projects %}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">07 / Projects</span>
-      <span class="sec-rule"></span>
-      <span class="sec-sub">From resume · GitHub</span>
-    </div>
-    <div class="proj-grid">
-      {% set pns = namespace(seen=[]) %}
-      {% for proj in projects_data[:6] %}
-        {% set ptitle = (proj.title or '')|trim %}
-        {% if ptitle|length > 2 and ptitle|lower not in JUNK and ptitle|lower not in pns.seen %}
-          {% set _ = pns.seen.append(ptitle|lower) %}
-          <div class="proj-card">
-            <div class="proj-title">{{ ptitle }}</div>
-            {% if proj.description and (proj.description|trim)|length > 8 %}
-            <div class="proj-desc">{{ (proj.description|trim)[:180] }}</div>
-            {% endif %}
-            {% if proj.technologies_used %}
-            <div class="proj-tech">
-              {% set tns = namespace(seen=[]) %}
-              {% set techs = proj.technologies_used %}
-              {% if techs is string %}
-                {% for t in techs.split(',') %}
-                  {% set tt = t|trim %}
-                  {% if tt|length > 1 and tt|lower not in JUNK and tt|lower not in tns.seen %}
-                    {% set _ = tns.seen.append(tt|lower) %}
-                    <span>{{ tt }}</span>
-                  {% endif %}
-                {% endfor %}
-              {% elif techs is iterable %}
-                {% for t in techs %}
-                  {% set tt = (t|string|trim) %}
-                  {% if tt|length > 1 and tt|lower not in JUNK and tt|lower not in tns.seen %}
-                    {% set _ = tns.seen.append(tt|lower) %}
-                    <span>{{ tt }}</span>
-                  {% endif %}
-                {% endfor %}
-              {% endif %}
+          {error && (
+            <div style={S.errBox}>
+              <p style={S.errText}>{error}</p>
             </div>
-            {% endif %}
-          </div>
-        {% endif %}
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  {# ════════════ 08 SKILLS ════════════ #}
-  {% if has_skills %}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">08 / Skills</span>
-      <span class="sec-rule"></span>
-      <span class="sec-sub">Technical · Soft · Tools</span>
-    </div>
-    <div class="skills-grid">
-
-      {% set tech = skills_data.get('technical_skills', []) %}
-      <div class="skill-col">
-        <div class="skill-h">Technical</div>
-        <div class="skill-list">
-          {% set tns = namespace(seen=[]) %}
-          {% for sk in tech %}
-            {% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}
-            {% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in tns.seen %}
-              {% set _ = tns.seen.append(nm|lower) %}
-              <span>{{ nm }}</span>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-
-      {% set soft = skills_data.get('soft_skills', []) %}
-      <div class="skill-col">
-        <div class="skill-h">Soft skills</div>
-        <div class="skill-list">
-          {% set sns = namespace(seen=[]) %}
-          {% for sk in soft %}
-            {% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}
-            {% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in sns.seen %}
-              {% set _ = sns.seen.append(nm|lower) %}
-              <span>{{ nm }}</span>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-
-      {% set tools = skills_data.get('tools', []) %}
-      <div class="skill-col">
-        <div class="skill-h">Tools</div>
-        <div class="skill-list">
-          {% set lns = namespace(seen=[]) %}
-          {% for sk in tools %}
-            {% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}
-            {% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in lns.seen %}
-              {% set _ = lns.seen.append(nm|lower) %}
-              <span>{{ nm }}</span>
-            {% endif %}
-          {% endfor %}
-        </div>
-      </div>
-
-    </div>
-  </div>
-  {% endif %}
-
-  {# ════════════ 09 HOBBIES ════════════ #}
-  {% if has_hobbies %}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">09 / Hobbies &amp; interests</span>
-      <span class="sec-rule"></span>
-    </div>
-    <div class="hobbies-row">
-      {% set hns = namespace(seen=[]) %}
-      {% for h in hobbies_data %}
-        {% set hh = (h|string|trim) %}
-        {% if hh|length > 1 and hh|lower not in JUNK and hh|lower not in hns.seen %}
-          {% set _ = hns.seen.append(hh|lower) %}
-          <span>{{ hh }}</span>
-        {% endif %}
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
-  {# ════════════ 10 EDUCATION ════════════ #}
-  {% if has_edu %}
-  <div class="section">
-    <div class="sec-eyebrow">
-      <span class="sec-mark">10 / Education</span>
-      <span class="sec-rule"></span>
-      <span class="sec-sub">From resume · LinkedIn · LMS</span>
-    </div>
-    <div class="tl">
-      {% set ens = namespace(seen=[]) %}
-      {% for edu in education_data[:5] %}
-        {% set k = ((edu.degree or '')|trim|lower) ~ '|' ~ ((edu.institution or '')|trim|lower) %}
-        {% if k|length > 2 and k not in ens.seen %}
-          {% set _ = ens.seen.append(k) %}
-          <div class="tl-card edu">
-            <div class="tl-title">{{ edu.degree or 'Degree' }}{% if edu.field_of_study %} — {{ edu.field_of_study }}{% endif %}</div>
-            {% if edu.institution %}<div class="tl-org">{{ edu.institution }}</div>{% endif %}
-            <div class="tl-meta">
-              {% if edu.year %}<span>{{ edu.year }}</span>{% endif %}
-              {% if edu.percentage %}<span>{{ edu.percentage }}</span>{% endif %}
-              {% if edu.cgpa %}<span>CGPA {{ edu.cgpa }}</span>{% endif %}
+          )}
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            style={{ ...S.genBtn, opacity: generating ? 0.65 : 1 }}
+          >
+            <Sparkles size={17} />
+            {generating ? "Generating…" : "Generate My AI Profile"}
+          </button>
+          {generating && (
+            <div style={S.genProgress}>
+              <div style={S.spinner} />
+              <p style={S.genProgressText}>Analyzing your resume, courses, and LMS data…</p>
             </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 3) Profile ready — preview + action buttons
+  return (
+    <div style={{ ...S.root, ...S.readyWrap }}>
+      <style>{@keyframes upSpin{to{transform:rotate(360deg)}}}</style>
+
+      {/* Header row */}
+      <div style={S.readyHeader}>
+        <div style={S.readyLeft}>
+          <div style={S.readyDot} />
+          <div>
+            <p style={S.readyTitle}>Your AI Profile is Live</p>
+            {fmtDate(aiProfile.updated_at) && (
+              <p style={S.readySub}>Last updated {fmtDate(aiProfile.updated_at)}</p>
+            )}
           </div>
-        {% endif %}
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
+          <button onClick={handleToggle} style={S.visBadge(aiProfile.visibility)} title="Toggle visibility">
+            {aiProfile.visibility === "public"
+              ? <><Globe size={11} /> Public</>
+              : <><Lock size={11} /> Private</>}
+          </button>
+        </div>
+        <a href={aiProfile.url} target="_blank" rel="noopener noreferrer" style={S.openLink}>
+          <ExternalLink size={12} /> Open full page
+        </a>
+      </div>
 
-  {# ════════════ FOOTER ════════════ #}
-  <div class="footer">
-    <div class="footer-mark">
-      ✦&nbsp;&nbsp;Generated by <span class="gold">Upskillize Profile IQ</span>
-    </div>
-    {% if data_sources %}
-    <div class="footer-sources">
-      {% for src in data_sources %}
-      <span>{% if src == 'lms' %}LMS{% elif src == 'resume' %}Resume{% elif src == 'github' %}GitHub{% elif src == 'linkedin' %}LinkedIn{% elif src == 'lms_profile' %}Profile{% else %}{{ src }}{% endif %}</span>
-      {% endfor %}
-    </div>
-    {% endif %}
-    {% if profile_url %}<a class="footer-link" href="{{ profile_url }}">{{ profile_url }}</a>{% endif %}
-  </div>
+      {/* Inline status banner */}
+      {regenStatus && (
+        <div style={S.statusBanner(regenStatus.kind)}>
+          {regenStatus.kind === "info" ? <Check size={13} /> : <RefreshCw size={13} />}
+          <span>{regenStatus.text}</span>
+        </div>
+      )}
 
-</div>
+      {/* Error */}
+      {error && (
+        <div style={{ ...S.errBox, marginBottom: 12 }}>
+          <p style={S.errText}>{error}</p>
+        </div>
+      )}
 
-</body>
-</html>
+      {/* Iframe preview */}
+      <div style={S.iframeShell}>
+        {generating && (
+          <div style={S.regenOverlay}>
+            <div style={S.regenSpinner} />
+            <p style={S.regenText}>Checking for updates…</p>
+            <p style={S.regenSubtext}>Only changed sections will be refreshed</p>
+          </div>
+        )}
+        <iframe
+          ref={iframeRef}
+          src={aiProfile.url}
+          title="AI Profile Preview"
+          style={S.iframe}
+          loading="lazy"
+        />
+      </div>
+
+      {/* Bottom action bar */}
+      <div style={S.actionBar}>
+        <button
+          onClick={handleRegenerate}
+          disabled={generating}
+          style={{ ...S.regenBtn, opacity: generating ? 0.6 : 1 }}
+          title="Check for new data and refresh changed sections"
+        >
+          <RefreshCw size={15} style={{ animation: generating ? "upSpin 1s linear infinite" : "none" }} />
+          {generating ? "Checking…" : "Regenerate"}
+        </button>
+
+        {/* Share button with popover */}
+        <div ref={shareRef} style={{ flex: 1, position: "relative" }}>
+          <button
+            onClick={() => setShowShareMenu(prev => !prev)}
+            style={{ ...S.shareBtn, width: "100%", background: shared ? "#059669" : "#1E3A5F" }}
+            title="Share your profile"
+          >
+            {shared ? <Check size={15} /> : <Share2 size={15} />}
+            {shared ? "Link Copied!" : "Share Profile"}
+          </button>
+
+          {/* Share popover menu */}
+          {showShareMenu && (
+            <div style={S.sharePopover}>
+              <button
+                onClick={handleShareWhatsApp}
+                style={S.shareItem}
+                onMouseEnter={e => e.currentTarget.style.background = "#f0fdf4"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                WhatsApp
+              </button>
+              <button
+                onClick={handleShareTelegram}
+                style={S.shareItem}
+                onMouseEnter={e => e.currentTarget.style.background = "#eff6ff"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#229ED9"><path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0a12 12 0 00-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                Telegram
+              </button>
+              <button
+                onClick={handleShareLinkedIn}
+                style={S.shareItem}
+                onMouseEnter={e => e.currentTarget.style.background = "#eff6ff"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#0077B5"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                LinkedIn
+              </button>
+              <div style={{ height: 1, background: "#f1f5f9", margin: "4px 6px" }} />
+              <button
+                onClick={handleCopyLink}
+                style={S.shareItem}
+                onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <Copy size={15} color="#6b7280" />
+                Copy Link
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
