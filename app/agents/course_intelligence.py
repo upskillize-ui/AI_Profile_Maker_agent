@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 HAS_API = bool(ANTHROPIC_API_KEY.strip())
-MODEL_PRIMARY  = "claude-sonnet-4-6"
+MODEL_PRIMARY  = "claude-haiku-4-5-20251001"
 MODEL_FALLBACK = "claude-haiku-4-5-20251001"
 
 

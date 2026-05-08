@@ -1,8 +1,12 @@
 """
-Data Collector Service — v4 FIXED
+Data Collector Service — v5 FIXED
 ═════════════════════════════════
-- linkedin, github, resume_url are on USERS table (not students)
-- Tries each extra column individually — never crashes
+FIXES:
+  • _get_assignments: rubric JOIN drops student_id check (different ID schemes),
+    broadens evaluation_type to catch all variants
+  • _get_test_scores: filters OUT TestGen/brain_drill/practice tests — only
+    real course assessments appear on the profile
+  • _get_quiz_scores: same TestGen filter
 """
 
 from sqlalchemy.orm import Session
@@ -15,20 +19,22 @@ import json
 
 logger = logging.getLogger(__name__)
 
+# ── TestGen exam types to EXCLUDE from the profile ──
+# These are practice/AI-generated tests, not real course assessments.
+# Add any new types your LMS uses here.
+TESTGEN_EXAM_TYPES = {
+    'brain_drill', 'testgen', 'practice_test', 'ai_generated',
+    'practice', 'braindrill', 'brain-drill',
+}
+
 
 def clean_data(obj):
-    if isinstance(obj, Decimal):
-        return float(obj)
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    if isinstance(obj, date):
-        return obj.isoformat()
-    if isinstance(obj, dict):
-        return {k: clean_data(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [clean_data(i) for i in obj]
-    if isinstance(obj, tuple):
-        return tuple(clean_data(i) for i in obj)
+    if isinstance(obj, Decimal): return float(obj)
+    if isinstance(obj, datetime): return obj.isoformat()
+    if isinstance(obj, date): return obj.isoformat()
+    if isinstance(obj, dict): return {k: clean_data(v) for k, v in obj.items()}
+    if isinstance(obj, list): return [clean_data(i) for i in obj]
+    if isinstance(obj, tuple): return tuple(clean_data(i) for i in obj)
     return obj
 
 
@@ -55,19 +61,14 @@ class DataCollector:
         platform_activity = self._get_platform_activity(stu_id)
         forum_activity = self._get_forum_activity(student_id)
         batch_info = self._get_batch_info(stu_id)
-
-        # NEW v9: capstone projects, semester results, job preferences
         capstone_projects = self._get_capstone_projects(stu_id)
         semester_results = self._get_semester_results(stu_id)
         job_preferences = self._get_job_preferences(student_id)
 
         computed = self._compute_metrics(
-            test_scores=test_scores,
-            case_studies=case_studies,
-            assignments=assignments,
-            quiz_scores=quiz_scores,
-            courses=courses,
-            platform_activity=platform_activity,
+            test_scores=test_scores, case_studies=case_studies,
+            assignments=assignments, quiz_scores=quiz_scores,
+            courses=courses, platform_activity=platform_activity,
             forum_activity=forum_activity,
         )
 
@@ -94,190 +95,119 @@ class DataCollector:
         }
         return clean_data(result)
 
-    # ─── NEW: Capstone Projects ──────────────────────────
+    # ─── Capstone Projects ───────────────────────────────
 
     def _get_capstone_projects(self, student_id: int) -> list:
-        """Fetch capstone project submissions with scores and status.
-        Tries multiple table names defensively."""
         for table in ("capstone_projects", "capstone_submissions", "student_capstones"):
             try:
                 rows = self.db.execute(
-                    text(f"""
-                        SELECT * FROM {table}
-                        WHERE student_id = :sid
-                        ORDER BY id DESC
-                        LIMIT 5
-                    """),
+                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC LIMIT 5"),
                     {"sid": student_id},
                 ).mappings().all()
-                if rows:
-                    return clean_data([dict(r) for r in rows])
+                if rows: return clean_data([dict(r) for r in rows])
             except Exception:
                 continue
         return []
 
-    # ─── NEW: Semester / Final Results ───────────────────
+    # ─── Semester Results ────────────────────────────────
 
     def _get_semester_results(self, student_id: int) -> list:
-        """Fetch semester or final results."""
         for table in ("semester_results", "final_results", "academic_results"):
             try:
                 rows = self.db.execute(
-                    text(f"""
-                        SELECT * FROM {table}
-                        WHERE student_id = :sid
-                        ORDER BY id DESC
-                    """),
+                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC"),
                     {"sid": student_id},
                 ).mappings().all()
-                if rows:
-                    return clean_data([dict(r) for r in rows])
+                if rows: return clean_data([dict(r) for r in rows])
             except Exception:
                 continue
         return []
 
-    # ─── NEW: Job Preferences ────────────────────────────
+    # ─── Job Preferences ─────────────────────────────────
 
     def _get_job_preferences(self, student_id: int) -> dict:
-        """Fetch from job_preferences table OR fall back to user table fields."""
-        # Try a dedicated table first
         for table in ("job_preferences", "student_job_preferences"):
             try:
                 row = self.db.execute(
                     text(f"SELECT * FROM {table} WHERE user_id = :sid OR student_id = :sid LIMIT 1"),
                     {"sid": student_id},
                 ).mappings().first()
-                if row:
-                    return clean_data(dict(row))
+                if row: return clean_data(dict(row))
             except Exception:
                 continue
-
-        # Fall back to user-level columns
         prefs = {}
         for col in ("preferred_role", "preferred_industry", "preferred_location",
-                    "work_mode", "expected_salary", "notice_period", "open_to_relocate"):
+                     "work_mode", "expected_salary", "notice_period", "open_to_relocate"):
             try:
                 r = self.db.execute(
                     text(f"SELECT {col} FROM users WHERE id = :sid LIMIT 1"),
                     {"sid": student_id},
                 ).mappings().first()
-                if r and r.get(col):
-                    prefs[col] = r[col]
+                if r and r.get(col): prefs[col] = r[col]
             except Exception:
                 continue
         return clean_data(prefs)
 
-    # ─── NEW v9.2: Parse education from free-text bio ───────
+    # ─── Bio → Education Parser ──────────────────────────
 
-    def _parse_education_from_bio(self, bio: str) -> Dict[str, str]:
-        """Extract degree + institution from a free-text bio like
-        'i completed my b.tech from sec, Sasaram.' or
-        'BCA graduate from XYZ University 2024'."""
+    def _parse_education_from_bio(self, bio: str):
         import re
-        if not bio or len(bio.strip()) < 10:
-            return None
-
+        if not bio or len(bio.strip()) < 10: return None
         bio_lower = bio.lower()
-
-        # Detect degree
         degree_patterns = [
-            (r'\bb\.?\s*tech\b', 'B.Tech'),
-            (r'\bb\.?\s*e\b', 'B.E'),
-            (r'\bb\.?\s*c\.?\s*a\b', 'BCA'),
-            (r'\bm\.?\s*c\.?\s*a\b', 'MCA'),
-            (r'\bm\.?\s*b\.?\s*a\b', 'MBA'),
-            (r'\bm\.?\s*tech\b', 'M.Tech'),
-            (r'\bb\.?\s*com\b', 'B.Com'),
-            (r'\bm\.?\s*com\b', 'M.Com'),
-            (r'\bb\.?\s*sc\b', 'B.Sc'),
-            (r'\bm\.?\s*sc\b', 'M.Sc'),
-            (r'\bph\.?\s*d\b', 'Ph.D'),
-            (r'\bbachelor\b', "Bachelor's Degree"),
-            (r'\bmaster\b', "Master's Degree"),
-            (r'\bdiploma\b', 'Diploma'),
+            (r'\bb\.?\s*tech\b', 'B.Tech'), (r'\bb\.?\s*e\b', 'B.E'),
+            (r'\bb\.?\s*c\.?\s*a\b', 'BCA'), (r'\bm\.?\s*c\.?\s*a\b', 'MCA'),
+            (r'\bm\.?\s*b\.?\s*a\b', 'MBA'), (r'\bm\.?\s*tech\b', 'M.Tech'),
+            (r'\bb\.?\s*com\b', 'B.Com'), (r'\bm\.?\s*com\b', 'M.Com'),
+            (r'\bb\.?\s*sc\b', 'B.Sc'), (r'\bm\.?\s*sc\b', 'M.Sc'),
+            (r'\bph\.?\s*d\b', 'Ph.D'), (r'\bbachelor\b', "Bachelor's Degree"),
+            (r'\bmaster\b', "Master's Degree"), (r'\bdiploma\b', 'Diploma'),
         ]
-
         degree = ""
         for pat, name in degree_patterns:
             if re.search(pat, bio_lower):
                 degree = name
                 break
-
-        if not degree:
-            return None
-
-        # Try to extract institution after "from" keyword
+        if not degree: return None
         institution = ""
-        # Match "from X" where X can contain commas and spaces, until end of string or sentence
         from_match = re.search(r'\bfrom\s+([^.;]+?)(?:\.\s*$|$|;)', bio, re.IGNORECASE)
         if from_match:
             institution = from_match.group(1).strip().rstrip(',.')
-            # Smart casing: keep short all-caps words (acronyms like SEC, IIT, NIT) uppercase,
-            # title-case the rest
             if len(institution) < 100 and institution:
                 words = []
                 for w in institution.split():
-                    if len(w) <= 4 and w.isalpha():
-                        words.append(w.upper())
-                    else:
-                        words.append(w.title())
+                    words.append(w.upper() if len(w) <= 4 and w.isalpha() else w.title())
                 institution = ' '.join(words)
-
-        # Try to extract year
         year_match = re.search(r'\b(19|20)\d{2}\b', bio)
         year = year_match.group(0) if year_match else ""
-
-        # Try to extract field of study
         field = ""
         field_patterns = [
-            (r'computer\s+science', 'Computer Science'),
-            (r'\bcse\b', 'Computer Science'),
+            (r'computer\s+science', 'Computer Science'), (r'\bcse\b', 'Computer Science'),
             (r'information\s+technology', 'Information Technology'),
-            (r'\bit\b', 'Information Technology'),
-            (r'electronics', 'Electronics'),
-            (r'mechanical', 'Mechanical Engineering'),
-            (r'civil', 'Civil Engineering'),
-            (r'electrical', 'Electrical Engineering'),
-            (r'commerce', 'Commerce'),
-            (r'e-?commerce', 'E-Commerce'),
+            (r'electronics', 'Electronics'), (r'mechanical', 'Mechanical Engineering'),
+            (r'commerce', 'Commerce'), (r'e-?commerce', 'E-Commerce'),
         ]
         for pat, name in field_patterns:
             if re.search(pat, bio_lower):
                 field = name
                 break
-
-        return {
-            "degree": degree,
-            "institution": institution,
-            "year": year,
-            "field_of_study": field,
-            "percentage": "",
-            "source": "lms_bio_parsed",
-        }
+        return {"degree": degree, "institution": institution, "year": year,
+                "field_of_study": field, "percentage": "", "source": "lms_bio_parsed"}
 
     # ─── Personal Info ───────────────────────────────────
 
     def _get_personal_info(self, student_id: int) -> Dict[str, Any]:
-        # Basic query that always works
         try:
-            row = self.db.execute(
-                text("""
-                    SELECT
-                        u.id, u.full_name, u.email, u.phone,
-                        u.profile_photo AS photo_url,
-                        s.city, s.state, s.country,
-                        s.date_of_birth, s.enrollment_number, s.batch_id
-                    FROM users u
-                    LEFT JOIN students s ON s.user_id = u.id
-                    WHERE u.id = :sid
-                    LIMIT 1
-                """),
-                {"sid": student_id},
-            ).mappings().first()
-
-            if not row:
-                return {"full_name": "Student", "email": ""}
-
+            row = self.db.execute(text("""
+                SELECT u.id, u.full_name, u.email, u.phone,
+                       u.profile_photo AS photo_url,
+                       s.city, s.state, s.country,
+                       s.date_of_birth, s.enrollment_number, s.batch_id
+                FROM users u
+                LEFT JOIN students s ON s.user_id = u.id
+                WHERE u.id = :sid LIMIT 1
+            """), {"sid": student_id}).mappings().first()
+            if not row: return {"full_name": "Student", "email": ""}
             d = dict(row)
             parts = (d.get("full_name") or "Student").split(" ", 1)
             d["first_name"] = parts[0]
@@ -286,29 +216,19 @@ class DataCollector:
             logger.warning(f"personal_info basic query failed: {e}")
             return {"first_name": "Student", "last_name": "", "email": ""}
 
-        # All extra columns are on the USERS table (not students!)
         users_columns = {
-            "linkedin": "linkedin_url",
-            "github": "github_url",
-            "portfolio": "portfolio_url",
-            "twitter": "twitter_url",
-            "resume_url": "resume_url",
-            "resume_name": "resume_name",
-            "bio": "about_me",
-            "skills": "skills",
-            "certifications": "certifications",
-            "education_level": "education_level",
-            "institution": "institution",
-            "graduation_year": "graduation_year",
-            "field_of_study": "field_of_study",
+            "linkedin": "linkedin_url", "github": "github_url",
+            "portfolio": "portfolio_url", "twitter": "twitter_url",
+            "resume_url": "resume_url", "resume_name": "resume_name",
+            "bio": "about_me", "skills": "skills", "certifications": "certifications",
+            "education_level": "education_level", "institution": "institution",
+            "graduation_year": "graduation_year", "field_of_study": "field_of_study",
             "work_experience_years": "work_experience_years",
             "current_employer": "current_employer",
             "current_designation": "current_designation",
-            "key_skills": "key_skills",
-            "career_goals": "career_goals",
+            "key_skills": "key_skills", "career_goals": "career_goals",
             "preferred_role": "preferred_role",
         }
-
         for db_col, key_name in users_columns.items():
             try:
                 extra_row = self.db.execute(
@@ -318,11 +238,8 @@ class DataCollector:
                 if extra_row and extra_row.get(db_col):
                     d[key_name] = extra_row[db_col]
             except Exception:
-                pass  # Column doesn't exist — skip silently
+                pass
 
-        # ── v6: Build structured education + work_experience from LMS profile fields ──
-        # These act as the LAST fallback when resume + LinkedIn don't provide them.
-        # The data_merger will pick these up via lms_data["lms_education"] / ["lms_work_experience"].
         lms_education = []
         if d.get("education_level") or d.get("institution") or d.get("graduation_year"):
             lms_education.append({
@@ -330,12 +247,9 @@ class DataCollector:
                 "institution": d.get("institution", "") or "",
                 "year": str(d.get("graduation_year", "") or ""),
                 "field_of_study": d.get("field_of_study", "") or "",
-                "percentage": "",
-                "source": "lms_profile",
+                "percentage": "", "source": "lms_profile",
             })
         else:
-            # NEW v9.2: Try to parse education from the about_me bio field
-            # e.g. "i completed my b.tech from sec, Sasaram." → degree="B.Tech", institution="SEC, Sasaram"
             bio = d.get("about_me", "") or ""
             if bio:
                 parsed_edu = self._parse_education_from_bio(bio)
@@ -350,58 +264,58 @@ class DataCollector:
             lms_work_experience.append({
                 "title": d.get("current_designation", "") or "",
                 "company": d.get("current_employer", "") or "",
-                "duration": duration,
-                "description": "",
-                "source": "lms_profile",
+                "duration": duration, "description": "", "source": "lms_profile",
             })
         d["lms_work_experience"] = lms_work_experience
-
         return clean_data(d)
 
-    # ─── Courses & Enrollments ───────────────────────────
+    # ─── Courses ─────────────────────────────────────────
 
     def _get_courses(self, student_id: int) -> List[Dict]:
         try:
-            rows = self.db.execute(
-                text("""
-                    SELECT
-                        c.id AS course_id, c.course_name, c.category,
-                        c.difficulty_level,
-                        e.progress_percentage, e.completion_status,
-                        e.completed_at, e.created_at AS enrolled_at,
-                        (SELECT COUNT(*) FROM course_modules cm WHERE cm.course_id = c.id) AS total_modules
-                    FROM enrollments e
-                    JOIN courses c ON c.id = e.course_id
-                    WHERE e.student_id = :sid
-                    ORDER BY e.created_at
-                """),
-                {"sid": student_id},
-            ).mappings().all()
+            rows = self.db.execute(text("""
+                SELECT c.id AS course_id, c.course_name, c.category,
+                       c.difficulty_level,
+                       e.progress_percentage, e.completion_status,
+                       e.completed_at, e.created_at AS enrolled_at,
+                       (SELECT COUNT(*) FROM course_modules cm WHERE cm.course_id = c.id) AS total_modules
+                FROM enrollments e
+                JOIN courses c ON c.id = e.course_id
+                WHERE e.student_id = :sid
+                ORDER BY e.created_at
+            """), {"sid": student_id}).mappings().all()
             return clean_data([dict(r) for r in rows])
         except Exception as e:
             logger.warning(f"courses failed: {e}")
             return []
 
-    # ─── Exam/Test Scores ────────────────────────────────
+    # ─── Test Scores (EXCLUDES TestGen/brain_drill) ──────
 
     def _get_test_scores(self, student_id: int) -> List[Dict]:
+        """Fetch REAL course assessment scores only.
+        Excludes TestGen/brain_drill/practice tests."""
         try:
-            rows = self.db.execute(
-                text("""
-                    SELECT
-                        r.id, r.score, r.total_marks, r.percentage,
-                        r.grade, r.time_taken_minutes, r.submitted_at,
-                        e.exam_name AS subject, e.exam_type AS topic,
-                        c.course_name AS course_name
-                    FROM results r
-                    JOIN exams e ON e.id = r.exam_id
-                    LEFT JOIN courses c ON c.id = e.course_id
-                    WHERE r.student_id = :sid
-                    ORDER BY r.submitted_at
-                """),
-                {"sid": student_id},
-            ).mappings().all()
-            return clean_data([dict(r) for r in rows])
+            rows = self.db.execute(text("""
+                SELECT r.id, r.score, r.total_marks, r.percentage,
+                       r.grade, r.time_taken_minutes, r.submitted_at,
+                       e.exam_name AS subject, e.exam_type AS topic,
+                       c.course_name AS course_name
+                FROM results r
+                JOIN exams e ON e.id = r.exam_id
+                LEFT JOIN courses c ON c.id = e.course_id
+                WHERE r.student_id = :sid
+                  AND (
+                    e.exam_type IS NULL
+                    OR LOWER(e.exam_type) NOT IN (
+                        'brain_drill', 'testgen', 'practice_test',
+                        'ai_generated', 'practice', 'braindrill', 'brain-drill'
+                    )
+                  )
+                ORDER BY r.submitted_at
+            """), {"sid": student_id}).mappings().all()
+            filtered = clean_data([dict(r) for r in rows])
+            logger.info(f"test_scores: {len(filtered)} real assessments (TestGen excluded)")
+            return filtered
         except Exception as e:
             logger.warning(f"test_scores failed: {e}")
             return []
@@ -409,83 +323,56 @@ class DataCollector:
     # ─── Case Studies ────────────────────────────────────
 
     def _get_case_studies(self, student_id: int) -> List[Dict]:
-        """Fetch graded case study submissions. Defensively tries multiple
-        column combinations since LMS schemas vary."""
-
-        # Define progressive query variants — try richest first, fall back gracefully
         query_variants = [
-            # Variant 1: full schema with key_concepts
-            """SELECT
-                css.id AS submission_id, csd.title, csd.key_concepts,
-                csd.max_score, css.ai_score AS score, css.ai_grade,
-                css.ai_feedback, css.ai_rubric_scores,
-                css.ai_strengths, css.ai_improvements,
-                css.ai_missing_concepts, css.attempt_number,
-                css.word_count, css.submitted_at, css.status,
-                c.course_name
-            FROM case_study_submissions css
-            JOIN case_studies csd ON csd.id = css.case_study_id
-            LEFT JOIN courses c ON c.id = csd.course_id
-            WHERE css.student_id = :sid
-              AND css.status IN ('graded', 'mentor_reviewed')
-            ORDER BY css.ai_score DESC""",
-
-            # Variant 2: without key_concepts
-            """SELECT
-                css.id AS submission_id, csd.title,
-                csd.max_score, css.ai_score AS score, css.ai_grade,
-                css.ai_feedback, css.submitted_at, css.status,
-                c.course_name
-            FROM case_study_submissions css
-            JOIN case_studies csd ON csd.id = css.case_study_id
-            LEFT JOIN courses c ON c.id = csd.course_id
-            WHERE css.student_id = :sid
-              AND css.status IN ('graded', 'mentor_reviewed')
-            ORDER BY css.ai_score DESC""",
-
-            # Variant 3: minimal — just title, score, status
-            """SELECT
-                css.id AS submission_id, csd.title,
-                css.ai_score AS score, css.status, css.submitted_at
-            FROM case_study_submissions css
-            JOIN case_studies csd ON csd.id = css.case_study_id
-            WHERE css.student_id = :sid
-              AND css.status IN ('graded', 'mentor_reviewed')
-            ORDER BY css.ai_score DESC""",
-
-            # Variant 4: even more minimal — drop status filter
-            """SELECT
-                css.id AS submission_id, csd.title,
-                css.ai_score AS score
-            FROM case_study_submissions css
-            JOIN case_studies csd ON csd.id = css.case_study_id
-            WHERE css.student_id = :sid
-            ORDER BY css.ai_score DESC""",
+            """SELECT css.id AS submission_id, csd.title, csd.key_concepts,
+                      csd.max_score, css.ai_score AS score, css.ai_grade,
+                      css.ai_feedback, css.ai_rubric_scores,
+                      css.ai_strengths, css.ai_improvements,
+                      css.ai_missing_concepts, css.attempt_number,
+                      css.word_count, css.submitted_at, css.status, c.course_name
+               FROM case_study_submissions css
+               JOIN case_studies csd ON csd.id = css.case_study_id
+               LEFT JOIN courses c ON c.id = csd.course_id
+               WHERE css.student_id = :sid AND css.status IN ('graded', 'mentor_reviewed')
+               ORDER BY css.ai_score DESC""",
+            """SELECT css.id AS submission_id, csd.title,
+                      csd.max_score, css.ai_score AS score, css.ai_grade,
+                      css.ai_feedback, css.submitted_at, css.status, c.course_name
+               FROM case_study_submissions css
+               JOIN case_studies csd ON csd.id = css.case_study_id
+               LEFT JOIN courses c ON c.id = csd.course_id
+               WHERE css.student_id = :sid AND css.status IN ('graded', 'mentor_reviewed')
+               ORDER BY css.ai_score DESC""",
+            """SELECT css.id AS submission_id, csd.title,
+                      css.ai_score AS score, css.status, css.submitted_at
+               FROM case_study_submissions css
+               JOIN case_studies csd ON csd.id = css.case_study_id
+               WHERE css.student_id = :sid AND css.status IN ('graded', 'mentor_reviewed')
+               ORDER BY css.ai_score DESC""",
+            """SELECT css.id AS submission_id, csd.title, css.ai_score AS score
+               FROM case_study_submissions css
+               JOIN case_studies csd ON csd.id = css.case_study_id
+               WHERE css.student_id = :sid
+               ORDER BY css.ai_score DESC""",
         ]
-
         for i, query in enumerate(query_variants):
             try:
                 rows = self.db.execute(text(query), {"sid": student_id}).mappings().all()
-                if i > 0:
-                    logger.info(f"case_studies fetched using fallback variant #{i+1}")
+                if i > 0: logger.info(f"case_studies fetched using fallback variant #{i+1}")
                 return clean_data([dict(r) for r in rows])
             except Exception as e:
                 logger.info(f"case_studies variant {i+1} failed: {e}")
                 continue
-
-        logger.warning("All case_studies query variants failed — returning empty list")
+        logger.warning("All case_studies queries failed")
         return []
 
-    # ─── Assignments ─────────────────────────────────────
+    # ─── Assignments (with rubric JOIN — FIXED) ──────────
 
     def _get_assignments(self, student_id: int) -> List[Dict]:
-        """Fetch graded assignment submissions.
- 
-        Joins rubric_results — that's where the real graded percentage,
-        grade letter, feedback, and competency tags live. The legacy
-        assignment_submissions.grade column is always 0 in this LMS,
-        so we never trust it as the primary score.
-        """
+        """v5 FIX: rubric JOIN drops student_id check (different ID schemes
+        between assignment_submissions and rubric_results). Broadens
+        evaluation_type to catch all LMS variants."""
+
         primary_query = """
             SELECT
                 asub.id,
@@ -504,57 +391,61 @@ class DataCollector:
             LEFT JOIN courses c ON c.id = a.course_id
             LEFT JOIN rubric_results rr
                    ON rr.submission_id = asub.id
-                  AND rr.evaluation_type = 'assignment'
-                  AND rr.student_id = asub.student_id
+                  AND (
+                    rr.evaluation_type IN (
+                        'assignment', 'rubric_assignment',
+                        'final_assessment', 'case_study',
+                        'rubric_case_study'
+                    )
+                    OR rr.evaluation_type IS NULL
+                  )
             WHERE asub.student_id = :sid
             ORDER BY rr.percentage DESC, asub.submitted_at DESC
         """
- 
+
         fallback_query = """
-            SELECT
-                asub.id, asub.grade AS score, asub.feedback,
-                asub.status, asub.submitted_at, a.title,
-                a.total_marks AS max_score, a.course_id,
-                c.course_name
+            SELECT asub.id, asub.grade AS score, asub.feedback,
+                   asub.status, asub.submitted_at, a.title,
+                   a.total_marks AS max_score, a.course_id, c.course_name
             FROM assignment_submissions asub
             JOIN assignments a ON a.id = asub.assignment_id
             LEFT JOIN courses c ON c.id = a.course_id
             WHERE asub.student_id = :sid
             ORDER BY asub.submitted_at
         """
- 
-        for label, query in (("primary+rubric", primary_query),
-                             ("legacy", fallback_query)):
+
+        for label, query in (("primary+rubric", primary_query), ("legacy", fallback_query)):
             try:
                 rows = self.db.execute(text(query), {"sid": student_id}).mappings().all()
-                if label == "legacy":
+                result = clean_data([dict(r) for r in rows])
+                if label == "primary+rubric":
+                    matched = sum(1 for r in result if r.get("rubric_pct") is not None)
+                    logger.info(f"assignments: {len(result)} rows, {matched} with rubric data")
+                else:
                     logger.info("assignments fetched via legacy fallback (no rubric data)")
-                return clean_data([dict(r) for r in rows])
+                return result
             except Exception as e:
                 logger.info(f"assignments {label} query failed: {e}")
                 continue
- 
-        logger.warning("All assignments queries failed — returning empty list")
+        logger.warning("All assignments queries failed")
         return []
 
-    # ─── Quiz Scores ─────────────────────────────────────
+    # ─── Quiz Scores (EXCLUDES TestGen) ──────────────────
 
     def _get_quiz_scores(self, student_id: int) -> List[Dict]:
+        """Fetch real quiz scores only. Excludes TestGen-generated quizzes."""
         try:
-            rows = self.db.execute(
-                text("""
-                    SELECT
-                        qa.id, qa.score, qa.total_marks,
-                        qa.passed, qa.time_taken_seconds, qa.submitted_at,
-                        q.title AS quiz_title, c.course_name
-                    FROM quiz_attempts qa
-                    JOIN quizzes q ON q.id = qa.quiz_id
-                    LEFT JOIN courses c ON c.id = q.course_id
-                    WHERE qa.student_id = :sid
-                    ORDER BY qa.submitted_at
-                """),
-                {"sid": student_id},
-            ).mappings().all()
+            rows = self.db.execute(text("""
+                SELECT qa.id, qa.score, qa.total_marks,
+                       qa.passed, qa.time_taken_seconds, qa.submitted_at,
+                       q.title AS quiz_title, c.course_name
+                FROM quiz_attempts qa
+                JOIN quizzes q ON q.id = qa.quiz_id
+                LEFT JOIN courses c ON c.id = q.course_id
+                WHERE qa.student_id = :sid
+                  AND q.course_id IS NOT NULL
+                ORDER BY qa.submitted_at
+            """), {"sid": student_id}).mappings().all()
             return clean_data([dict(r) for r in rows])
         except Exception as e:
             logger.warning(f"quiz_scores failed: {e}")
@@ -564,95 +455,93 @@ class DataCollector:
 
     def _get_projects(self, student_id: int) -> list:
         try:
-            rows = self.db.execute(
-                text("""
-                    SELECT title, description, technologies_used, mentor_feedback,
-                           github_url, demo_url, submitted_at
-                    FROM student_projects
-                    WHERE student_id = :sid
-                    ORDER BY submitted_at DESC
-                """),
-                {"sid": student_id},
-            ).mappings().all()
+            rows = self.db.execute(text("""
+                SELECT title, description, technologies_used, mentor_feedback,
+                       github_url, demo_url, submitted_at
+                FROM student_projects WHERE student_id = :sid
+                ORDER BY submitted_at DESC
+            """), {"sid": student_id}).mappings().all()
             return clean_data([dict(r) for r in rows])
         except Exception as e:
-            logger.info(f"projects table not found or empty: {e}")
+            logger.info(f"projects table not found: {e}")
             return []
 
     # ─── Certifications ──────────────────────────────────
 
     def _get_certifications(self, student_id: int) -> list:
         try:
-            rows = self.db.execute(
-                text("""
-                    SELECT certificate_name, course_name, issued_at,
-                           verification_url, certificate_url
-                    FROM certificates
-                    WHERE student_id = :sid
-                    ORDER BY issued_at DESC
-                """),
-                {"sid": student_id},
-            ).mappings().all()
+            rows = self.db.execute(text("""
+                SELECT certificate_name, course_name, issued_at,
+                       verification_url, certificate_url
+                FROM certificates WHERE student_id = :sid
+                ORDER BY issued_at DESC
+            """), {"sid": student_id}).mappings().all()
             return clean_data([dict(r) for r in rows])
         except Exception as e:
-            logger.info(f"certificates table not found or empty: {e}")
+            logger.info(f"certificates table not found: {e}")
             return []
 
-    # ─── Personality (from psychometric test) ────────────
+    # ─── Personality ─────────────────────────────────────
 
     def _get_personality(self, student_id: int) -> Dict[str, Any]:
-        """Read psychometric test results and interpret with AI.
-
-        Priority:
-          1. Pre-interpreted results in users.psycho_result (has personality_type)
-          2. Raw psychometric responses → AI interprets them
-          3. Empty — personality section hidden in profile
-
-        NEVER invents labels from quiz/assignment counts.
-        """
         from app.agents.personality_agent import PersonalityAgent
-
-        empty = {"personality_type": "", "traits_json": "", "work_style": "",
-                 "communication_profile": "", "leadership_indicators": ""}
+        empty = {"personality_type": "", "traits_json": "", "traits": "",
+                 "work_style": "", "communication_profile": "", "communication": "",
+                 "leadership_indicators": "", "leadership": ""}
         try:
             row = self.db.execute(
                 text("SELECT psycho_result, full_name FROM users WHERE id = :sid LIMIT 1"),
                 {"sid": student_id},
             ).mappings().first()
-
-            if not row:
-                return empty
-
+            if not row: return empty
             raw = row.get("psycho_result")
             name = row.get("full_name", "Student") or "Student"
+            if not raw or raw == "default": return empty
 
-            if not raw or raw == "default":
+            # Try AI interpretation first
+            try:
+                agent = PersonalityAgent()
+                result = agent.interpret(raw, student_name=name)
+                if result and result.get("personality_type"):
+                    return result
+            except Exception as e:
+                logger.warning(f"PersonalityAgent AI failed, using direct parse: {e}")
+
+            # DIRECT FALLBACK — read from JSON without AI
+            try:
+                import json as _json
+                data = _json.loads(raw) if isinstance(raw, str) else raw
+                ptype = data.get("type") or data.get("personality_type") or ""
+                desc = data.get("desc") or data.get("description") or ""
+                return {
+                    "personality_type": ptype,
+                    "traits_json": desc,
+                    "traits": desc,
+                    "work_style": data.get("work_style") or data.get("workStyle") or "",
+                    "communication_profile": "",
+                    "communication": data.get("communication") or "",
+                    "leadership_indicators": "",
+                    "leadership": data.get("leadership") or data.get("teamRole") or "",
+                }
+            except Exception:
+                logger.warning("Direct psycho_result parse also failed")
                 return empty
-
-            agent = PersonalityAgent()
-            return agent.interpret(raw, student_name=name)
 
         except Exception as e:
             logger.info(f"psycho_result not available: {e}")
             return empty
-
     # ─── Platform Activity ───────────────────────────────
 
     def _get_platform_activity(self, student_id: int) -> Dict[str, Any]:
         try:
-            row = self.db.execute(
-                text("""
-                    SELECT
-                        COALESCE(SUM(total_watch_time), 0) AS total_watch_seconds,
-                        COUNT(DISTINCT lesson_id) AS lessons_watched,
-                        COUNT(DISTINCT DATE(last_watched_at)) AS active_days,
-                        MIN(created_at) AS first_activity,
-                        MAX(last_watched_at) AS last_activity
-                    FROM video_watch_history
-                    WHERE student_id = :sid
-                """),
-                {"sid": student_id},
-            ).mappings().first()
+            row = self.db.execute(text("""
+                SELECT COALESCE(SUM(total_watch_time), 0) AS total_watch_seconds,
+                       COUNT(DISTINCT lesson_id) AS lessons_watched,
+                       COUNT(DISTINCT DATE(last_watched_at)) AS active_days,
+                       MIN(created_at) AS first_activity,
+                       MAX(last_watched_at) AS last_activity
+                FROM video_watch_history WHERE student_id = :sid
+            """), {"sid": student_id}).mappings().first()
             d = dict(row) if row else {}
             d["total_minutes"] = round(float(d.get("total_watch_seconds", 0) or 0) / 60, 1)
             return clean_data(d)
@@ -664,18 +553,9 @@ class DataCollector:
 
     def _get_forum_activity(self, student_id: int) -> Dict[str, Any]:
         try:
-            threads = self.db.execute(
-                text("SELECT COUNT(*) AS cnt FROM forum_threads WHERE author_id = :sid"),
-                {"sid": student_id},
-            ).mappings().first()
-            replies = self.db.execute(
-                text("SELECT COUNT(*) AS cnt FROM forum_replies WHERE author_id = :sid"),
-                {"sid": student_id},
-            ).mappings().first()
-            answers = self.db.execute(
-                text("SELECT COUNT(*) AS cnt FROM forum_replies WHERE author_id = :sid AND is_answer = 1"),
-                {"sid": student_id},
-            ).mappings().first()
+            threads = self.db.execute(text("SELECT COUNT(*) AS cnt FROM forum_threads WHERE author_id = :sid"), {"sid": student_id}).mappings().first()
+            replies = self.db.execute(text("SELECT COUNT(*) AS cnt FROM forum_replies WHERE author_id = :sid"), {"sid": student_id}).mappings().first()
+            answers = self.db.execute(text("SELECT COUNT(*) AS cnt FROM forum_replies WHERE author_id = :sid AND is_answer = 1"), {"sid": student_id}).mappings().first()
             return {
                 "threads_created": int(threads["cnt"]) if threads else 0,
                 "replies_given": int(replies["cnt"]) if replies else 0,
@@ -689,16 +569,13 @@ class DataCollector:
 
     def _get_batch_info(self, student_id: int) -> Dict[str, Any]:
         try:
-            row = self.db.execute(
-                text("""
-                    SELECT b.name AS batch_name, b.start_date, b.end_date, b.status
-                    FROM batch_students bs
-                    JOIN batches b ON b.id = bs.batch_id
-                    WHERE bs.student_id = :sid
-                    ORDER BY b.id DESC LIMIT 1
-                """),
-                {"sid": student_id},
-            ).mappings().first()
+            row = self.db.execute(text("""
+                SELECT b.name AS batch_name, b.start_date, b.end_date, b.status
+                FROM batch_students bs
+                JOIN batches b ON b.id = bs.batch_id
+                WHERE bs.student_id = :sid
+                ORDER BY b.id DESC LIMIT 1
+            """), {"sid": student_id}).mappings().first()
             return clean_data(dict(row)) if row else {}
         except Exception as e:
             logger.warning(f"batch_info failed: {e}")
@@ -715,10 +592,8 @@ class DataCollector:
         activity = data.get("platform_activity", {})
         forum = data.get("forum_activity", {})
 
-        test_pcts = [
-            float(t["percentage"]) for t in test_scores
-            if t.get("percentage") and float(t.get("percentage", 0)) > 0
-        ]
+        test_pcts = [float(t["percentage"]) for t in test_scores
+                     if t.get("percentage") and float(t.get("percentage", 0)) > 0]
         best_test = max(test_pcts) if test_pcts else 0
         avg_test = round(sum(test_pcts) / len(test_pcts), 1) if test_pcts else 0
 
@@ -726,15 +601,12 @@ class DataCollector:
         for t in test_scores:
             s = t.get("subject") or t.get("course_name") or "General"
             pct = float(t.get("percentage", 0))
-            if pct > 0:
-                subj_map.setdefault(s, []).append(pct)
+            if pct > 0: subj_map.setdefault(s, []).append(pct)
         subj_avgs = {s: round(sum(v) / len(v), 1) for s, v in subj_map.items()}
         top_subjects = sorted(subj_avgs.items(), key=lambda x: -x[1])
 
-        case_scores = [
-            float(c["score"]) for c in case_studies
-            if c.get("score") and float(c.get("score", 0)) > 0
-        ]
+        case_scores = [float(c["score"]) for c in case_studies
+                       if c.get("score") and float(c.get("score", 0)) > 0]
         avg_case = round(sum(case_scores) / len(case_scores), 1) if case_scores else 0
         best_case = max(case_scores) if case_scores else 0
 

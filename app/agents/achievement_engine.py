@@ -1,36 +1,25 @@
 """
-Achievement Engine v5 — Course-First Headlines
-═══════════════════════════════════════════════
-KEY CHANGE: Headline is derived from LMS-driven role matches FIRST.
-Only falls back to education/resume data when no courses are enrolled.
-
-Headline priority:
-  1. LMS-driven role matches (from role_matcher with lms_driven=True)
-  2. Course-name-derived professional roles
-  3. Education + designation fallback
-  4. Generic "Finance & Banking Professional"
+Achievement Engine v6 — Dynamic Headlines, Clean
+═════════════════════════════════════════════════
+FIX: Removed duplicate _generate_headline dead code that was
+unreachable after the new dynamic version's return statement.
 """
-
 import hashlib
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from app.agents.course_intelligence import CourseIntelligence
 
-
 logger = logging.getLogger(__name__)
-
 
 ACHIEVEMENT_VERBS = [
     "Analyzed", "Evaluated", "Assessed", "Investigated", "Examined",
     "Developed", "Designed", "Implemented", "Executed", "Delivered",
     "Demonstrated", "Showcased", "Applied", "Utilized", "Leveraged",
 ]
-
 LEARNING_VERBS = [
     "Mastered", "Completed", "Achieved", "Accomplished", "Attained",
     "Built expertise in", "Gained proficiency in", "Acquired skills in",
 ]
-
 PERFORMANCE_VERBS = [
     "Outperformed", "Excelled in", "Achieved distinction in",
     "Secured top marks in", "Demonstrated proficiency in",
@@ -50,7 +39,6 @@ class AchievementEngine:
     def generate_all(self, student_data: Dict[str, Any], role_matches: list = None) -> Dict[str, Any]:
         name = (student_data.get("personal", {}).get("full_name") or "Student").strip()
         computed = student_data.get("computed", {})
-
         return {
             "headline": self._generate_headline(student_data, role_matches),
             "top_achievements": self._top_achievements(student_data, name),
@@ -64,24 +52,19 @@ class AchievementEngine:
             "engagement_statement": self._engagement_statement(student_data, name),
         }
 
-    # ─── Dynamic Headline — COURSE-FIRST ─────────────────
-
     def _generate_headline(self, d: Dict, role_matches: list = None) -> str:
-        """Headline = top 2-3 job titles, derived dynamically from courses.
- 
-        v5 — fully dynamic. Uses CourseIntelligence to derive roles from
-        enrolled courses regardless of name (no hardcoded course list).
-        """
-        # ── Priority 1: scored role matches from RoleMatcher ──
+        """Fully dynamic — uses CourseIntelligence for any course."""
+        # Priority 1: scored role matches from RoleMatcher
         if role_matches and len(role_matches) > 0:
-            top_roles = [r["role_title"] for r in role_matches[:3]]
             seen, unique = set(), []
-            for r in top_roles:
-                if r.lower() not in seen:
-                    seen.add(r.lower()); unique.append(r)
+            for r in role_matches[:3]:
+                title = r["role_title"]
+                if title.lower() not in seen:
+                    seen.add(title.lower())
+                    unique.append(title)
             return " | ".join(unique)
- 
-        # ── Priority 2: derive directly from enrolled courses (any course) ──
+
+        # Priority 2: derive directly from enrolled courses
         courses = d.get("courses", []) or []
         if courses:
             try:
@@ -90,99 +73,19 @@ class AchievementEngine:
                     return " | ".join(intel["roles"][:3])
             except Exception as e:
                 logger.info(f"course_intel headline derivation failed: {e}")
- 
-        # ── Priority 3: current designation ──
+
+        # Priority 3: current designation
         personal = d.get("personal", {}) or {}
         designation = (personal.get("current_designation") or "").strip()
-        employer    = (personal.get("current_employer")    or "").strip()
+        employer = (personal.get("current_employer") or "").strip()
         if designation:
             return f"{designation} at {employer}" if employer else designation
- 
-        # ── Priority 4: generic ──
+
+        # Priority 4: generic
         return "Financial Services Professional"
-        """Generate headline with LMS courses as PRIMARY signal.
-
-        Priority order:
-        1. LMS-driven role matches (lms_driven=True from role_matcher)
-        2. Course-name-derived professional roles
-        3. Current designation + domain
-        4. Generic fallback
-        """
-        # ── Priority 1: Use LMS-driven role matches ──
-        if role_matches and len(role_matches) > 0:
-            # Filter to only LMS-driven roles
-            lms_roles = [r for r in role_matches if r.get("lms_driven")]
-            if lms_roles:
-                top_roles = [r["role_title"] for r in lms_roles[:3]]
-                return " | ".join(top_roles)
-
-            # If no LMS-driven roles, use top matches but cap at 2
-            top_roles = [r["role_title"] for r in role_matches[:2]]
-            return " | ".join(top_roles)
-
-        # ── Priority 2: Derive from course names directly ──
-        courses = d.get("courses", [])
-        course_names = [c.get("course_name", "") for c in courses if c.get("course_name")]
-
-        if course_names:
-            text = " ".join(course_names).lower()
-
-            roles = []
-            if "payment" in text or "card" in text or "upi" in text:
-                roles.extend(["Digital Payments Specialist", "Payment Operations Analyst"])
-            if "banking" in text or "bank" in text:
-                roles.extend(["Banking Operations Executive", "Branch Operations Analyst"])
-            if "credit" in text or "lending" in text:
-                roles.extend(["Credit Analyst", "Lending Operations Associate"])
-            if "risk" in text or "compliance" in text:
-                roles.extend(["Risk & Compliance Analyst", "Compliance Associate"])
-            if "fintech" in text:
-                roles.extend(["FinTech Product Analyst", "Digital Banking Associate"])
-            if "insurance" in text:
-                roles.extend(["Insurance Analyst", "Underwriting Associate"])
-            if "data" in text or "analytics" in text:
-                roles.extend(["Data Analyst", "Business Intelligence Analyst"])
-            if "investment" in text or "wealth" in text:
-                roles.extend(["Investment Analyst", "Wealth Management Associate"])
-            if "finance" in text:
-                roles.extend(["Financial Analyst", "Finance Executive"])
-            if "python" in text or "sql" in text:
-                roles.extend(["Data Analyst", "Technology Analyst"])
-            if "cbaf" in text:
-                roles.extend(["Credit Analyst", "Banking Operations Executive"])
-            if "adfba" in text or "pgdfba" in text:
-                roles.extend(["Banking Professional", "Financial Services Analyst"])
-            if "cfbm" in text:
-                roles.extend(["Business Strategy Analyst", "Family Business Consultant"])
-
-            if roles:
-                seen = set()
-                unique = []
-                for r in roles:
-                    if r not in seen:
-                        seen.add(r)
-                        unique.append(r)
-                    if len(unique) >= 3:
-                        break
-                return " | ".join(unique)
-
-        # ── Priority 3: Current designation ──
-        personal = d.get("personal", {})
-        designation = personal.get("current_designation", "") or ""
-        employer = personal.get("current_employer", "") or ""
-        if designation:
-            if employer:
-                return f"{designation} at {employer}"
-            return designation
-
-        # ── Priority 4: Generic fallback ──
-        return "Finance & Banking Professional"
-
-    # ─── Everything below is UNCHANGED from v4 ───────────
 
     def _top_achievements(self, d: Dict, name: str) -> List[Dict]:
         achievements = []
-
         case_studies = d.get("case_studies", [])
         if case_studies:
             best_case = max(case_studies, key=lambda x: float(x.get("score", 0) or 0))
@@ -197,7 +100,6 @@ class AchievementEngine:
                 "statement": f"{_hash_pick(name, ACHIEVEMENT_VERBS, 1)} {title}{concept_text}, achieving {pct}% score",
                 "metric": f"{pct}%", "label": title,
             })
-
         test_scores = d.get("test_scores", [])
         if test_scores:
             best_test = max(test_scores, key=lambda x: float(x.get("percentage", 0) or 0))
@@ -208,7 +110,6 @@ class AchievementEngine:
                 "statement": f"Scored {pct}% in {subject}",
                 "metric": f"{pct}%", "label": subject,
             })
-
         courses = d.get("courses", [])
         completed_courses = [c for c in courses if c.get("completed_at")]
         if completed_courses:
@@ -217,7 +118,6 @@ class AchievementEngine:
                 "statement": f"Successfully completed {len(completed_courses)} professional training course{'s' if len(completed_courses) > 1 else ''}",
                 "metric": str(len(completed_courses)), "label": "Courses completed",
             })
-
         computed = d.get("computed", {})
         avg_quiz = computed.get("avg_quiz_score", 0)
         total_quizzes = computed.get("total_quizzes", 0)
@@ -227,7 +127,6 @@ class AchievementEngine:
                 "statement": f"Maintained {avg_quiz}% average across {total_quizzes} assessments",
                 "metric": f"{avg_quiz}%", "label": f"Avg across {total_quizzes} quizzes",
             })
-
         improvement = computed.get("improvement_pct", 0)
         if improvement > 10:
             achievements.append({
@@ -235,7 +134,6 @@ class AchievementEngine:
                 "statement": f"Demonstrated {improvement}% performance improvement from first to recent assessments",
                 "metric": f"+{improvement}%", "label": "Score improvement",
             })
-
         achievements.sort(key=lambda x: x["score"], reverse=True)
         return achievements[:5]
 
@@ -316,7 +214,7 @@ class AchievementEngine:
             techs = p.get("technologies_used", [])
             feedback = p.get("mentor_feedback", "")
             tech_text = f" using {', '.join(techs[:4])}" if techs else ""
-            feedback_text = f". Mentor noted: \"{feedback[:100]}\"" if feedback else ""
+            feedback_text = f'. Mentor noted: "{feedback[:100]}"' if feedback else ""
             statement = f"{_hash_pick(name, ACHIEVEMENT_VERBS, i + 40)} {title}{tech_text}{feedback_text}"
             highlights.append({"title": title, "description": desc[:200] if desc else "", "technologies": techs, "statement": statement})
         return highlights
@@ -342,17 +240,17 @@ class AchievementEngine:
 
     def _consistency_statement(self, computed: Dict, name: str) -> str:
         consistency = computed.get("consistency_score", 0)
-        total = (computed.get("total_tests", 0) + computed.get("total_quizzes", 0) + computed.get("total_case_studies", 0))
+        total = computed.get("total_tests", 0) + computed.get("total_quizzes", 0) + computed.get("total_case_studies", 0)
         if total < 3: return ""
-        if consistency >= 85: return f"Demonstrates exceptional consistency with {consistency}% score stability across {total} assessments"
-        if consistency >= 70: return f"Shows reliable performance with {consistency}% consistency across {total} assessments"
-        if consistency >= 50: return f"Building consistency across {total} assessments with diverse performance areas"
+        if consistency >= 85: return f"Exceptional consistency with {consistency}% score stability across {total} assessments"
+        if consistency >= 70: return f"Reliable performance with {consistency}% consistency across {total} assessments"
+        if consistency >= 50: return f"Building consistency across {total} assessments"
         return ""
 
     def _growth_statement(self, computed: Dict, name: str) -> str:
         improvement = computed.get("improvement_pct", 0)
-        if improvement > 20: return f"Rapid growth trajectory — {improvement}% improvement from early to recent assessments"
-        if improvement > 10: return f"Positive growth trend with {improvement}% score improvement over the learning journey"
+        if improvement > 20: return f"Rapid growth — {improvement}% improvement from early to recent assessments"
+        if improvement > 10: return f"Positive growth with {improvement}% score improvement"
         if improvement > 5: return f"Steady upward trajectory with {improvement}% cumulative improvement"
         return ""
 
