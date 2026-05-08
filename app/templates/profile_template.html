@@ -1,1085 +1,660 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ student_name or 'Student' }} — Upskillize AI Profile</title>
-<meta name="description" content="Professional AI-verified profile of {{ student_name or 'Student' }} — powered by Upskillize">
-<meta property="og:title" content="{{ student_name or 'Student' }} — Professional Profile">
-<meta property="og:description" content="{{ headline or 'Professional' }} — AI-powered profile from verified credentials">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ student_name or 'Student' }} — Upskillize Profile</title>
+<meta name="description" content="Verified profile of {{ student_name or 'Student' }} — Upskillize Profile IQ.">
+<meta property="og:title" content="{{ student_name or 'Student' }} — Upskillize Profile">
+<meta property="og:description" content="{{ headline or 'Professional Profile' }}">
 <meta property="og:url" content="{{ profile_url or '' }}">
-<meta property="og:type" content="profile">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --ink:#0B1628; --ink-2:#1a2744;
+    --gold:#C8992A; --gold-2:#F5B800;
+    --teal:#0F6E56; --teal-soft:#E1F5EE; --teal-bd:#9FE1CB;
+    --orange:#E8521A; --orange-soft:#FFF6F1;
+    --cream:#FAF7F0; --cream-2:#EDE7D8;
+    --paper:#FFFFFF;
+    --body:#1F2937; --body-2:#475569; --hint:#6B7280; --faint:#94A3B8;
+    --rule:#E5E7EB; --rule-2:#F1F5F9;
+    --good:#0F6E56; --mid:#B47914; --low:#A32D2D;
+    --serif:'Playfair Display', Georgia, serif;
+    --sans:'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --mono:'DM Mono', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+  body{font-family:var(--sans);background:var(--cream);color:var(--body);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+  a{color:inherit;text-decoration:none}
+  a:hover{color:var(--gold)}
+  .page{max-width:880px;margin:0 auto;padding:0 0 64px}
 
-/* ═══════════ THEME SYSTEM ═══════════ */
-:root,[data-theme="light"]{
-  --bg: #FAFBFD;
-  --bg-card: #FFFFFF;
-  --bg-soft: #F4F6FA;
-  --bg-softer: #EBEEF5;
-  --text: #0B1628;
-  --text-2: #3D4F6B;
-  --text-3: #8293AB;
-  --text-4: #B8C4D6;
-  --border: #E4E9F2;
-  --border-strong: #CBD3E3;
-  --navy: #0B1628;
-  --navy-2: #1a2744;
-  --gold: #C8992A;
-  --gold-soft: #FBF6EC;
-  --gold-2: #A67C1A;
-  --teal: #0DBFA3;
-  --teal-soft: #EDFAF7;
-  --accent: #1A4FA0;
-  --accent-soft: #EBF1FB;
-  --green: #0F8A65;
-  --green-soft: #EEFBF5;
-  --amber: #C68A17;
-  --amber-soft: #FEF9EE;
-  --purple: #5B2D8E;
-  --purple-soft: #F5F0FB;
-  --shadow-card: 0 1px 2px rgba(11,22,40,.03), 0 4px 16px rgba(11,22,40,.04);
-  --shadow-card-hover: 0 2px 4px rgba(11,22,40,.05), 0 8px 24px rgba(11,22,40,.07);
-  --hero-bg: linear-gradient(160deg, #07112E 0%, #0B1628 35%, #1a2744 100%);
-  --hero-text: #F5F7FB;
-  --hero-text-2: #8293AB;
-  --skill-bar-bg: #E4E9F2;
-  --divider: #E4E9F2;
-  --icon-bg: #F4F6FA;
-}
+  /* ── Hero ── */
+  .hero{background:var(--ink);color:var(--cream);padding:32px 36px 28px;border-radius:0 0 14px 14px;position:relative;overflow:hidden}
+  .hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;margin-bottom:20px}
+  .hero-grid{display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center}
+  .hero-photo{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,var(--gold) 0%,var(--gold-2) 100%);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-weight:600;font-size:38px;color:var(--ink);overflow:hidden;box-shadow:0 0 0 3px rgba(200,153,42,0.25);flex-shrink:0}
+  .hero-photo img{width:100%;height:100%;object-fit:cover}
+  .hero-info{min-width:0}
+  .hero-info .name{font-family:var(--serif);font-weight:600;font-size:32px;line-height:1.05;letter-spacing:-1px;color:var(--cream);margin-bottom:4px}
+  .hero-info .name .badge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:0.16em;text-transform:uppercase;padding:3px 8px;border-radius:3px;background:rgba(200,153,42,0.15);color:var(--gold);border:1px solid rgba(200,153,42,0.4);margin-left:10px;vertical-align:8px}
+  .hero-info .headline{font-family:var(--serif);font-style:italic;font-weight:500;font-size:16px;color:var(--gold);margin:0 0 10px;line-height:1.3}
+  .hero-info .top-match{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:rgba(250,247,240,0.65);margin-bottom:12px;text-transform:uppercase}
+  .hero-info .top-match b{color:var(--gold);font-weight:500}
+  .hero-info .contact{font-size:12px;color:rgba(250,247,240,0.65);line-height:1.7}
+  .hero-info .contact b{color:var(--cream);font-weight:500}
+  .hero-info .contact a{color:var(--cream);border-bottom:1px solid rgba(250,247,240,0.25);padding-bottom:1px}
+  .hero-info .contact a:hover{color:var(--gold);border-color:var(--gold)}
+  .hero-info .contact .sep{color:rgba(250,247,240,0.3);margin:0 7px}
+  .hero-ats{text-align:right;padding-left:18px;border-left:1px solid rgba(200,153,42,0.25);min-width:90px;flex-shrink:0}
+  .hero-ats .num{font-family:var(--serif);font-weight:600;font-size:42px;line-height:1;color:var(--gold)}
+  .hero-ats .num span{font-size:18px;color:rgba(250,247,240,0.5);font-weight:500}
+  .hero-ats .lbl{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:rgba(250,247,240,0.55);text-transform:uppercase;margin-top:6px}
 
-[data-theme="dark"]{
-  --bg: #080D19;
-  --bg-card: #0E1525;
-  --bg-soft: #151D30;
-  --bg-softer: #1D2840;
-  --text: #EAEFF6;
-  --text-2: #B0BDCF;
-  --text-3: #6B7D96;
-  --text-4: #3D4F6B;
-  --border: #1D2840;
-  --border-strong: #2A3854;
-  --navy: #050A14;
-  --navy-2: #0B1628;
-  --gold: #E8B84A;
-  --gold-soft: rgba(200,153,42,.1);
-  --gold-2: #C8992A;
-  --teal: #34D9B8;
-  --teal-soft: rgba(13,191,163,.1);
-  --accent: #5B8CD6;
-  --accent-soft: rgba(26,79,160,.12);
-  --green: #34D399;
-  --green-soft: rgba(15,138,101,.12);
-  --amber: #F0C050;
-  --amber-soft: rgba(198,138,23,.12);
-  --purple: #A78BFA;
-  --purple-soft: rgba(91,45,142,.12);
-  --shadow-card: 0 1px 3px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.18);
-  --shadow-card-hover: 0 2px 6px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.22);
-  --hero-bg: linear-gradient(160deg, #030610 0%, #080D19 35%, #0E1525 100%);
-  --hero-text: #EAEFF6;
-  --hero-text-2: #4E6180;
-  --skill-bar-bg: #1D2840;
-  --divider: #1D2840;
-  --icon-bg: #151D30;
-}
+  /* ── Section frame ── */
+  .section{background:var(--paper);border:1px solid var(--rule);border-radius:12px;margin:14px 36px 0;padding:22px 26px 24px}
+  .sec-eyebrow{display:flex;align-items:center;gap:14px;margin-bottom:4px}
+  .sec-mark{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;font-weight:500;flex-shrink:0}
+  .sec-rule{flex:1;height:1px;background:var(--cream-2)}
+  .sec-h{font-family:var(--serif);font-style:italic;font-weight:500;font-size:20px;color:var(--ink);line-height:1.25;margin:6px 0 16px;letter-spacing:-0.3px}
+  .sec-sub{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--hint);text-transform:uppercase}
 
-body{
-  font-family: 'Plus Jakarta Sans', -apple-system, system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.65;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  transition: background .35s ease, color .25s ease;
-}
+  /* ── Professional summary ── */
+  .summary-text{font-size:13.5px;line-height:1.75;color:var(--body);max-width:680px}
 
-.wrap{max-width: 920px; margin: 0 auto; padding: 0 20px 56px}
+  /* ── Courses (compact) ── */
+  .courses-mini{display:grid;grid-template-columns:repeat(3, 1fr);gap:8px}
+  .course-mini{background:var(--cream);border:1px solid var(--cream-2);border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .course-mini .nm{font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.35;flex:1}
+  .course-mini .st{font-family:var(--mono);font-size:8.5px;letter-spacing:0.14em;text-transform:uppercase;font-weight:500;padding:2px 7px;border-radius:3px;flex-shrink:0}
+  .course-mini .st.completed{background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal-bd)}
+  .course-mini .st.in-progress{background:rgba(200,153,42,0.12);color:var(--gold);border:1px solid rgba(200,153,42,0.4)}
+  .course-mini .st.enrolled{background:var(--paper);color:var(--body-2);border:1px solid var(--rule)}
 
-/* ═══════════ INLINE SVG ICON SYSTEM ═══════════ */
-.ic{
-  width: 34px; height: 34px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.ic svg{width: 16px; height: 16px; stroke-width: 2}
+  /* ── Best till date ── */
+  .best-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:10px}
+  .best-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;border-top:3px solid var(--gold)}
+  .best-card.alt{border-top-color:var(--teal)}
+  .best-card.alt2{border-top-color:var(--orange)}
+  .best-tag{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;font-weight:500}
+  .best-card.alt .best-tag{color:var(--teal)}
+  .best-card.alt2 .best-tag{color:var(--orange)}
+  .best-pct{font-family:var(--serif);font-weight:600;font-size:30px;line-height:1;color:var(--ink)}
+  .best-pct .u{font-size:14px;color:var(--faint);font-weight:500}
+  .best-pct.teal{color:var(--good)}
+  .best-pct.mid{color:var(--mid)}
+  .best-pct.low{color:var(--low)}
+  .best-title{font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.4}
+  .best-meta{font-family:var(--mono);font-size:10px;letter-spacing:0.05em;color:var(--hint)}
+  .best-desc{font-size:11.5px;color:var(--body-2);line-height:1.55;font-style:italic;font-family:var(--serif)}
 
-/* ═══════════ THEME TOGGLE ═══════════ */
-.theme-toggle{
-  position: fixed; top: 20px; right: 20px; z-index: 999;
-  width: 52px; height: 28px; border-radius: 99px;
-  background: var(--bg-softer); border: 1px solid var(--border);
-  cursor: pointer; padding: 3px; display: flex; align-items: center;
-  transition: all .3s;
-  box-shadow: 0 2px 8px rgba(0,0,0,.08);
-}
-.theme-toggle .knob{
-  width: 20px; height: 20px; border-radius: 50%;
-  background: var(--bg-card); display: flex; align-items: center; justify-content: center;
-  transition: transform .3s ease, background .3s;
-  box-shadow: 0 1px 3px rgba(0,0,0,.15);
-}
-.theme-toggle .knob svg{width: 12px; height: 12px}
-[data-theme="dark"] .theme-toggle{background: #1A4FA0; border-color: #3B7DDB}
-[data-theme="dark"] .theme-toggle .knob{transform: translateX(24px); background: #E8B84A}
-.theme-toggle .sun{display: block; color: #C8992A}
-.theme-toggle .moon{display: none; color: #0B1628}
-[data-theme="dark"] .theme-toggle .sun{display: none}
-[data-theme="dark"] .theme-toggle .moon{display: block}
+  /* ── Capstone ── */
+  .capstone{background:var(--ink);color:var(--cream);padding:22px 24px;border-radius:10px}
+  .capstone-h{font-family:var(--serif);font-style:italic;font-weight:500;font-size:18px;color:var(--gold);margin-bottom:8px}
+  .capstone-meta{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:rgba(250,247,240,0.55);text-transform:uppercase;margin-bottom:10px}
+  .capstone-desc{font-size:13px;color:rgba(250,247,240,0.85);line-height:1.65;margin-bottom:12px}
+  .capstone-tech{display:flex;flex-wrap:wrap;gap:6px}
+  .capstone-tech span{font-family:var(--mono);font-size:10px;padding:3px 8px;background:rgba(200,153,42,0.12);border:1px solid rgba(200,153,42,0.35);color:var(--gold);border-radius:3px}
 
-/* ═══════════ HERO ═══════════ */
-.hero{
-  background: var(--hero-bg);
-  border-radius: 0 0 24px 24px;
-  margin: 0 -20px 24px;
-  padding: 52px 44px 40px;
-  position: relative; overflow: hidden;
-}
-.hero::before{
-  content: '';position: absolute;top: -120px;right: -80px;
-  width: 350px;height: 350px;border-radius: 50%;
-  background: radial-gradient(circle, rgba(200,153,42,.08) 0%, transparent 70%);
-  pointer-events: none;
-}
-.hero::after{
-  content: '';position: absolute;bottom: -100px;left: -60px;
-  width: 280px;height: 280px;border-radius: 50%;
-  background: radial-gradient(circle, rgba(13,191,163,.06) 0%, transparent 70%);
-  pointer-events: none;
-}
-.hero-grid{display: grid; grid-template-columns: 88px 1fr auto; gap: 24px; align-items: center; position: relative; z-index: 1}
-.avatar{
-  width: 88px; height: 88px; border-radius: 20px;
-  background: linear-gradient(145deg, #C8992A 0%, #A67C1A 100%);
-  color: #fff; display: flex; align-items: center; justify-content: center;
-  font-size: 32px; font-weight: 700; font-family: 'Fraunces', serif;
-  border: 2px solid rgba(200,153,42,.25);
-  flex-shrink: 0; letter-spacing: -.5px;
-}
-.avatar img{width: 100%; height: 100%; border-radius: 18px; object-fit: cover}
-.hero-info h1{
-  font-family: 'Fraunces', serif;
-  font-size: 30px; font-weight: 600; line-height: 1.15;
-  color: var(--hero-text); letter-spacing: -.4px; margin-bottom: 6px;
-}
-.hero-info .headline{
-  font-size: 14px; font-weight: 500; color: #C8992A;
-  margin-bottom: 10px; letter-spacing: .2px;
-}
-.hero-info .meta{font-size: 13px; color: #C0CCDB; margin-bottom: 12px; letter-spacing: .1px; font-weight: 500}
-.hero-info .meta span + span::before{content: ' · '; margin: 0 6px; opacity: .6}
-.hero-info .meta a{color: #C0CCDB; text-decoration: none}
-.hero-info .meta a:hover{color: #fff; text-decoration: underline}
-.hero-links{display: flex; gap: 8px; flex-wrap: wrap}
-.hero-links a{
-  font-size: 11.5px; font-weight: 700; padding: 6px 16px;
-  color: #fff;
-  background: rgba(255,255,255,.1);
-  border: 1px solid rgba(255,255,255,.22);
-  border-radius: 99px; text-decoration: none;
-  transition: all .25s; letter-spacing: .4px;
-  text-transform: uppercase;
-}
-.hero-links a:hover{background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.4); color: #fff; transform: translateY(-1px)}
+  /* ── Personality ── */
+  .persona-type{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:16px 20px;margin-bottom:10px}
+  .persona-type .pl{font-family:var(--mono);font-size:9px;letter-spacing:0.16em;color:var(--hint);text-transform:uppercase}
+  .persona-type .pv{font-family:var(--serif);font-style:italic;font-weight:500;font-size:20px;color:var(--ink);margin-top:2px}
+  .persona-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .persona-cell{background:var(--cream);border:1px solid var(--cream-2);border-radius:8px;padding:11px 14px}
+  .persona-cell .pl{font-family:var(--mono);font-size:9px;letter-spacing:0.16em;color:var(--gold);text-transform:uppercase;margin-bottom:5px}
+  .persona-cell .pv{font-size:12px;color:var(--body);line-height:1.55}
 
-.fresher-badge{
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 10.5px; font-weight: 700; padding: 3px 10px;
-  background: rgba(13,191,163,.12); color: #34D9B8;
-  border: 1px solid rgba(13,191,163,.2); border-radius: 99px;
-  margin-left: 10px; text-transform: uppercase; letter-spacing: .8px;
-}
-.pro-badge{
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 10.5px; font-weight: 700; padding: 3px 10px;
-  background: rgba(200,153,42,.15); color: #E8B84A;
-  border: 1px solid rgba(200,153,42,.25); border-radius: 99px;
-  margin-left: 10px; text-transform: uppercase; letter-spacing: .8px;
-}
+  /* ── Timeline cards (Experience, Education) ── */
+  .tl{display:flex;flex-direction:column;gap:8px}
+  .tl-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:13px 16px;border-left:3px solid var(--gold)}
+  .tl-card.edu{border-left-color:var(--teal)}
+  .tl-title{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:2px}
+  .tl-org{font-size:13px;color:var(--body);margin-bottom:4px}
+  .tl-meta{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--hint);text-transform:uppercase;margin-bottom:6px}
+  .tl-meta span+span:before{content:"·";margin:0 6px;color:var(--faint)}
+  .tl-desc{font-size:12.5px;color:var(--body-2);line-height:1.6}
 
-.ats-box{text-align: center; min-width: 84px}
-.ats-box .score{font-family: 'Fraunces', serif; font-size: 42px; font-weight: 700; line-height: 1; color: #34D9B8}
-.ats-box .score.mid{color: #E8B84A}
-.ats-box .score.low{color: var(--hero-text-2)}
-.ats-box .lbl{font-size: 9px; text-transform: uppercase; letter-spacing: 2px; font-weight: 700; color: var(--hero-text-2); margin-top: 4px}
+  /* ── Projects ── */
+  .proj-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .proj-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:14px 16px}
+  .proj-title{font-size:13.5px;font-weight:600;color:var(--ink);margin-bottom:5px}
+  .proj-desc{font-size:12px;color:var(--body-2);line-height:1.6;margin-bottom:9px}
+  .proj-tech{display:flex;flex-wrap:wrap;gap:5px}
+  .proj-tech span{font-family:var(--mono);font-size:10px;padding:2px 7px;background:var(--paper);border:1px solid var(--rule);color:var(--body-2);border-radius:3px}
 
-/* ═══════════ METRICS STRIP ═══════════ */
-.metrics{display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 22px}
-.metric-card{
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 14px; padding: 18px 14px; text-align: center;
-  box-shadow: var(--shadow-card);
-  transition: all .25s;
-}
-.metric-card:hover{transform: translateY(-1px); box-shadow: var(--shadow-card-hover)}
-.metric-card .v{font-family: 'Fraunces', serif; font-size: 26px; font-weight: 700; color: var(--accent); line-height: 1}
-.metric-card .v.green{color: var(--green)}
-.metric-card .v.amber{color: var(--amber)}
-.metric-card .v.teal{color: var(--teal)}
-.metric-card .l{font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; color: var(--text-3); margin-top: 6px}
+  /* ── Skills ── */
+  .skills-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:12px}
+  .skill-col{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:13px 16px}
+  .skill-h{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:0.16em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--cream-2)}
+  .skill-list{display:flex;flex-wrap:wrap;gap:5px}
+  .skill-list span{font-size:11px;font-weight:500;padding:4px 9px;background:var(--paper);border:1px solid var(--rule);color:var(--body);border-radius:99px}
 
-/* ═══════════ SECTIONS ═══════════ */
-.section{
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 16px; padding: 26px 28px; margin-bottom: 16px;
-  box-shadow: var(--shadow-card);
-  transition: all .3s;
-}
-.section:hover{box-shadow: var(--shadow-card-hover)}
-.section-title{
-  font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600;
-  margin-bottom: 16px; display: flex; align-items: center; gap: 12px;
-  color: var(--text); letter-spacing: -.2px;
-}
+  /* ── Hobbies ── */
+  .hobbies-row{display:flex;flex-wrap:wrap;gap:6px}
+  .hobbies-row span{font-family:var(--serif);font-style:italic;font-size:13px;padding:5px 12px;background:var(--cream);border:1px solid var(--cream-2);color:var(--ink);border-radius:99px}
 
-/* ═══════════ PROFESSIONAL SUMMARY ═══════════ */
-.summary-bullets{list-style: none; padding: 0; margin: 0}
-.summary-bullets li{
-  position: relative; padding: 6px 0 6px 22px;
-  font-size: 14.5px; line-height: 1.75; color: var(--text-2);
-}
-.summary-bullets li::before{
-  content: ''; position: absolute; left: 0; top: 14px;
-  width: 5px; height: 5px; border-radius: 50%;
-  background: var(--gold);
-}
-.summary-bullets li + li{margin-top: 2px}
-.summary-text{font-size: 14.5px; line-height: 1.8; color: var(--text-2)}
+  /* ── Empty state ── */
+  .empty{background:var(--cream);border:1px dashed var(--cream-2);border-radius:10px;padding:18px 20px;text-align:center;color:var(--hint);font-size:12.5px;line-height:1.6}
+  .empty b{color:var(--ink);font-weight:600}
 
-/* ═══════════ TIMELINE CARDS ═══════════ */
-.timeline-card{
-  position: relative; padding: 16px 20px;
-  background: var(--bg-soft); border-left: 3px solid var(--accent);
-  border-radius: 0 12px 12px 0; margin-bottom: 12px;
-  transition: all .2s;
-}
-.timeline-card:last-child{margin-bottom: 0}
-.timeline-card:hover{background: var(--bg-softer)}
-.timeline-card.work{border-left-color: var(--teal)}
-.tc-title{font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 2px}
-.tc-org{font-size: 13px; color: var(--accent); font-weight: 600; margin-bottom: 4px}
-.tc-meta{font-size: 11.5px; color: var(--text-3); display: flex; gap: 14px; flex-wrap: wrap; font-weight: 500}
-.tc-desc{font-size: 13px; color: var(--text-2); margin-top: 6px; line-height: 1.65}
+  /* ── Footer ── */
+  .footer{margin:28px 36px 0;padding:18px 0 0;border-top:1px solid var(--cream-2);text-align:center}
+  .footer-mark{font-family:var(--mono);font-size:9px;letter-spacing:0.18em;color:var(--hint);text-transform:uppercase;margin-bottom:6px}
+  .footer-mark .gold{color:var(--gold);font-weight:500}
+  .footer-sources{display:inline-flex;gap:6px;margin-top:4px;flex-wrap:wrap;justify-content:center}
+  .footer-sources span{font-family:var(--mono);font-size:9px;letter-spacing:0.14em;padding:3px 8px;background:var(--cream);border:1px solid var(--cream-2);color:var(--body-2);border-radius:99px;text-transform:uppercase}
+  .footer-link{font-family:var(--mono);font-size:10px;color:var(--gold);margin-top:10px;display:block;word-break:break-all}
 
-/* ═══════════ HIGHLIGHT CARDS ═══════════ */
-.highlight-card{
-  background: var(--bg-soft);
-  border: 1px solid var(--border); border-left: 3px solid var(--accent);
-  border-radius: 12px; padding: 18px 20px; margin-bottom: 12px;
-  transition: all .2s;
-}
-.highlight-card:hover{border-color: var(--accent); box-shadow: var(--shadow-card-hover)}
-.highlight-card.green{border-left-color: var(--teal)}
-.highlight-card.green:hover{border-color: var(--teal)}
-.hc-head{display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; gap: 12px}
-.hc-title{font-size: 15px; font-weight: 700; color: var(--text); flex: 1}
-.hc-score{
-  font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700;
-  color: var(--teal); line-height: 1; flex-shrink: 0;
-}
-.hc-status{
-  display: inline-block; font-size: 10px; padding: 2px 10px;
-  background: var(--teal-soft); color: var(--teal); border: 1px solid var(--teal);
-  border-radius: 99px; font-weight: 700; margin-left: 8px;
-  text-transform: uppercase; letter-spacing: .5px;
-}
-.hc-desc{font-size: 13px; color: var(--text-2); line-height: 1.6; margin-top: 6px}
-.hc-tags{display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px}
-.hc-tags span{
-  font-size: 10.5px; padding: 3px 10px; background: var(--purple-soft);
-  color: var(--purple); border: 1px solid transparent; border-radius: 6px; font-weight: 600;
-  letter-spacing: .2px;
-}
+  /* ── Print ── */
+  @media print{
+    body{background:#fff}
+    .page{max-width:none;padding:0}
+    .hero,.section,.footer{margin-left:0;margin-right:0}
+    .section{break-inside:avoid;page-break-inside:avoid}
+    .hero{border-radius:0}
+  }
 
-/* ═══════════ SKILLS ═══════════ */
-.skill-cat{
-  font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.6px;
-  font-weight: 700; color: var(--text-3); margin: 16px 0 10px;
-}
-.skill-cat:first-child{margin-top: 0}
-.skill-tags{display: flex; flex-wrap: wrap; gap: 5px}
-.skill-tags span{
-  font-size: 12px; padding: 5px 12px; background: var(--bg-soft);
-  border: 1px solid var(--border); border-radius: 8px; color: var(--text-2);
-  font-weight: 500; transition: all .2s; letter-spacing: .1px;
-}
-.skill-tags span:hover{border-color: var(--gold); color: var(--gold); background: var(--gold-soft)}
-
-/* ═══════════ JOB ROLES ═══════════ */
-.role-card{
-  border: 1px solid var(--border); border-radius: 12px;
-  padding: 16px 18px; margin-bottom: 10px; transition: all .2s;
-  background: var(--bg-card);
-}
-.role-card:hover{border-color: var(--accent); box-shadow: var(--shadow-card-hover)}
-.role-head{display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 12px}
-.role-title{font-size: 14px; font-weight: 700; color: var(--text)}
-.role-pct{font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700}
-.role-pct.high{color: var(--teal)}
-.role-pct.mid{color: var(--gold)}
-.role-pct.low{color: var(--text-3)}
-.role-bar{height: 6px; background: var(--skill-bar-bg); border-radius: 99px; overflow: hidden; margin-bottom: 10px}
-.role-bar .fill{height: 100%; border-radius: 99px; transition: width .8s ease-out}
-.role-bar .fill.high{background: linear-gradient(90deg, var(--teal), #34D9B8)}
-.role-bar .fill.mid{background: linear-gradient(90deg, var(--gold), #E8B84A)}
-.role-bar .fill.low{background: var(--text-3)}
-.role-keywords{display: flex; flex-wrap: wrap; gap: 4px}
-.role-keywords span{font-size: 10.5px; padding: 3px 9px; border-radius: 6px; font-weight: 600; letter-spacing: .2px}
-.role-keywords .match{background: var(--teal-soft); color: var(--teal)}
-.role-keywords .miss{background: var(--amber-soft); color: var(--amber)}
-
-/* ═══════════ PERSONALITY ═══════════ */
-.persona-hero{
-  text-align: center; padding: 16px;
-  background: var(--purple-soft);
-  border-radius: 12px; margin-bottom: 14px;
-}
-.persona-hero .type{
-  font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700;
-  color: var(--purple); margin-bottom: 3px;
-}
-.persona-hero .src{font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700}
-.persona-grid{display: grid; grid-template-columns: 1fr 1fr; gap: 10px}
-.persona-cell{padding: 12px; background: var(--bg-soft); border-radius: 10px}
-.persona-cell .pl{font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); font-weight: 700; margin-bottom: 3px}
-.persona-cell .pv{font-size: 13px; font-weight: 500; color: var(--text-2); line-height: 1.5}
-
-/* ═══════════ LMS COURSE CARDS ═══════════ */
-.course-row{
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px; background: var(--bg-soft); border-radius: 10px;
-  margin-bottom: 8px; gap: 12px; transition: all .2s;
-}
-.course-row:last-child{margin-bottom: 0}
-.course-row:hover{background: var(--bg-softer)}
-.course-name{font-size: 13.5px; font-weight: 600; color: var(--text); flex: 1}
-.course-status{
-  font-size: 10px; font-weight: 700; padding: 3px 10px;
-  border-radius: 99px; text-transform: uppercase; letter-spacing: .5px;
-  flex-shrink: 0;
-}
-.course-status.completed{background: var(--teal-soft); color: var(--teal); border: 1px solid var(--teal)}
-.course-status.in-progress{background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber)}
-.course-status.enrolled{background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent)}
-
-/* ═══════════ SCORE ROWS ═══════════ */
-.score-row{
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px 16px; background: var(--bg-soft); border-radius: 10px;
-  margin-bottom: 8px; transition: all .2s;
-}
-.score-row:last-child{margin-bottom: 0}
-.score-row:hover{background: var(--bg-softer)}
-.score-val{
-  font-family: 'Fraunces', serif; font-size: 22px; font-weight: 700;
-  color: var(--teal); min-width: 52px; text-align: center; line-height: 1;
-}
-.score-val.mid{color: var(--amber)}
-.score-val.low{color: var(--text-3)}
-.score-info{flex: 1}
-.score-title{font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 2px}
-.score-meta{font-size: 11px; color: var(--text-3); font-weight: 500}
-.score-meta span + span::before{content: ' · '; opacity: .5}
-
-/* ═══════════ PLACEHOLDER ═══════════ */
-.placeholder{
-  text-align: center; padding: 20px 16px;
-  background: var(--bg-soft); border-radius: 12px;
-  border: 1.5px dashed var(--border-strong);
-}
-.placeholder .ph-icon{
-  width: 36px; height: 36px; border-radius: 50%;
-  background: var(--bg-softer); display: flex;
-  align-items: center; justify-content: center;
-  margin: 0 auto 10px; color: var(--text-4);
-}
-.placeholder .ph-icon svg{width: 16px; height: 16px; stroke-width: 2}
-.placeholder .ph-text{font-size: 12.5px; color: var(--text-3); font-weight: 500; line-height: 1.6}
-.placeholder .ph-text strong{color: var(--text-2); font-weight: 700}
-
-/* ═══════════ CERTIFICATIONS ═══════════ */
-.cert-card{display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--divider); align-items: center}
-.cert-card:last-child{border-bottom: none}
-.cert-icon-box{
-  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
-  background: linear-gradient(145deg, var(--gold-soft), var(--gold));
-  display: flex; align-items: center; justify-content: center;
-  color: #fff;
-}
-.cert-icon-box svg{width: 18px; height: 18px; stroke-width: 1.8}
-.cert-name{font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 1px}
-.cert-issuer{font-size: 11.5px; color: var(--text-3); font-weight: 500}
-
-/* ═══════════ JOB PREFERENCES ═══════════ */
-.pref-grid{display: grid; grid-template-columns: 1fr 1fr; gap: 10px}
-.pref-cell{padding: 12px; background: var(--bg-soft); border-radius: 10px}
-.pref-cell .pl{font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); font-weight: 700; margin-bottom: 3px}
-.pref-cell .pv{font-size: 13.5px; font-weight: 600; color: var(--text)}
-
-/* ═══════════ COMPLETION NOTICE ═══════════ */
-.notice{
-  display: flex; gap: 16px;
-  background: var(--gold-soft);
-  border: 1px solid var(--gold); border-radius: 14px;
-  padding: 18px 22px; margin-bottom: 22px; align-items: flex-start;
-}
-[data-theme="dark"] .notice{
-  background: rgba(200,153,42,.08);
-  border-color: rgba(200,153,42,.3);
-}
-.notice .ic-warn{
-  width: 32px; height: 32px; border-radius: 50%;
-  background: var(--gold); color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.notice .ic-warn svg{width: 16px; height: 16px; stroke-width: 2.5}
-.notice .nt{font-size: 14px; font-weight: 700; color: var(--gold-2); margin-bottom: 4px}
-[data-theme="dark"] .notice .nt{color: #E8B84A}
-.notice .nd{font-size: 12.5px; color: var(--text-2); line-height: 1.6; margin-bottom: 10px}
-.notice .ntag{display: flex; flex-wrap: wrap; gap: 5px}
-.notice .ntag span{
-  font-size: 10.5px; padding: 4px 11px;
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 99px; color: var(--text-2); font-weight: 600;
-}
-
-/* ═══════════ TWO-COLUMN LAYOUT ═══════════ */
-.grid2{display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start}
-.grid2.single{grid-template-columns: 1fr; max-width: 720px; margin: 0 auto}
-.grid2 .col{display: flex; flex-direction: column}
-.grid2 .col .section{margin-bottom: 16px}
-.grid2 .col .section:last-child{margin-bottom: 0}
-
-/* Share handled by React wrapper — no in-template share UI */
-
-/* ═══════════ FOOTER ═══════════ */
-.footer{text-align: center; padding: 28px 0 0; color: var(--text-3); font-size: 11.5px}
-.footer .brand{
-  font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600;
-  color: var(--text); margin-bottom: 3px; letter-spacing: -.2px;
-}
-.footer a{color: var(--accent); text-decoration: none; font-weight: 500}
-.footer a:hover{text-decoration: underline}
-.ds-badges{display: flex; gap: 5px; flex-wrap: wrap; margin: 10px 0; justify-content: center}
-.ds-badges span{
-  font-size: 10px; padding: 3px 10px; border-radius: 99px;
-  background: var(--bg-soft); color: var(--text-3); border: 1px solid var(--border);
-  font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
-}
-.footer-sep{
-  width: 40px; height: 2px; background: var(--gold); margin: 12px auto;
-  border-radius: 99px; opacity: .5;
-}
-
-/* ═══════════ ANIMATIONS ═══════════ */
-@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-.section,.metric-card,.hero{animation: fadeUp .45s ease both}
-.metric-card:nth-child(2){animation-delay:.04s}
-.metric-card:nth-child(3){animation-delay:.08s}
-.metric-card:nth-child(4){animation-delay:.12s}
-.metric-card:nth-child(5){animation-delay:.16s}
-
-/* ═══════════ PRINT ═══════════ */
-@media print{
-  body{background:#fff}
-  .theme-toggle{display:none!important}
-  .section,.metric-card,.hero{box-shadow:none;border:1px solid #ddd;animation:none}
-  .hero{background:#0B1628!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-}
-
-/* ═══════════ RESPONSIVE ═══════════ */
-@media(max-width: 768px){
-  .hero{padding: 36px 22px 28px}
-  .hero-grid{grid-template-columns: 68px 1fr; gap: 14px}
-  .avatar{width: 68px; height: 68px; font-size: 24px; border-radius: 16px}
-  .ats-box{position: absolute; top: 20px; right: 20px}
-  .grid2,.persona-grid,.pref-grid{grid-template-columns: 1fr}
-  .metrics{grid-template-columns: repeat(2, 1fr)}
-  .section{padding: 20px 18px; border-radius: 14px}
-  .hero-info h1{font-size: 24px}
-  .hero-info .headline{font-size: 13px}
-  .wrap{padding: 0 16px 40px}
-}
-@media(max-width: 480px){
-  .hero{padding: 28px 18px 24px; border-radius: 0 0 18px 18px}
-  .hero-grid{grid-template-columns: 56px 1fr; gap: 12px}
-  .avatar{width: 56px; height: 56px; font-size: 20px; border-radius: 14px}
-  .hero-info h1{font-size: 20px}
-  .metrics{grid-template-columns: 1fr 1fr}
-  .section{padding: 16px 14px}
-}
+  /* ── Mobile ── */
+  @media (max-width:720px){
+    .hero{padding:24px 20px}
+    .hero-grid{grid-template-columns:auto 1fr;gap:16px}
+    .hero-ats{grid-column:1/-1;border-left:none;border-top:1px solid rgba(200,153,42,0.25);padding:14px 0 0;text-align:left;margin-top:6px}
+    .hero-info .name{font-size:24px}
+    .section{margin:12px 18px 0;padding:18px 18px 20px}
+    .courses-mini{grid-template-columns:1fr 1fr}
+    .best-grid{grid-template-columns:1fr}
+    .skills-grid{grid-template-columns:1fr}
+    .proj-grid{grid-template-columns:1fr}
+    .persona-grid{grid-template-columns:1fr}
+    .footer{margin:24px 18px 0}
+  }
 </style>
 </head>
+
 <body>
 
-<!-- ═══ THEME TOGGLE ═══ -->
-<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-  <div class="knob">
-    <span class="sun"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
-    <span class="moon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></span>
-  </div>
-</button>
+{# ─────────────────────────────────────────────
+   Validation — junk lookup table.
+   Any value matching these (case-insensitive, trimmed) is dropped.
+───────────────────────────────────────────── #}
+{% set JUNK = ['', 'test', 'asdf', 'asdfg', 'asdfgh', 'qwerty', 'abc', 'abcd', 'tbd', 'tba', 'n/a', 'na', '-', '--', '...', 'xxx', 'yyy', 'zzz', 'none', 'null', 'undefined', '0', '1', '2', '.', ',', 'sample', 'example', 'lorem', 'ipsum'] %}
 
-<div class="wrap">
+{# Pre-compute which sections to render #}
+{% set has_summary    = professional_summary and (professional_summary|trim)|length > 20 %}
+{% set has_courses    = courses_data and courses_data|length > 0 %}
+{% set has_personality = personality_data and personality_data.personality_type %}
+{% set has_capstone   = capstone_project or (capstone_projects and capstone_projects|length > 0) %}
+{% set has_work       = work_experience and work_experience|length > 0 %}
+{% set has_projects   = projects_data and projects_data|length > 0 %}
+{% set has_skills     = skills_data and ((skills_data.get('technical_skills', [])|length > 0) or (skills_data.get('soft_skills', [])|length > 0) or (skills_data.get('tools', [])|length > 0)) %}
+{% set has_hobbies    = hobbies_data and hobbies_data|length > 0 %}
+{% set has_edu        = education_data and education_data|length > 0 %}
+{% set ats_score      = (ats_data.total_score if ats_data and ats_data.total_score else 0) %}
 
-<!-- ═══════════ HERO ═══════════ -->
-<div class="hero">
-  <div class="hero-grid">
-    <div class="avatar">
-      {% if student_photo_url %}
-        <img src="{{ student_photo_url }}" alt="{{ student_name }}">
-      {% else %}
-        {{ (student_name or 'S')[0] | upper }}
-      {% endif %}
-    </div>
-    <div class="hero-info">
-      <h1>
-        {{ student_name or 'Student' }}
-        {% if is_fresher %}<span class="fresher-badge">Fresher</span>{% endif %}
-        {% if is_working_professional %}<span class="pro-badge">Professional</span>{% endif %}
-      </h1>
-      <div class="headline">{{ headline or 'Professional' }}</div>
-      <div class="meta">
-        {% if student_email %}<span><a href="mailto:{{ student_email }}">{{ student_email }}</a></span>{% endif %}
-        {% if student_location %}<span>{{ student_location }}</span>{% endif %}
-        {% if student_phone %}<span><a href="tel:{{ student_phone }}">{{ student_phone }}</a></span>{% endif %}
-      </div>
-      <div class="hero-links">
-        {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank" rel="noopener">LinkedIn</a>{% endif %}
-        {% if github_url %}<a href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>{% endif %}
-        {% if portfolio_url %}<a href="{{ portfolio_url }}" target="_blank" rel="noopener">Portfolio</a>{% endif %}
-      </div>
-    </div>
-    {% if ats_data and ats_data.total_score and ats_data.total_score > 20 %}
-    <div class="ats-box">
-      {% set ats_class = 'high' if ats_data.total_score >= 70 else ('mid' if ats_data.total_score >= 40 else 'low') %}
-      <div class="score {{ ats_class }}">{{ ats_data.total_score }}</div>
-      <div class="lbl">ATS Score</div>
-    </div>
-    {% endif %}
-  </div>
-</div>
+{# Pick the SINGLE best item for each evaluation type #}
+{% set best_test = best_test_scores[0] if best_test_scores and best_test_scores|length > 0 else None %}
+{% set best_asgn = best_assignments[0] if best_assignments and best_assignments|length > 0 else None %}
+{% set best_case = best_case_studies[0] if best_case_studies and best_case_studies|length > 0 else (case_study_highlights[0] if case_study_highlights and case_study_highlights|length > 0 else None) %}
+{% set has_any_best = best_test or best_asgn or best_case %}
 
-<!-- ═══════════ METRICS STRIP ═══════════ -->
-{% set total_assessments = (performance_data.total_tests or 0) + (performance_data.total_quizzes or 0) + (performance_data.total_case_studies or 0) %}
-{% if total_assessments > 0 or (performance_data and performance_data.completed_courses and performance_data.completed_courses > 0) %}
-<div class="metrics">
-  {% if performance_data and performance_data.overall_score and performance_data.overall_score > 0 %}
-  <div class="metric-card"><div class="v teal">{{ "%.0f"|format(performance_data.overall_score) }}%</div><div class="l">Overall Score</div></div>
-  {% endif %}
-  {% if performance_data and performance_data.best_test_score and performance_data.best_test_score > 0 %}
-  <div class="metric-card"><div class="v">{{ "%.0f"|format(performance_data.best_test_score) }}%</div><div class="l">Best Score</div></div>
-  {% endif %}
-  {% if performance_data and performance_data.completed_courses and performance_data.completed_courses > 0 %}
-  <div class="metric-card"><div class="v green">{{ performance_data.completed_courses }}</div><div class="l">Certified</div></div>
-  {% endif %}
-  {% if total_assessments > 0 %}
-  <div class="metric-card"><div class="v amber">{{ total_assessments }}</div><div class="l">Assessments</div></div>
-  {% endif %}
-  {% if performance_data and performance_data.total_hours and performance_data.total_hours > 0 %}
-  <div class="metric-card"><div class="v">{{ "%.0f"|format(performance_data.total_hours) }}h</div><div class="l">Training</div></div>
-  {% endif %}
-</div>
-{% endif %}
+{# Top role match — chip in hero #}
+{% set top_role = role_matches[0] if role_matches and role_matches|length > 0 else None %}
 
-<!-- ═══════════ COMPLETION NOTICE ═══════════ -->
-{% set has_education = education_data and education_data|length > 0 %}
-{% set has_experience = work_experience and work_experience|length > 0 %}
-{% set has_skills_data = skills_data and (skills_data.get('technical_skills', [])|length > 0 if skills_data is mapping else false) %}
-{% set missing_count = (0 if has_education else 1) + (0 if has_experience else 1) + (0 if has_skills_data else 1) %}
-{% if missing_count >= 2 %}
-<div class="notice">
-  <div class="ic-warn">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-  </div>
-  <div>
-    <div class="nt">Complete your profile for the full AI experience</div>
-    <div class="nd">Add these details in your LMS profile so the AI can generate a richer, more accurate profile:</div>
-    <div class="ntag">
-      {% if not has_education %}<span>Education</span>{% endif %}
-      {% if not has_experience %}<span>Work Experience</span>{% endif %}
-      {% if not has_skills_data %}<span>Skills</span>{% endif %}
-      <span>Resume PDF</span>
-      <span>LinkedIn URL</span>
-      <span>GitHub URL</span>
-    </div>
-  </div>
-</div>
-{% endif %}
+<div class="page">
 
-<!-- ═══════════ PROFESSIONAL SUMMARY ═══════════ -->
-<div class="section">
-  <div class="section-title">
-    <div class="ic" style="background:var(--gold-soft);color:var(--gold)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-    </div>
-    Professional Summary
-  </div>
-  {% if professional_summary %}
-    {% set has_bullets = '•' in professional_summary or professional_summary.startswith('-') %}
-    {% if has_bullets %}
-      <ul class="summary-bullets">
-        {% for line in professional_summary.split('\n') %}
-          {% set clean = line.strip().lstrip('•').lstrip('-').strip() %}
-          {% if clean %}<li>{{ clean }}</li>{% endif %}
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p class="summary-text">{{ professional_summary }}</p>
-    {% endif %}
-  {% else %}
-    <p class="summary-text" style="color:var(--text-3);font-style:italic">Professional summary will appear once profile data is available.</p>
-  {% endif %}
-</div>
+  {# ════════════ HERO ════════════ #}
+  <div class="hero">
+    <div class="hero-eyebrow">✦&nbsp;&nbsp;Upskillize · Profile IQ · Verified Credentials</div>
+    <div class="hero-grid">
 
-<!-- ═══════════ ENROLLED COURSES ═══════════ -->
-<div class="section">
-  <div class="section-title">
-    <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-    </div>
-    Enrolled Courses
-    {% if total_courses %}<span style="font-size:11px;color:var(--text-3);font-weight:500;font-family:'Plus Jakarta Sans',sans-serif;margin-left:8px">{{ completed_courses }}/{{ total_courses }} completed</span>{% endif %}
-  </div>
-  {% if courses_data and courses_data|length > 0 %}
-    {% for course in courses_data[:6] %}
-    <div class="course-row">
-      <div class="course-name">{{ course.course_name or 'Course' }}</div>
-      {% set cs_status = course.completion_status or course.status or 'enrolled' %}
-      <span class="course-status {{ 'completed' if cs_status == 'completed' else ('in-progress' if cs_status in ('in_progress', 'active', 'started') else 'enrolled') }}">
-        {{ 'Completed' if cs_status == 'completed' else ('In Progress' if cs_status in ('in_progress', 'active', 'started') else 'Enrolled') }}
-      </span>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg></div>
-      <div class="ph-text">No courses enrolled yet.<br><strong>Enroll in a course</strong> to unlock role matching and stronger ATS scores.</div>
-    </div>
-  {% endif %}
-</div>
-
-<!-- ═══════════ PERSONALITY & WORK STYLE ═══════════ -->
-<div class="section">
-  <div class="section-title">
-    <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a9 9 0 019 9c0 3.87-3.13 7-7 7h-2v4l-4-4A9 9 0 0112 2z"/></svg>
-    </div>
-    Personality &amp; Work Style
-  </div>
-  {% if personality_data and personality_data.personality_type %}
-    <div class="persona-hero">
-      <div class="type">{{ personality_data.personality_type }}</div>
-      <div class="src">Psychometric Assessment</div>
-    </div>
-    <div class="persona-grid">
-      {% if personality_data.traits %}<div class="persona-cell"><div class="pl">Key Traits</div><div class="pv">{{ personality_data.traits }}</div></div>{% endif %}
-      {% if personality_data.work_style %}<div class="persona-cell"><div class="pl">Work Style</div><div class="pv">{{ personality_data.work_style }}</div></div>{% endif %}
-      {% if personality_data.communication %}<div class="persona-cell"><div class="pl">Communication</div><div class="pv">{{ personality_data.communication }}</div></div>{% endif %}
-      {% if personality_data.leadership %}<div class="persona-cell"><div class="pl">Team Role</div><div class="pv">{{ personality_data.leadership }}</div></div>{% endif %}
-    </div>
-  {% else %}
-    <div class="placeholder">
-      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a9 9 0 019 9c0 3.87-3.13 7-7 7h-2v4l-4-4A9 9 0 0112 2z"/></svg></div>
-      <div class="ph-text">Personality profile not available yet.<br><strong>Complete the Psychometric Test</strong> in your LMS profile to unlock AI-powered personality insights.</div>
-    </div>
-  {% endif %}
-</div>
-
-<!-- ═══════════ ASSESSMENT & QUIZ PERFORMANCE ═══════════ -->
-<div class="section">
-  <div class="section-title">
-    <div class="ic" style="background:var(--green-soft);color:var(--green)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-    </div>
-    Assessment Performance
-    {% if total_assessments %}<span style="font-size:11px;color:var(--text-3);font-weight:500;font-family:'Plus Jakarta Sans',sans-serif;margin-left:8px">{{ total_assessments }} total</span>{% endif %}
-  </div>
-  {% if best_test_scores and best_test_scores|length > 0 %}
-    {% for ts in best_test_scores[:5] %}
-    {% set pct = ts.percentage or ts.score or 0 %}
-    {% set pct_class = 'teal' if pct >= 70 else ('mid' if pct >= 40 else 'low') %}
-    <div class="score-row">
-      <div class="score-val {{ pct_class }}">{{ "%.0f"|format(pct) }}%</div>
-      <div class="score-info">
-        <div class="score-title">{{ ts.subject or ts.topic or 'Assessment' }}</div>
-        <div class="score-meta">
-          {% if ts.course_name %}<span>{{ ts.course_name }}</span>{% endif %}
-          {% if ts.module_name %}<span>{{ ts.module_name }}</span>{% endif %}
-          {% if ts.grade %}<span>Grade: {{ ts.grade }}</span>{% endif %}
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
-      <div class="ph-text">No assessment scores yet.<br><strong>Take quizzes and tests</strong> in your enrolled courses to build verified skill evidence.</div>
-    </div>
-  {% endif %}
-</div>
-
-<!-- ═══════════ CASE STUDIES ═══════════ -->
-<div class="section">
-  <div class="section-title">
-    <div class="ic" style="background:var(--purple-soft);color:var(--purple)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    </div>
-    Case Studies
-    {% if total_case_studies %}<span style="font-size:11px;color:var(--text-3);font-weight:500;font-family:'Plus Jakarta Sans',sans-serif;margin-left:8px">{{ total_case_studies }} submitted</span>{% endif %}
-  </div>
-  {% if best_case_studies and best_case_studies|length > 0 %}
-    {% for cs in best_case_studies %}
-    {% set cs_score = cs.score or cs.ai_score or 0 %}
-    {% set cs_max = cs.max_score or 100 %}
-    {% set cs_pct = (cs_score / cs_max * 100) if cs_max > 0 else 0 %}
-    {% set cs_class = 'teal' if cs_pct >= 70 else ('mid' if cs_pct >= 40 else 'low') %}
-    <div class="score-row">
-      <div class="score-val {{ cs_class }}">{{ "%.0f"|format(cs_pct) }}%</div>
-      <div class="score-info">
-        <div class="score-title">{{ cs.title or 'Case Study' }}</div>
-        <div class="score-meta">
-          {% if cs.course_name %}<span>{{ cs.course_name }}</span>{% endif %}
-          {% if cs.topic %}<span>{{ cs.topic }}</span>{% endif %}
-          {% if cs.ai_grade %}<span>Grade: {{ cs.ai_grade }}</span>{% endif %}
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  {% elif case_study_highlights and case_study_highlights|length > 0 %}
-    {% for cs in case_study_highlights[:2] %}
-    <div class="score-row">
-      <div class="score-val teal">{{ cs.score_pct }}%</div>
-      <div class="score-info">
-        <div class="score-title">{{ cs.title }}</div>
-        {% if cs.concepts %}<div class="score-meta"><span>{{ cs.concepts|join(', ') }}</span></div>{% endif %}
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-      <div class="ph-text">No case studies submitted yet.<br><strong>Submit case studies</strong> to demonstrate analytical and problem-solving skills.</div>
-    </div>
-  {% endif %}
-</div>
-
-<!-- ═══════════ BEST ASSIGNMENTS ═══════════ -->
-<div class="section">
-  <div class="section-title">
-    <div class="ic" style="background:var(--amber-soft);color:var(--amber)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
-    </div>
-    Assignments
-    {% if total_assignments %}<span style="font-size:11px;color:var(--text-3);font-weight:500;font-family:'Plus Jakarta Sans',sans-serif;margin-left:8px">{{ total_assignments }} total</span>{% endif %}
-  </div>
-  {% if best_assignments and best_assignments|length > 0 %}
-    {% for asgn in best_assignments %}
-    {% set a_score = asgn.score or 0 %}
-    {% set a_max = asgn.max_score or 100 %}
-    {% set a_pct = (a_score / a_max * 100) if a_max > 0 else 0 %}
-    {% set a_class = 'teal' if a_pct >= 70 else ('mid' if a_pct >= 40 else 'low') %}
-    <div class="score-row">
-      <div class="score-val {{ a_class }}">{{ "%.0f"|format(a_pct) }}%</div>
-      <div class="score-info">
-        <div class="score-title">{{ asgn.title or 'Assignment' }}</div>
-        <div class="score-meta">
-          {% if asgn.course_name %}<span>{{ asgn.course_name }}</span>{% endif %}
-          {% if asgn.module_name %}<span>{{ asgn.module_name }}</span>{% endif %}
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></div>
-      <div class="ph-text">No graded assignments yet.<br><strong>Complete assignments</strong> in your courses to showcase applied learning.</div>
-    </div>
-  {% endif %}
-</div>
-
-<!-- ═══════════ CAPSTONE PROJECT ═══════════ -->
-<div class="section">
-  <div class="section-title">
-    <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M16 8l-4 4-2-2"/><path d="M8 14l2 2 6-6"/></svg>
-    </div>
-    Capstone Project
-  </div>
-  {% if capstone_project %}
-    <div class="highlight-card green">
-      <div class="hc-head">
-        <div class="hc-title">{{ capstone_project.title or capstone_project.project_name or 'Capstone Project' }}{% if capstone_project.status %}<span class="hc-status">{{ capstone_project.status }}</span>{% endif %}</div>
-        {% if capstone_project.score %}<div class="hc-score">{{ capstone_project.score }}{% if capstone_project.max_score %}/{{ capstone_project.max_score }}{% endif %}</div>{% endif %}
-      </div>
-      {% if capstone_project.description %}<div class="hc-desc">{{ capstone_project.description[:300] }}</div>{% endif %}
-      {% if capstone_project.course_name %}<div class="score-meta" style="margin-top:6px"><span>{{ capstone_project.course_name }}</span></div>{% endif %}
-      {% if capstone_project.technologies or capstone_project.tech_stack %}
-      <div class="hc-tags">
-        {% for t in (capstone_project.technologies or capstone_project.tech_stack or '').split(',') %}<span>{{ t.strip() }}</span>{% endfor %}
-      </div>
-      {% endif %}
-    </div>
-  {% elif capstone_projects and capstone_projects|length > 0 %}
-    {% for cp in capstone_projects[:1] %}
-    <div class="highlight-card green">
-      <div class="hc-head">
-        <div class="hc-title">{{ cp.title or cp.project_name or 'Capstone Project' }}{% if cp.status %}<span class="hc-status">{{ cp.status }}</span>{% endif %}</div>
-        {% if cp.score %}<div class="hc-score">{{ cp.score }}{% if cp.max_score %}/{{ cp.max_score }}{% endif %}</div>{% endif %}
-      </div>
-      {% if cp.description %}<div class="hc-desc">{{ cp.description[:300] }}</div>{% endif %}
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="placeholder">
-      <div class="ph-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M16 8l-4 4-2-2"/></svg></div>
-      <div class="ph-text">No capstone project submitted yet.<br><strong>Submit your capstone</strong> to showcase your end-to-end project delivery capability.</div>
-    </div>
-  {% endif %}
-</div>
-
-<!-- ═══════════ ACADEMIC RESULTS ═══════════ -->
-{% if semester_results and semester_results|length > 0 %}
-<div class="section">
-  <div class="section-title">
-    <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-    </div>
-    Academic Results
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
-    {% for sr in semester_results[:6] %}
-    <div style="background:var(--bg-soft);border-radius:10px;padding:12px;text-align:center">
-      <div style="font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--accent)">
-        {{ sr.cgpa or sr.gpa or sr.percentage or sr.score or '—' }}{% if sr.percentage %}%{% endif %}
-      </div>
-      <div style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.8px;font-weight:700;margin-top:3px">
-        {{ sr.semester or sr.term or sr.label or 'Result' }}
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
-
-<!-- ═══════════ TWO COLUMN GRID ═══════════ -->
-{% set has_left_content = (role_matches and role_matches|length > 0) or (education_data and education_data|length > 0) or (work_experience and work_experience|length > 0) %}
-<div class="grid2{% if not has_left_content %} single{% endif %}">
-
-  {% if has_left_content %}
-  <!-- LEFT COLUMN -->
-  <div class="col">
-
-    {% if education_data and education_data|length > 0 %}
-    <div class="section">
-      <div class="section-title">
-        <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></svg>
-        </div>
-        Education
-      </div>
-      {% for edu in education_data %}
-      <div class="timeline-card">
-        <div class="tc-title">{{ edu.degree or 'Degree' }}{% if edu.field_of_study %} — {{ edu.field_of_study }}{% endif %}</div>
-        {% if edu.institution %}<div class="tc-org">{{ edu.institution }}</div>{% endif %}
-        <div class="tc-meta">
-          {% if edu.year %}<span>{{ edu.year }}</span>{% endif %}
-          {% if edu.percentage %}<span>{{ edu.percentage }}</span>{% endif %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if work_experience and work_experience|length > 0 %}
-    <div class="section">
-      <div class="section-title">
-        <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
-        </div>
-        Experience
-      </div>
-      {% for exp in work_experience %}
-      <div class="timeline-card work">
-        <div class="tc-title">{{ exp.title or 'Role' }}</div>
-        {% if exp.company %}<div class="tc-org">{{ exp.company }}</div>{% endif %}
-        {% if exp.duration %}<div class="tc-meta"><span>{{ exp.duration }}</span></div>{% endif %}
-        {% if exp.description %}<div class="tc-desc">{{ exp.description }}</div>{% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if role_matches and role_matches|length > 0 %}
-    <div class="section">
-      <div class="section-title">
-        <div class="ic" style="background:var(--teal-soft);color:var(--teal)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </div>
-        Eligible Job Roles
-      </div>
-      {% for role in role_matches[:3] %}
-      {% set rclass = 'high' if role.match_percentage >= 70 else ('mid' if role.match_percentage >= 40 else 'low') %}
-      <div class="role-card">
-        <div class="role-head">
-          <div class="role-title">{{ role.role_title }}</div>
-          <div class="role-pct {{ rclass }}">{{ role.match_percentage }}%</div>
-        </div>
-        <div class="role-bar"><div class="fill {{ rclass }}" style="width:{{ role.match_percentage }}%"></div></div>
-        <div class="role-keywords">
-          {% for kw in role.matching_keywords[:5] %}<span class="match">{{ kw }}</span>{% endfor %}
-          {% for kw in (role.missing_keywords or [])[:2] %}<span class="miss">{{ kw }}</span>{% endfor %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-  </div>
-  {% endif %}
-
-  <!-- RIGHT COLUMN -->
-  <div class="col">
-
-    {% if skills_data and ((skills_data.get('technical_skills', [])|length > 0) or (skills_data.get('soft_skills', [])|length > 0) or (skills_data.get('tools', [])|length > 0)) %}
-    <div class="section">
-      <div class="section-title">
-        <div class="ic" style="background:var(--purple-soft);color:var(--purple)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        </div>
-        Skills &amp; Competencies
-      </div>
-      {% set tech = skills_data.get('technical_skills', []) %}
-      {% if tech %}
-      <div class="skill-cat">Technical</div>
-      <div class="skill-tags">
-        {% for sk in tech[:12] %}<span>{{ sk.name if sk.name is defined else sk }}</span>{% endfor %}
-      </div>
-      {% endif %}
-      {% set tools = skills_data.get('tools', []) %}
-      {% if tools %}
-      <div class="skill-cat">Tools</div>
-      <div class="skill-tags">
-        {% for sk in tools[:10] %}<span>{{ sk.name if sk.name is defined else sk }}</span>{% endfor %}
-      </div>
-      {% endif %}
-      {% set soft = skills_data.get('soft_skills', []) %}
-      {% if soft %}
-      <div class="skill-cat">Soft Skills</div>
-      <div class="skill-tags">
-        {% for sk in soft[:6] %}<span>{{ sk.name if sk.name is defined else sk }}</span>{% endfor %}
-      </div>
-      {% endif %}
-    </div>
-    {% endif %}
-
-    {% if certifications_data and certifications_data|length > 0 %}
-    <div class="section">
-      <div class="section-title">
-        <div class="ic" style="background:var(--gold-soft);color:var(--gold)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
-        </div>
-        Certifications
-      </div>
-      {% for cert in certifications_data[:5] %}
-      <div class="cert-card">
-        <div class="cert-icon-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7V4a2 2 0 012-2h8.5L20 7.5V20a2 2 0 01-2 2H6a2 2 0 01-2-2v-3"/><polyline points="14 2 14 8 20 8"/><path d="M4 15h9"/><path d="M10 12l3 3-3 3"/></svg>
-        </div>
-        <div>
-          <div class="cert-name">{{ cert.certificate_name or cert.name or 'Certificate' }}</div>
-          <div class="cert-issuer">
-            {% if cert.course_name %}{{ cert.course_name }}{% endif %}
-            {% if cert.issued_at %} · {{ cert.issued_at }}{% endif %}
-          </div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if job_preferences and (job_preferences.preferred_role or job_preferences.preferred_industry or job_preferences.work_mode) %}
-    <div class="section">
-      <div class="section-title">
-        <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </div>
-        Job Preferences
-      </div>
-      <div class="pref-grid">
-        {% if job_preferences.preferred_role %}<div class="pref-cell"><div class="pl">Target Role</div><div class="pv">{{ job_preferences.preferred_role }}</div></div>{% endif %}
-        {% if job_preferences.preferred_industry %}<div class="pref-cell"><div class="pl">Industry</div><div class="pv">{{ job_preferences.preferred_industry }}</div></div>{% endif %}
-        {% if job_preferences.work_mode %}<div class="pref-cell"><div class="pl">Work Mode</div><div class="pv">{{ job_preferences.work_mode }}</div></div>{% endif %}
-        {% if job_preferences.preferred_location %}<div class="pref-cell"><div class="pl">Location</div><div class="pv">{{ job_preferences.preferred_location }}</div></div>{% endif %}
-      </div>
-    </div>
-    {% endif %}
-
-    {% if projects_data and projects_data|length > 0 %}
-    <div class="section">
-      <div class="section-title">
-        <div class="ic" style="background:var(--accent-soft);color:var(--accent)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-        </div>
-        Projects
-      </div>
-      {% for proj in projects_data[:4] %}
-      <div class="timeline-card" style="border-left-color:var(--purple)">
-        <div class="tc-title">{{ proj.title }}</div>
-        {% if proj.description %}<div class="tc-desc">{{ proj.description[:200] }}</div>{% endif %}
-        {% if proj.technologies_used %}
-        <div class="hc-tags" style="margin-top:8px">
-          {% set techs = proj.technologies_used %}
-          {% if techs is string %}{% for t in techs.split(',') %}<span>{{ t.strip() }}</span>{% endfor %}
-          {% elif techs is iterable %}{% for t in techs %}<span>{{ t }}</span>{% endfor %}{% endif %}
-        </div>
+      <div class="hero-photo">
+        {% if student_photo_url %}
+          <img src="{{ student_photo_url }}" alt="{{ student_name }}">
+        {% else %}
+          {{ (student_name or 'S')[0]|upper }}
         {% endif %}
       </div>
+
+      <div class="hero-info">
+        <div class="name">
+          {{ student_name or 'Student' }}{% if is_fresher %}<span class="badge">Fresher</span>{% elif is_working_professional %}<span class="badge">Professional</span>{% endif %}
+        </div>
+        {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
+        {% if top_role %}
+        <div class="top-match">Top match — <b>{{ top_role.role_title }} · {{ top_role.match_percentage }}%</b></div>
+        {% endif %}
+        <div class="contact">
+          {% if student_location %}<b>{{ student_location }}</b>{% endif %}
+          {% if student_email %}{% if student_location %}<span class="sep">·</span>{% endif %}<a href="mailto:{{ student_email }}">{{ student_email }}</a>{% endif %}
+          {% if student_phone %}<span class="sep">·</span><a href="tel:{{ student_phone }}">{{ student_phone }}</a>{% endif %}
+          {% if linkedin_url or github_url or portfolio_url %}
+          <br>
+          {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank" rel="noopener">LinkedIn</a>{% endif %}
+          {% if github_url %}{% if linkedin_url %}<span class="sep">·</span>{% endif %}<a href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>{% endif %}
+          {% if portfolio_url %}{% if linkedin_url or github_url %}<span class="sep">·</span>{% endif %}<a href="{{ portfolio_url }}" target="_blank" rel="noopener">Portfolio</a>{% endif %}
+          {% endif %}
+        </div>
+      </div>
+
+      {% if ats_score and ats_score > 20 %}
+      <div class="hero-ats">
+        <div class="num">{{ ats_score }}<span>/100</span></div>
+        <div class="lbl">ATS Score</div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  {# ════════════ 01 PROFESSIONAL SUMMARY ════════════ #}
+  {% if has_summary %}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">01 / Professional summary</span>
+      <span class="sec-rule"></span>
+    </div>
+    <h2 class="sec-h">In one read.</h2>
+    <p class="summary-text">{{ professional_summary|trim }}</p>
+  </div>
+  {% endif %}
+
+  {# ════════════ 02 COURSES (compact) ════════════ #}
+  {% if has_courses %}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">02 / Courses enrolled</span>
+      <span class="sec-rule"></span>
+      <span class="sec-sub">{{ completed_courses or 0 }}/{{ total_courses or courses_data|length }} completed</span>
+    </div>
+    <h2 class="sec-h">Programs taken at Upskillize.</h2>
+    <div class="courses-mini">
+      {% set ns = namespace(seen=[]) %}
+      {% for course in courses_data[:12] %}
+        {% set cnm = (course.course_name or '')|trim %}
+        {% if cnm|length > 1 and cnm|lower not in JUNK and cnm|lower not in ns.seen %}
+          {% set _ = ns.seen.append(cnm|lower) %}
+          {% set cs_status = course.completion_status or course.status or 'enrolled' %}
+          <div class="course-mini">
+            <span class="nm">{{ cnm }}</span>
+            <span class="st {{ 'completed' if cs_status == 'completed' else ('in-progress' if cs_status in ('in_progress', 'active', 'started') else 'enrolled') }}">
+              {{ 'Done' if cs_status == 'completed' else ('Active' if cs_status in ('in_progress', 'active', 'started') else 'Enrolled') }}
+            </span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ════════════ 03 BEST TILL DATE ════════════ #}
+  {% if has_any_best %}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">03 / Best till date</span>
+      <span class="sec-rule"></span>
+      <span class="sec-sub">Top assignment · assessment · case study</span>
+    </div>
+    <h2 class="sec-h">Highest-scoring work — across categories.</h2>
+    <div class="best-grid">
+
+      {# Best assignment #}
+      {% if best_asgn %}
+      {% set a_score = best_asgn.score or 0 %}
+      {% set a_max = best_asgn.max_score or 100 %}
+      {% set a_pct = (a_score / a_max * 100) if a_max > 0 else 0 %}
+      {% set ac = 'teal' if a_pct >= 70 else ('mid' if a_pct >= 40 else 'low') %}
+      <div class="best-card">
+        <div class="best-tag">Assignment</div>
+        <div class="best-pct {{ ac }}">{{ "%.0f"|format(a_pct) }}<span class="u">%</span></div>
+        <div class="best-title">{{ best_asgn.title or 'Assignment' }}</div>
+        {% if best_asgn.course_name or best_asgn.module_name %}
+        <div class="best-meta">
+          {% if best_asgn.course_name %}{{ best_asgn.course_name }}{% endif %}{% if best_asgn.course_name and best_asgn.module_name %} · {% endif %}{% if best_asgn.module_name %}{{ best_asgn.module_name }}{% endif %}
+        </div>
+        {% endif %}
+        {% if best_asgn.feedback and (best_asgn.feedback|trim)|length > 5 %}
+        <div class="best-desc">{{ (best_asgn.feedback|trim)[:140] }}</div>
+        {% elif best_asgn.description and (best_asgn.description|trim)|length > 5 %}
+        <div class="best-desc">{{ (best_asgn.description|trim)[:140] }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# Best assessment / test #}
+      {% if best_test %}
+      {% set t_pct = best_test.percentage or best_test.score or 0 %}
+      {% set tc = 'teal' if t_pct >= 70 else ('mid' if t_pct >= 40 else 'low') %}
+      <div class="best-card alt">
+        <div class="best-tag">Assessment</div>
+        <div class="best-pct {{ tc }}">{{ "%.0f"|format(t_pct) }}<span class="u">%</span></div>
+        <div class="best-title">{{ best_test.subject or best_test.topic or 'Assessment' }}</div>
+        {% if best_test.course_name or best_test.module_name %}
+        <div class="best-meta">
+          {% if best_test.course_name %}{{ best_test.course_name }}{% endif %}{% if best_test.course_name and best_test.module_name %} · {% endif %}{% if best_test.module_name %}{{ best_test.module_name }}{% endif %}
+        </div>
+        {% endif %}
+        {% if best_test.grade %}
+        <div class="best-desc">Grade <b style="font-style:normal;font-family:var(--sans);font-weight:600">{{ best_test.grade }}</b> on this module test.</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {# Best case study #}
+      {% if best_case %}
+      {% if best_case_studies %}
+        {% set cs_score = best_case.score or best_case.ai_score or 0 %}
+        {% set cs_max = best_case.max_score or 100 %}
+        {% set cs_pct = (cs_score / cs_max * 100) if cs_max > 0 else 0 %}
+      {% else %}
+        {% set cs_pct = best_case.score_pct or 0 %}
+      {% endif %}
+      {% set csc = 'teal' if cs_pct >= 70 else ('mid' if cs_pct >= 40 else 'low') %}
+      <div class="best-card alt2">
+        <div class="best-tag">Case study</div>
+        <div class="best-pct {{ csc }}">{{ "%.0f"|format(cs_pct) }}<span class="u">%</span></div>
+        <div class="best-title">{{ best_case.title or 'Case Study' }}</div>
+        {% if best_case.course_name or best_case.topic %}
+        <div class="best-meta">
+          {% if best_case.course_name %}{{ best_case.course_name }}{% endif %}{% if best_case.course_name and best_case.topic %} · {% endif %}{% if best_case.topic %}{{ best_case.topic }}{% endif %}
+        </div>
+        {% endif %}
+        {% if best_case.concepts and best_case.concepts|length > 0 %}
+        <div class="best-desc">Covered {{ best_case.concepts[:3]|join(', ') }}.</div>
+        {% elif best_case.ai_grade %}
+        <div class="best-desc">Assessor grade <b style="font-style:normal;font-family:var(--sans);font-weight:600">{{ best_case.ai_grade }}</b>.</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+  {% endif %}
+
+  {# ════════════ 04 CAPSTONE ════════════ #}
+  {% if has_capstone %}
+  {% set cp = capstone_project if capstone_project else capstone_projects[0] %}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">04 / Capstone project</span>
+      <span class="sec-rule"></span>
+      {% if cp.score %}<span class="sec-sub">{{ cp.score }}{% if cp.max_score %}/{{ cp.max_score }}{% endif %}</span>{% endif %}
+    </div>
+    <h2 class="sec-h">The flagship deliverable.</h2>
+    <div class="capstone">
+      <div class="capstone-h">{{ cp.title or cp.project_name or 'Capstone Project' }}</div>
+      {% if cp.course_name or cp.status %}
+      <div class="capstone-meta">
+        {% if cp.course_name %}{{ cp.course_name }}{% endif %}{% if cp.course_name and cp.status %} · {% endif %}{% if cp.status %}{{ cp.status }}{% endif %}
+      </div>
+      {% endif %}
+      {% if cp.description and (cp.description|trim)|length > 10 %}
+      <div class="capstone-desc">{{ cp.description[:320]|trim }}</div>
+      {% endif %}
+      {% if cp.technologies or cp.tech_stack %}
+      <div class="capstone-tech">
+        {% set techs = cp.technologies or cp.tech_stack %}
+        {% set tns = namespace(seen=[]) %}
+        {% if techs is string %}
+          {% for t in techs.split(',') %}
+            {% set tt = t|trim %}
+            {% if tt|length > 1 and tt|lower not in JUNK and tt|lower not in tns.seen %}
+              {% set _ = tns.seen.append(tt|lower) %}
+              <span>{{ tt }}</span>
+            {% endif %}
+          {% endfor %}
+        {% elif techs is iterable %}
+          {% for t in techs %}
+            {% set tt = (t|string|trim) %}
+            {% if tt|length > 1 and tt|lower not in JUNK and tt|lower not in tns.seen %}
+              {% set _ = tns.seen.append(tt|lower) %}
+              <span>{{ tt }}</span>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ════════════ 05 PERSONALITY ════════════ #}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">05 / Personality &amp; work style</span>
+      <span class="sec-rule"></span>
+      <span class="sec-sub">Psychometric verified</span>
+    </div>
+    <h2 class="sec-h">Decoded for recruiters.</h2>
+    {% if has_personality %}
+      <div class="persona-type">
+        <div class="pl">Type</div>
+        <div class="pv">{{ personality_data.personality_type }}</div>
+      </div>
+      <div class="persona-grid">
+        {% if personality_data.traits and (personality_data.traits|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Key traits</div><div class="pv">{{ personality_data.traits|trim }}</div></div>{% endif %}
+        {% if personality_data.work_style and (personality_data.work_style|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Work style</div><div class="pv">{{ personality_data.work_style|trim }}</div></div>{% endif %}
+        {% if personality_data.communication and (personality_data.communication|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Communication</div><div class="pv">{{ personality_data.communication|trim }}</div></div>{% endif %}
+        {% if personality_data.leadership and (personality_data.leadership|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Team role</div><div class="pv">{{ personality_data.leadership|trim }}</div></div>{% endif %}
+      </div>
+    {% else %}
+      <div class="empty">
+        <b>Psychometric not yet completed.</b><br>
+        Take the test on the LMS to unlock work-style decoding.
+      </div>
+    {% endif %}
+  </div>
+
+  {# ════════════ 06 EXPERIENCE ════════════ #}
+  {% if has_work %}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">06 / Experience</span>
+      <span class="sec-rule"></span>
+      <span class="sec-sub">From resume &amp; LinkedIn</span>
+    </div>
+    <h2 class="sec-h">Roles held.</h2>
+    <div class="tl">
+      {% set ens = namespace(seen=[]) %}
+      {% for exp in work_experience[:5] %}
+        {% set k = ((exp.title or '')|trim|lower) ~ '|' ~ ((exp.company or '')|trim|lower) %}
+        {% if k|length > 2 and k not in ens.seen %}
+          {% set _ = ens.seen.append(k) %}
+          <div class="tl-card">
+            <div class="tl-title">{{ exp.title or 'Role' }}</div>
+            {% if exp.company %}<div class="tl-org">{{ exp.company }}</div>{% endif %}
+            {% if exp.duration %}<div class="tl-meta"><span>{{ exp.duration }}</span></div>{% endif %}
+            {% if exp.description and (exp.description|trim)|length > 5 %}<div class="tl-desc">{{ (exp.description|trim)[:220] }}</div>{% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ════════════ 07 PROJECTS ════════════ #}
+  {% if has_projects %}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">07 / Projects</span>
+      <span class="sec-rule"></span>
+      <span class="sec-sub">From resume · GitHub</span>
+    </div>
+    <h2 class="sec-h">Built and shipped.</h2>
+    <div class="proj-grid">
+      {% set pns = namespace(seen=[]) %}
+      {% for proj in projects_data[:6] %}
+        {% set ptitle = (proj.title or '')|trim %}
+        {% if ptitle|length > 2 and ptitle|lower not in JUNK and ptitle|lower not in pns.seen %}
+          {% set _ = pns.seen.append(ptitle|lower) %}
+          <div class="proj-card">
+            <div class="proj-title">{{ ptitle }}</div>
+            {% if proj.description and (proj.description|trim)|length > 8 %}
+            <div class="proj-desc">{{ (proj.description|trim)[:180] }}</div>
+            {% endif %}
+            {% if proj.technologies_used %}
+            <div class="proj-tech">
+              {% set tns = namespace(seen=[]) %}
+              {% set techs = proj.technologies_used %}
+              {% if techs is string %}
+                {% for t in techs.split(',') %}
+                  {% set tt = t|trim %}
+                  {% if tt|length > 1 and tt|lower not in JUNK and tt|lower not in tns.seen %}
+                    {% set _ = tns.seen.append(tt|lower) %}
+                    <span>{{ tt }}</span>
+                  {% endif %}
+                {% endfor %}
+              {% elif techs is iterable %}
+                {% for t in techs %}
+                  {% set tt = (t|string|trim) %}
+                  {% if tt|length > 1 and tt|lower not in JUNK and tt|lower not in tns.seen %}
+                    {% set _ = tns.seen.append(tt|lower) %}
+                    <span>{{ tt }}</span>
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ════════════ 08 SKILLS ════════════ #}
+  {% if has_skills %}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">08 / Skills</span>
+      <span class="sec-rule"></span>
+      <span class="sec-sub">Technical · Soft · Tools</span>
+    </div>
+    <h2 class="sec-h">Capabilities — verified across sources.</h2>
+    <div class="skills-grid">
+
+      {% set tech = skills_data.get('technical_skills', []) %}
+      <div class="skill-col">
+        <div class="skill-h">Technical</div>
+        <div class="skill-list">
+          {% set tns = namespace(seen=[]) %}
+          {% for sk in tech %}
+            {% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}
+            {% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in tns.seen %}
+              {% set _ = tns.seen.append(nm|lower) %}
+              <span>{{ nm }}</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+      {% set soft = skills_data.get('soft_skills', []) %}
+      <div class="skill-col">
+        <div class="skill-h">Soft skills</div>
+        <div class="skill-list">
+          {% set sns = namespace(seen=[]) %}
+          {% for sk in soft %}
+            {% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}
+            {% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in sns.seen %}
+              {% set _ = sns.seen.append(nm|lower) %}
+              <span>{{ nm }}</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+      {% set tools = skills_data.get('tools', []) %}
+      <div class="skill-col">
+        <div class="skill-h">Tools</div>
+        <div class="skill-list">
+          {% set lns = namespace(seen=[]) %}
+          {% for sk in tools %}
+            {% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}
+            {% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in lns.seen %}
+              {% set _ = lns.seen.append(nm|lower) %}
+              <span>{{ nm }}</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+  </div>
+  {% endif %}
+
+  {# ════════════ 09 HOBBIES ════════════ #}
+  {% if has_hobbies %}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">09 / Hobbies &amp; interests</span>
+      <span class="sec-rule"></span>
+    </div>
+    <h2 class="sec-h">Outside work.</h2>
+    <div class="hobbies-row">
+      {% set hns = namespace(seen=[]) %}
+      {% for h in hobbies_data %}
+        {% set hh = (h|string|trim) %}
+        {% if hh|length > 1 and hh|lower not in JUNK and hh|lower not in hns.seen %}
+          {% set _ = hns.seen.append(hh|lower) %}
+          <span>{{ hh }}</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ════════════ 10 EDUCATION ════════════ #}
+  {% if has_edu %}
+  <div class="section">
+    <div class="sec-eyebrow">
+      <span class="sec-mark">10 / Education</span>
+      <span class="sec-rule"></span>
+      <span class="sec-sub">From resume · LinkedIn · LMS</span>
+    </div>
+    <h2 class="sec-h">Academic background.</h2>
+    <div class="tl">
+      {% set ens = namespace(seen=[]) %}
+      {% for edu in education_data[:5] %}
+        {% set k = ((edu.degree or '')|trim|lower) ~ '|' ~ ((edu.institution or '')|trim|lower) %}
+        {% if k|length > 2 and k not in ens.seen %}
+          {% set _ = ens.seen.append(k) %}
+          <div class="tl-card edu">
+            <div class="tl-title">{{ edu.degree or 'Degree' }}{% if edu.field_of_study %} — {{ edu.field_of_study }}{% endif %}</div>
+            {% if edu.institution %}<div class="tl-org">{{ edu.institution }}</div>{% endif %}
+            <div class="tl-meta">
+              {% if edu.year %}<span>{{ edu.year }}</span>{% endif %}
+              {% if edu.percentage %}<span>{{ edu.percentage }}</span>{% endif %}
+              {% if edu.cgpa %}<span>CGPA {{ edu.cgpa }}</span>{% endif %}
+            </div>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ════════════ FOOTER ════════════ #}
+  <div class="footer">
+    <div class="footer-mark">
+      ✦&nbsp;&nbsp;Generated by <span class="gold">Upskillize Profile IQ</span>
+    </div>
+    {% if data_sources %}
+    <div class="footer-sources">
+      {% for src in data_sources %}
+      <span>{% if src == 'lms' %}LMS{% elif src == 'resume' %}Resume{% elif src == 'github' %}GitHub{% elif src == 'linkedin' %}LinkedIn{% elif src == 'lms_profile' %}Profile{% else %}{{ src }}{% endif %}</span>
       {% endfor %}
     </div>
     {% endif %}
-
+    {% if profile_url %}<a class="footer-link" href="{{ profile_url }}">{{ profile_url }}</a>{% endif %}
   </div>
-</div>
-
-<!-- ═══════════ FOOTER ═══════════ -->
-<div class="footer">
-  <div class="brand">Professional Profile</div>
-  <p>AI-generated from verified credentials, assessments &amp; psychometric data</p>
-  {% if data_sources %}
-  <div class="ds-badges">
-    {% for src in data_sources %}
-    <span>{% if src == 'lms' %}LMS{% elif src == 'resume' %}Resume{% elif src == 'github' %}GitHub{% elif src == 'linkedin' %}LinkedIn{% elif src == 'lms_profile' %}Profile{% else %}{{ src }}{% endif %}</span>
-    {% endfor %}
-  </div>
-  {% endif %}
-  <div class="footer-sep"></div>
-  {% if profile_url %}<p><a href="{{ profile_url }}">{{ profile_url }}</a></p>{% endif %}
-  <p style="margin-top:6px;font-size:10.5px;color:var(--text-4);letter-spacing:.3px">Powered by Upskillize · Profile IQ · &copy; 2026</p>
-</div>
 
 </div>
-
-<script>
-/* Theme */
-function toggleTheme(){
-  const h=document.documentElement;
-  const n=h.getAttribute('data-theme')==='dark'?'light':'dark';
-  h.setAttribute('data-theme',n);
-  try{localStorage.setItem('profile-theme',n)}catch(e){}
-}
-try{
-  const s=localStorage.getItem('profile-theme');
-  if(s)document.documentElement.setAttribute('data-theme',s);
-  else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches){
-    document.documentElement.setAttribute('data-theme','dark');
-  }
-}catch(e){}
-
-</script>
 
 </body>
 </html>
