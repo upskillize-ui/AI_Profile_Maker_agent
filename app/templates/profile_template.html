@@ -180,7 +180,8 @@ a{color:inherit;text-decoration:none}a:hover{color:var(--gold)}
     {% set parts = raw.split('•') %}
     <ul class="summary-bullets">{% for part in parts %}{% set clean = part|trim %}{% if clean and clean|length > 5 %}<li>{{ clean }}</li>{% endif %}{% endfor %}</ul>
   {% elif '\n' in raw and (raw.split('\n')|length) >= 3 %}
-    <ul class="summary-bullets">{% for line in raw.split('\n') %}{% set clean = line|trim|lstrip('-')|lstrip('*')|trim %}{% if clean and clean|length > 5 %}<li>{{ clean }}</li>{% endif %}{% endfor %}</ul>
+    <ul class="summary-bullets">{% for line in raw.split('\n') %}{% set clean = line|trim %}
+{% if clean[:2] in ('- ', '* ') %}{% set clean = clean[2:]|trim %}{% elif clean[:1] in ('-', '*') %}{% set clean = clean[1:]|trim %}{% endif %}{% if clean and clean|length > 5 %}<li>{{ clean }}</li>{% endif %}{% endfor %}</ul>
   {% else %}<p class="summary-text">{{ raw }}</p>{% endif %}
 </div>
 {% endif %}
