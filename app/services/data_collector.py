@@ -279,39 +279,35 @@ class DataCollector:
 
     def _get_case_studies(self, student_id: int) -> List[Dict]:
         query_variants = [
-            """SELECT css.id AS submission_id, csd.title, csd.key_concepts,
-                      csd.max_score, css.ai_score AS score, css.ai_grade,
-                      css.ai_feedback, css.ai_rubric_scores,
-                      css.ai_strengths, css.ai_improvements,
-                      css.ai_missing_concepts, css.attempt_number,
-                      css.word_count, css.submitted_at, css.status, c.course_name
+            """SELECT css.id AS submission_id, csd.title,
+                      csd.max_score, css.grade AS score,
+                      css.feedback, css.rubric_scores,
+                      css.notes, css.submitted_at, css.status,
+                      c.course_name
                FROM case_study_submissions css
                JOIN case_studies csd ON csd.id = css.case_study_id
                LEFT JOIN courses c ON c.id = csd.course_id
-               WHERE css.student_id = :sid AND css.status IN ('graded','mentor_reviewed')
-               ORDER BY css.ai_score DESC""",
+               WHERE css.student_id = :sid
+                 AND css.status IN ('reviewed','graded','mentor_reviewed','completed')
+               ORDER BY css.grade DESC""",
             """SELECT css.id AS submission_id, csd.title,
-                      csd.max_score, css.ai_score AS score, css.ai_grade,
-                      css.ai_feedback, css.submitted_at, css.status, c.course_name
+                      css.grade AS score, css.feedback,
+                      css.notes, css.status, css.submitted_at
                FROM case_study_submissions css
                JOIN case_studies csd ON csd.id = css.case_study_id
-               LEFT JOIN courses c ON c.id = csd.course_id
-               WHERE css.student_id = :sid AND css.status IN ('graded','mentor_reviewed')
-               ORDER BY css.ai_score DESC""",
-            """SELECT css.id AS submission_id, csd.title,
-                      css.ai_score AS score, css.status, css.submitted_at
-               FROM case_study_submissions css
-               JOIN case_studies csd ON csd.id = css.case_study_id
-               WHERE css.student_id = :sid ORDER BY css.ai_score DESC""",
+               WHERE css.student_id = :sid
+               ORDER BY css.grade DESC""",
         ]
         for i, query in enumerate(query_variants):
             try:
                 rows = self.db.execute(text(query), {"sid": student_id}).mappings().all()
-                if i > 0: logger.info(f"case_studies fetched using fallback variant #{i+1}")
-                return clean_data([dict(r) for r in rows])
+                if rows:
+                    logger.info(f"case_studies: {len(rows)} rows (variant {i+1})")
+                    return clean_data([dict(r) for r in rows])
             except Exception as e:
                 logger.info(f"case_studies variant {i+1} failed: {e}")
         return []
+               
 
     # ─── Assignments (rubric JOIN FIXED) ─────────────────
 
