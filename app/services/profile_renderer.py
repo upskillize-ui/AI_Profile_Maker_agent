@@ -301,6 +301,7 @@ class ProfileRenderer:
 
             # ═══ JOB PREFERENCES (NEW) ═══
             "job_preferences": job_preferences,
+            "personal_career_goals": personal.get("career_goals", ""),
             # ═══ HOBBIES (NEW) ═══
             "hobbies_data": student_data.get("hobbies_data", []),
 
