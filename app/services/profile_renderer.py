@@ -215,6 +215,8 @@ class ProfileRenderer:
         # ── Capstone (best one) ──────────────────────
         capstone_projects = student_data.get("capstone_projects", [])
         best_capstone = capstone_projects[0] if capstone_projects else None
+        
+
 
         # ── Courses with progress ────────────────────
         courses = student_data.get("courses", [])
@@ -246,6 +248,7 @@ class ProfileRenderer:
             "portfolio_url": personal.get("portfolio_url", ""),
             "headline": profile_data.get("headline", "Professional"),
             "is_fresher": is_fresher,
+            "is_working_professional": not is_fresher and bool(profile_data.get("work_experience", [])),
             "ats_data": profile_data.get("ats_data", {}),
 
             # ═══ PROFESSIONAL SUMMARY ═══
@@ -270,6 +273,7 @@ class ProfileRenderer:
 
             # ═══ CAPSTONE PROJECT (NEW) ═══
             "capstone_project": best_capstone,
+            "capstone_projects": capstone_projects,
 
             # ═══ CERTIFICATES ═══
             "certifications_data": certifications,
@@ -297,6 +301,8 @@ class ProfileRenderer:
 
             # ═══ JOB PREFERENCES (NEW) ═══
             "job_preferences": job_preferences,
+            # ═══ HOBBIES (NEW) ═══
+            "hobbies_data": student_data.get("hobbies_data", []),
 
             # ═══ GITHUB PROFILE ═══
             "github_profile": profile_data.get("github_profile", {}),
