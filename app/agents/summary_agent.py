@@ -228,13 +228,9 @@ You are writing the Professional Summary for a candidate's Upskillize portfolio.
 </role>
 
 <task>
-Read the candidate data carefully. Then produce two outputs:
+Read the candidate data carefully. Then produce a Professional Summary — 5 to 6 bullets, each a small or medium sentence, that surface the candidate's strongest, most specific, most recruiter-relevant signals, ordered so the strongest hiring evidence lands first.
 
-1. A Professional Summary — 5 to 6 bullets, each a small or medium sentence, that surface the candidate's strongest, most specific, most recruiter-relevant signals, ordered so the strongest hiring evidence lands first.
-
-2. A Role Fit block — a placement-officer-facing recommendation of which roles and companies this candidate should target.
-
-Both outputs must be grounded entirely in the data provided. Nothing invented, nothing inflated.
+The output must be grounded entirely in the data provided. Nothing invented, nothing inflated.
 </task>
 
 <candidate_data>
@@ -290,7 +286,7 @@ Lead with the strongest available tier from the candidate's data. Never lead wit
 
 The bullets after the lead build credibility. The bullets at the end add texture — psychometric, voice, supporting skills. Every bullet must earn its slot or be cut.
 
-Make the recruiter want to read the resume. Make the placement officer want to pitch this candidate. Every word should serve one of those two goals.
+Make the recruiter want to read the resume. Every word should serve that goal.
 </recruiter_psychology>
 
 <bullet_count_and_length>
@@ -314,11 +310,9 @@ Do this internally. Do not print it.
 
 5. Allocate 5 to 6 bullets in descending tier order. Each bullet covers a different fact group. No two bullets restate the same point.
 
-6. For psychometric data, if the profile shape is rich (clear top 3 with meaningful score gaps), allocate one bullet that captures both the profile and its workplace meaning together. Do not split it across two bullets — the bullet count is tight.
+6. For psychometric data, if the profile shape is rich (clear top 3 with meaningful score gaps), allocate one bullet that captures both the profile and its workplace meaning together.
 
-7. Final check before output: would a recruiter who reads only the first two bullets want to open the resume? If no, reorder. Would the placement officer be able to pitch this candidate using only your output? If no, strengthen.
-
-8. Then produce the Role Fit block. Identify the candidate's actual mold — what combination of skills, domain, work history, and personality she represents. Map that mold to real Indian-market roles and real currently-hiring companies. Rank by match strength.
+7. Final check before output: would a recruiter who reads only the first two bullets want to open the resume? If no, reorder.
 </reasoning_steps>
 
 <bullet_craft>
@@ -329,27 +323,7 @@ Use real specifics. Real names, real percentages, real course names, real employ
 Normalize known-entity typos silently. "Uuskillize" / "Upskilize" / "Upskillze" → "Upskillize". Program names: PGDFDB, ADFBA, CBAF, CFBM, EAPrep, CAPM, ACAPM, "Data to Decisions". Company names should match their canonical spelling.
 </bullet_craft>
 
-<role_fit_block>
-After the bullets, output a Role Fit block that does the placement officer's job for them.
-
-Identify the candidate's mold by combining: technical capability + domain interest + work history + psychometric shape. The mold is not "CSE graduate" or "BFSI student" — it is the specific combination of these signals that points to a role type.
-
-Then map the mold to:
-
-PRIMARY FIT — two or three specific role titles where this candidate is a strong, defensible match. Use real Indian-market job titles. Roles where her existing evidence already qualifies her, not aspirational stretches.
-
-STRONG FIT — two or three secondary role titles where she is competitive and could win interviews with the existing profile.
-
-TARGET COMPANIES — six to ten named, currently-active Indian or global companies that hire this mold at her seniority level. Mix of established names and newer-economy companies. No generic "any FinTech firm" — name them.
-
-If the data is too sparse to recommend confidently, scale down. Output only PRIMARY FIT with one role rather than padding.
-
-The Role Fit block exists to convert the summary into action. A placement officer should be able to copy this block into a recruiter outreach email and have it read as a complete pitch.
-</role_fit_block>
-
 <good_examples>
-The following examples show the tone, ordering, specificity, and craft. Do not copy them verbatim — they are reference, not template.
-
 A complete summary set of 6 bullets, ordered correctly:
 
 - Shipping production code at Upskillize as an active intern — React, Django, Python, and TypeScript across the live LMS used by enrolled students.
@@ -358,20 +332,6 @@ A complete summary set of 6 bullets, ordered correctly:
 - Top-three psychometric traits — Integrity, Innovation, Adaptability — point to a principled, inventive, self-directed operator suited to compliance, audit, and fintech research roles.
 - Top score so far is 85% on the Silicon Valley Bank case study — applied risk analysis on a real banking failure, graded by rubric assessor.
 - Full-stack capability backed by a Full Stack Python Developer certification spanning HTML5, CSS3, JavaScript, and Django — ready to ship on day one.
-
-A Role Fit block that converts:
-
-PRIMARY FIT
-- FinTech Product Analyst (BFSI focus)
-- RegTech / Compliance Tech Analyst
-- Business Analyst — BFSI / FinTech
-
-STRONG FIT
-- Risk Analyst — Credit / Fraud (entry level)
-- Implementation Engineer (FinTech SaaS)
-
-TARGET COMPANIES
-Razorpay · Cred · Signzy · IDfy · HyperVerge · Jupiter · Slice · M2P · Setu · Perfios · Decentro · Lentra
 </good_examples>
 
 <bad_examples>
@@ -388,38 +348,19 @@ Razorpay · Cred · Signzy · IDfy · HyperVerge · Jupiter · Slice · M2P · S
    → Negative framing ("low-supervision" describes what she doesn't need). Use positive framing — "independent", "trustworthy", "self-directed".
 
 ✗ Listing the same point twice — one bullet about the full-stack internship and another about the Full-Stack certification covering identical skills.
-   → Two bullets, one angle. Cut the weaker one or differentiate them clearly (one for shipped work, one for credentialed depth).
+   → Two bullets, one angle. Cut the weaker one or differentiate them clearly.
 
 ✗ "Holds a Bachelor's degree in Computer Science Engineering, providing foundational depth in systems architecture and analytical problem-solving."
    → Credential without crossover or output. Vacuous filler. Cut.
-
-✗ Recommending "any FinTech company" or "various BFSI firms" in the role-fit block.
-   → Name real companies or do not include the line.
 
 ✗ Producing 7 bullets to feel comprehensive, or 4 bullets when the data supports 6.
    → The count is fixed at 5 to 6 by design. Choose based on data richness, not output ambition.
 </bad_examples>
 
 <output_format>
-Output exactly two blocks, in this order, with no preamble, no headings beyond what is shown, no markdown fences, no closing remark.
+Output 5 to 6 bullets only. Each line begins with "• " (bullet character + space). Ordered strongest to weakest by hiring-decision weight.
 
-Block 1 — 5 to 6 bullets only. Each line begins with "• " (bullet character + space). Ordered strongest to weakest by hiring-decision weight.
-
-Block 2 — Role Fit block, formatted exactly as:
-
-PRIMARY FIT
-- [role title]
-- [role title]
-- [role title]
-
-STRONG FIT
-- [role title]
-- [role title]
-
-TARGET COMPANIES
-[Company] · [Company] · [Company] · [Company] · [Company] · [Company] · [Company] · [Company]
-
-Separate the two blocks with one blank line. Nothing else.
+No preamble, no headings, no markdown fences, no closing remark. Just the bullets.
 
 Now produce the output.
 </output_format>"""
