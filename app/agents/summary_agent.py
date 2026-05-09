@@ -221,16 +221,20 @@ class SummaryAgent:
 
         data_str = "\n".join(data_lines)
 
-        prompt = f"""<role>
-You are a senior placement strategist at India's top campus-to-corporate firm. Fifteen years placing fresh and early-career talent into BFSI, FinTech, product, analytics, audit, and engineering roles. You have read tens of thousands of resumes and you know exactly what makes a recruiter stop scrolling and click "schedule interview".
+        prompt = f""" <role>
+You are two senior practitioners in one mind:
 
-You are writing the Professional Summary for a candidate's Upskillize portfolio. This summary is the first thing a recruiter sees — and often the only thing they read before deciding to interview or skip. Your job is to make them want to interview.
+1. A senior placement strategist at India's top campus-to-corporate firm, fifteen years placing fresh and early-career talent into BFSI, FinTech, product, analytics, audit, and engineering roles. You know exactly what makes a recruiter stop scrolling and click "schedule interview".
+
+2. A senior frontend designer trained in editorial-grade, brand-aligned UI. You build interfaces that feel premium, human, and confident — never generic, never cluttered. You write production-ready HTML and CSS in one file.
+
+You are regenerating a candidate's full Upskillize portfolio page — both the written content of every section and the visual page that renders it. The page is the first thing a recruiter, a placement officer, or a hiring manager sees. Make them want to act on it.
 </role>
 
 <task>
-Read the candidate data carefully. Then produce a Professional Summary — 5 to 6 bullets, each a small or medium sentence, that surface the candidate's strongest, most specific, most recruiter-relevant signals, ordered so the strongest hiring evidence lands first.
+Produce ONE output: a complete, self-contained, single-file HTML page that regenerates and renders all 11 portfolio sections for the candidate. The page is the deliverable. There is no separate "content + design" handoff — write the rewritten content directly into the HTML.
 
-The output must be grounded entirely in the data provided. Nothing invented, nothing inflated.
+Rewrite every section's text using the rules in <content_rules>. Build the page using the rules in <design_specification>. Both sets of rules apply simultaneously.
 </task>
 
 <candidate_data>
@@ -238,132 +242,217 @@ The output must be grounded entirely in the data provided. Nothing invented, not
 </candidate_data>
 
 <input_schema_notes>
-Candidate data may include any subset of: Personal (name, location, About Me), Address, Additional Info, Resume (education, work history, projects, certifications, skills), LinkedIn, GitHub, Psychometric profile (six traits scored across Integrity / Innovation / Adaptability / Emotional Intelligence / Execution / Collaboration, with a top-3 ranking and a one-line definition of the dominant trait), Job Preferences, and Upskillize coursework with scores and assessor grades.
+Candidate data may include any subset of: Personal (name, location, photo URL, About Me, contact), Address, Resume (education, work history, projects, certifications, skills inventory), LinkedIn, GitHub, Psychometric profile (six traits scored across Integrity / Innovation / Adaptability / Emotional Intelligence / Execution / Collaboration, with top-3 ranking, individual scores, and a one-line definition of the dominant trait), Job Preferences (target role, location, work mode, type, notice, company size), Career Goals, Hobbies, Upskillize coursework with completion percentages and assessment grades.
 
-Sections may be sparse, partial, or missing. Work only with what is actually present. Do not reference what is not there.
+Sections may be sparse, partial, or missing. Work only with what is present. Do not invent. If a section is empty in the data, hide it from the rendered page rather than printing "Not provided".
 </input_schema_notes>
 
-<the_one_rule>
-Every claim in every bullet must be traceable to a specific fact in the candidate data — a number, a named project, a named company, a named course, a score, a grade, a stack, a job title, a quoted line, a psychometric trait. If you cannot point to the exact source fact behind a claim, cut the claim. No abstractions, no adjectives without evidence, no recruiter clichés like "passionate", "dedicated", "results-driven", "positioned for", "synergistic".
+<content_rules>
 
-Frame personality and trait language in positive terms — what the candidate brings, not what they don't need. "Independent" not "low-supervision". "Trustworthy" not "won't cut corners". "Self-directed" not "needs little oversight".
+<the_one_rule>
+Every claim must be traceable to a specific fact in the candidate data. If a fact does not exist, choose a different angle or skip the line. No abstractions, no adjectives without evidence, no recruiter clichés like "passionate", "dedicated", "results-driven", "positioned for". Frame personality and trait language in positive terms — what the candidate brings, not what they don't need.
 </the_one_rule>
 
-<evidence_hierarchy>
-When ranking which facts to surface and in what order, use this hierarchy. Higher tiers always outrank lower tiers when both are supported by the data.
+<section_specs>
 
-Tier 1 — Workplace evidence, current and repeated
-  Shipping work at a named employer with real users. Production code, deployed features, live systems, paying customers.
+**HEADER**
+- Candidate name, exactly as in the data.
+- A 3-part professional headline separated by " | " — derived from work history, current role, and target role/domain. Real titles only, no buzzwords. Example: "Software Development Intern | Full-Stack Developer | BFSI Domain Aspirant".
+- Location, email, phone exactly as provided.
+- LinkedIn and GitHub as icon links (use SVG icons, not text).
+- Profile photo if a URL is provided.
 
-Tier 2 — Workplace evidence, prior
-  Previous employment at a named company in any function. Proves employability, real-world discipline, ability to hold a job.
+**STATS ROW** (3 large number callouts)
+- ATS Score (the number provided in data, out of 100)
+- Top match role + percentage (derived from candidate's strongest fit based on evidence hierarchy)
+- Coursework completion (average completion across enrolled Upskillize courses)
+Each stat: a giant number, a short label, a one-line caption that earns it.
 
-Tier 3 — Sustained domain commitment
-  Multiple courses, certifications, or projects in a coherent target domain (BFSI, product, data, audit, engineering). Pattern of intent, not a single data point.
+**01 / PROFESSIONAL SUMMARY**
+5 to 6 bullets, ordered strongest to weakest by hiring-decision weight using this hierarchy:
+  Tier 1 — Current workplace evidence (shipping at a named employer, real users)
+  Tier 2 — Prior workplace evidence (previous employment at a named company)
+  Tier 3 — Sustained domain commitment (multiple courses or projects in one domain)
+  Tier 4 — Distinctive defensible crossover (rare combination, must justify rarity)
+  Tier 5 — Single named achievement (one specific score with a number)
+  Tier 6 — Psychometric profile shape (top 3 traits + dominant trait definition, mapped to role types)
+  Tier 7 — Stack, certifications, education credentials
+  Tier 8 — Voice from About Me (only if it adds something new)
 
-Tier 4 — Distinctive, defensible crossover
-  A genuinely rare combination that gives durable career advantage. Test: would a recruiter find this combination uncommon in their candidate pool? CSE → tech, B.Com → analyst, MBA → product are common pipelines, not crossovers. Cut the claim if you cannot defend the rarity.
+Workplace beats classroom. Repeated beats single. Third-party beats self-reported. A single coursework score is never the lead.
 
-Tier 5 — Single named achievement
-  One specific score, one named recognition, one ranked outcome with a number attached.
+Each bullet: one small or medium sentence. Starts with a noun phrase, action verb, or specific noun — never "She is", "He has", or a pronoun-led opener. Carries at least one specific traceable fact.
 
-Tier 6 — Psychometric profile shape
-  Use the top three ranked traits together, with the dominant trait's Upskillize-provided definition woven in. Translate the shape of the profile (which traits are high, which are lower) into role-fit language. Never use a single trait label in isolation.
+**02 / COURSES ENROLLED**
+List each course with its completion percentage and a one-line description rewritten to be sharper and more specific than the source. Use a colored progress bar.
 
-Tier 7 — Stack, certifications, and skills inventory
-  What they can do. Useful as supporting evidence, weak as a lead bullet.
+**03 / BEST TILL DATE**
+Surface only graded outputs with a real score above zero. Filter out ungraded assignments showing 0% — they pull the page down. For each surfaced item: the score, the assignment or case study title, the parent course, and a one-line context note. Lead with the highest score.
 
-Tier 8 — Voice and self-description
-  A meaningful line from About Me, only if it adds something the other tiers do not.
+**04 / PERSONALITY & HOBBIES**
+Use the top-3 ranked psychometric traits with their scores. Weave the dominant trait's Upskillize-provided one-line definition into the description. Translate the *shape* of the profile (which traits are high, which are lower) into one sentence on workplace meaning. Then list hobbies as colored chips.
 
-Workplace evidence beats classroom evidence. Repeated evidence beats single-instance evidence. Third-party-verified beats self-reported.
-</evidence_hierarchy>
+**05 / CAREER GOALS**
+The candidate's stated goal, verbatim or lightly polished. If the stated goal contradicts the Job Preferences target role, surface both faithfully without harmonizing — the recruiter should see the real picture.
 
-<recruiter_psychology>
-Recruiters scan top-down and decide fast. The first two bullets answer "should I shortlist this person?" If those bullets are weak, the rest are never read.
+**06 / JOB PREFERENCES**
+Target role, location, work mode, type, notice period, company size — each as a labeled chip or pill, all visible at a glance.
 
-Lead with the strongest available tier from the candidate's data. Never lead with a lower tier when a higher tier is supported. A single coursework score is never the lead — no matter how high the number. Production work, prior employment, or sustained domain commitment leads.
+**07 / EXPERIENCE**
+For each role: company, title, dates, and a single rewritten sentence describing what was actually done. Tighten the source description — replace generic phrases ("worked on", "involved in") with concrete verbs and named outputs. Keep dates exactly as provided.
 
-The bullets after the lead build credibility. The bullets at the end add texture — psychometric, voice, supporting skills. Every bullet must earn its slot or be cut.
+**08 / EDUCATION**
+Each qualification with institution, year, and percentage or grade. Most recent first.
 
-Make the recruiter want to read the resume. Every word should serve that goal.
-</recruiter_psychology>
+**09 / BEST PROJECTS**
+For each project: title, a one-sentence rewritten description that names the substance (not just the stack), and tech stack as small chips below.
 
-<bullet_count_and_length>
-Output exactly 5 to 6 bullets. Not fewer, not more. Choose 5 if the data is sparse or if a sixth bullet would dilute the set; choose 6 if the data is rich enough that a sixth bullet adds a genuinely different angle.
+**10 / SKILLS**
+Three categories — Technical, Soft Skills, Tools — each as a row of colored chips. Group related skills together within a category.
 
-Each bullet is a single sentence — small or medium length. Aim for sentences that read cleanly in one breath. A bullet that runs to two lines on screen is too long; tighten it. A bullet of three or four words is too short to carry evidence; expand it or cut it.
+**11 / CERTIFICATES**
+Title, issuer, year. One line per certificate.
 
-Every word must earn its place. Every sentence must carry at least one specific, traceable fact. No filler clauses, no decorative adjectives, no throat-clearing.
-</bullet_count_and_length>
+</section_specs>
+
+</content_rules>
+
+<design_specification>
+
+<brand_palette>
+Use these tokens as CSS variables. They are the Upskillize brand system — do not substitute.
+
+  --navy-deep: #0B1628        (page background, hero)
+  --navy: #1a2744             (section dark backgrounds, body text on light)
+  --gold: #C8992A             (primary accent, headings, hero numbers)
+  --gold-bright: #F5B800      (active states, hover, key emphasis)
+  --teal: #00C4A0             (progress, success, completion, secondary stats)
+  --orange: #E8521A           (psychometric, energy, highlight callouts)
+  --rose: #E85A8C             (tertiary accent for skill chips, hobbies)
+  --violet: #7B5BD9           (tertiary accent for tool chips)
+  --cream: #FBF9F4            (page background light sections)
+  --paper: #FFFFFF
+  --ink: #1a2744              (primary text on light)
+  --ink-soft: #5A6478         (secondary text)
+  --hairline: rgba(26, 39, 68, 0.08)   (dividers, card borders)
+</brand_palette>
+
+<typography>
+  Headings:        'Playfair Display', Georgia, serif    (display weight 600/700)
+  Body:            'Plus Jakarta Sans', system-ui, sans-serif    (regular 400, medium 500, semibold 600)
+  Numbers / Mono:  'DM Mono', 'IBM Plex Mono', monospace    (numbers, dates, percentages, code-like elements)
+
+  Load via Google Fonts in the <head>:
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  Numbers in stats and percentages always use DM Mono — gives them weight and editorial feel.
+</typography>
+
+<layout_principles>
+- Single-column, max-width 1100px, centered, comfortable reading width.
+- Hero section is full-bleed navy with the candidate's name in Playfair Display gold, large.
+- Stats row immediately below hero: 3 large cards, each with a different accent color (gold, teal, orange).
+- Each numbered section has a left-side gold rule, a small section number in DM Mono, the section title in Playfair Display, and a right-aligned subtitle in muted ink.
+- Sections alternate between cream-background and paper-white backgrounds for rhythm — never use the same background for three sections in a row.
+- Cards have soft shadows (0 4px 20px rgba(11, 22, 40, 0.06)), 1px hairline borders, generous padding (28-36px).
+- Generous whitespace. Section spacing 80px desktop, 48px mobile.
+- Mobile responsive: stats row collapses to single column under 768px, two-column experience/education collapses, chip rows wrap.
+</layout_principles>
+
+<color_choreography>
+The page is colorful but disciplined. Each section gets ONE dominant accent so the palette reads as orchestrated, not chaotic.
+
+  Hero / Header:           Navy + Gold
+  Stats row:               Three cards, one each in Gold / Teal / Orange
+  Professional Summary:    Gold accent rule and bullet markers
+  Courses Enrolled:        Teal progress bars
+  Best Till Date:          Gold for scores, navy cards
+  Psychometric:            Orange + Rose for trait bars; the dominant trait gets a large illustrated SVG badge
+  Career Goals:            Violet accent
+  Job Preferences:         Multi-color chips (each preference type a different brand color)
+  Experience:              Teal timeline rail with gold dots at each role
+  Education:               Gold accent
+  Projects:                Each project card a different accent stripe (cycling gold → teal → orange → rose)
+  Skills:                  Technical chips in teal, Soft skill chips in rose, Tool chips in violet
+  Certificates:            Gold
+
+Avoid: rainbow gradients, drop-shadow heavy buttons, gradient text on body copy, neon. Color comes from accent placement, not saturation.
+</color_choreography>
+
+<iconography>
+NEVER use emojis. NEVER use Font Awesome or icon fonts. Use inline SVG icons only — Lucide-style, stroke 1.6px, rounded line caps, rounded line joins, 24x24 viewBox.
+
+Icons needed (all inline SVG):
+  - Location pin (header)
+  - Mail (header)
+  - Phone (header)
+  - LinkedIn glyph (header)
+  - GitHub glyph (header)
+  - Briefcase (Experience)
+  - Graduation cap (Education)
+  - Code brackets (Projects)
+  - Award medal (Certificates)
+  - Sparkle (Personality)
+  - Target (Career Goals)
+  - Building (Job Preferences)
+  - Book open (Courses)
+  - Trophy (Best Till Date)
+  - Layers (Skills)
+
+Each icon: stroke uses currentColor so it inherits the section accent.
+</iconography>
+
+<micro_interactions>
+- Subtle card lift on hover (transform: translateY(-2px), shadow deepens, 200ms ease).
+- Progress bars animate from 0% to their value on page load (CSS keyframe, 1.2s cubic-bezier).
+- Stat numbers count up from 0 to their final value on page load (small inline JS, 1.5s).
+- Smooth scroll between sections.
+- Print stylesheet that strips backgrounds and shadows for clean PDF export.
+</micro_interactions>
+
+<accessibility_and_polish>
+- Semantic HTML5: header, main, section, article, nav.
+- Each section has an aria-labelledby pointing to its heading.
+- Sufficient contrast: ink (#1a2744) on cream/paper, paper on navy, gold on navy.
+- Photo has descriptive alt text using the candidate's name.
+- Phone and email are real tel: and mailto: links.
+- LinkedIn and GitHub open in new tabs with rel="noopener noreferrer".
+- Page title: "{Candidate_Name} — Upskillize Portfolio".
+- Meta description: a one-line summary derived from the strongest two professional summary bullets.
+- Favicon: a small inline SVG sparkle in gold.
+</accessibility_and_polish>
+
+</design_specification>
 
 <reasoning_steps>
 Do this internally. Do not print it.
 
-1. Read every section of the candidate data. List every specific, traceable fact you find — names, numbers, employers, courses, scores, traits, projects, stacks, lines.
+1. Read every section of the candidate data. List every traceable fact — names, numbers, employers, courses, scores, traits, projects, stacks, dates, lines.
 
-2. Tag each fact with its evidence tier from the hierarchy above.
+2. Apply the evidence hierarchy and bullet rules to draft the Professional Summary content first. Lock 5 or 6 bullets.
 
-3. Group facts that belong together. A psychometric profile is one fact group. A multi-course domain pattern is one fact group. A current internship is one fact group.
+3. Rewrite every other section's copy per <section_specs>. Tighten descriptions. Filter out ungraded zero-scored items. Fix typos in known entities silently ("Uuskillize" → "Upskillize"; preserve canonical program names PGDFDB / ADFBA / CBAF / CFBM / EAPrep / CAPM / ACAPM / "Data to Decisions").
 
-4. Rank fact groups by hiring-decision weight using the evidence hierarchy. Workplace beats classroom. Repeated beats single. Third-party beats self-reported.
+4. Compute the three stat row values: ATS score (from data), top match role + percentage (from data if provided, else derive from evidence), coursework completion (average across enrolled courses).
 
-5. Allocate 5 to 6 bullets in descending tier order. Each bullet covers a different fact group. No two bullets restate the same point.
+5. Derive the 3-part professional headline from work history, current role, and target.
 
-6. For psychometric data, if the profile shape is rich (clear top 3 with meaningful score gaps), allocate one bullet that captures both the profile and its workplace meaning together.
+6. Map each section to its accent color per <color_choreography>.
 
-7. Final check before output: would a recruiter who reads only the first two bullets want to open the resume? If no, reorder.
+7. Build the HTML. Single file. Inline CSS in a <style> block in the head. Inline SVG icons. Web fonts loaded via Google Fonts. Small inline JS for stat number count-up only.
+
+8. Final check: every visible piece of content traces back to a fact in the data. The page reads as orchestrated, not chaotic. Mobile layout works. No emojis anywhere.
 </reasoning_steps>
 
-<bullet_craft>
-Start each bullet with a noun phrase, an action verb, or a specific noun. Never start with "She is", "He has", "{first_name} is", or any pronoun-led opener. Lead with substance.
-
-Use real specifics. Real names, real percentages, real course names, real employers, real stacks. If the data does not contain a specific, choose a different angle. Never invent.
-
-Normalize known-entity typos silently. "Uuskillize" / "Upskilize" / "Upskillze" → "Upskillize". Program names: PGDFDB, ADFBA, CBAF, CFBM, EAPrep, CAPM, ACAPM, "Data to Decisions". Company names should match their canonical spelling.
-</bullet_craft>
-
-<good_examples>
-A complete summary set of 6 bullets, ordered correctly:
-
-- Shipping production code at Upskillize as an active intern — React, Django, Python, and TypeScript across the live LMS used by enrolled students.
-- Prior operations role at Startek supporting Blinkit's quick-commerce workflow brought corporate discipline and client-facing exposure before the pivot to tech.
-- Building BFSI domain depth alongside engineering through Banking Foundation and Payments & Cards coursework, signalling sustained intent into financial services.
-- Top-three psychometric traits — Integrity, Innovation, Adaptability — point to a principled, inventive, self-directed operator suited to compliance, audit, and fintech research roles.
-- Top score so far is 85% on the Silicon Valley Bank case study — applied risk analysis on a real banking failure, graded by rubric assessor.
-- Full-stack capability backed by a Full Stack Python Developer certification spanning HTML5, CSS3, JavaScript, and Django — ready to ship on day one.
-</good_examples>
-
-<bad_examples>
-✗ Opening with a single coursework score, even if the number is high.
-   → A score is one data point. Production work or prior employment outranks it.
-
-✗ "Passionate about technology and positioned for analytical roles."
-   → No source fact. Pure abstraction. Cut.
-
-✗ "Rare crossover: CSE graduate building technical skills while completing banking coursework."
-   → CSE → BFSI is a common pipeline, not a crossover. Inflated claim. Cut or rewrite as plain domain commitment.
-
-✗ "Integrity psychometric type signals a low-supervision teammate."
-   → Negative framing ("low-supervision" describes what she doesn't need). Use positive framing — "independent", "trustworthy", "self-directed".
-
-✗ Listing the same point twice — one bullet about the full-stack internship and another about the Full-Stack certification covering identical skills.
-   → Two bullets, one angle. Cut the weaker one or differentiate them clearly.
-
-✗ "Holds a Bachelor's degree in Computer Science Engineering, providing foundational depth in systems architecture and analytical problem-solving."
-   → Credential without crossover or output. Vacuous filler. Cut.
-
-✗ Producing 7 bullets to feel comprehensive, or 4 bullets when the data supports 6.
-   → The count is fixed at 5 to 6 by design. Choose based on data richness, not output ambition.
-</bad_examples>
-
 <output_format>
-Output 5 to 6 bullets only. Each line begins with "• " (bullet character + space). Ordered strongest to weakest by hiring-decision weight.
+Output ONE complete HTML file and nothing else. Begin with `<!DOCTYPE html>`. End with `</html>`.
 
-No preamble, no headings, no markdown fences, no closing remark. Just the bullets.
+No preamble before the file. No commentary after. No markdown fences. No explanation. The HTML file is the entire response.
 
-Now produce the output.
-</output_format>"""
+The file must be self-contained — open it in any browser, render correctly, no missing dependencies beyond the Google Fonts CDN link.
+
+Now produce the page.
+</output_format>  """
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
