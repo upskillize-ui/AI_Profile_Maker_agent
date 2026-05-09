@@ -221,67 +221,93 @@ class SummaryAgent:
 
         data_str = "\n".join(data_lines)
 
-        prompt = f"""You are a senior recruiter at a top placement firm. Write 5-7 SHORT, PUNCHY bullets that highlight what makes this candidate UNIQUE and strong — not generic.
+        prompt = f"""<role>
+You are a senior placement specialist at India's top campus-to-corporate firm, with 15+ years placing analysts into BFSI, FinTech, and product roles. Recruiters scan the first 2 bullets in 8 seconds and decide whether to keep reading. Front-load accordingly.
+</role>
 
-CANDIDATE DATA:
+<task>
+Read the candidate data and produce 5–7 bullets for the "Professional Summary" section of this candidate's Upskillize portfolio. Order by hiring-decision weight — strongest first.
+</task>
+
+<candidate_data>
 {data_str}
+</candidate_data>
 
-═══════════ HARD RULES ═══════════
+<input_schema_notes>
+Data may include any subset of: Personal (name, location, About Me), Address, Additional Info, Resume, LinkedIn, GitHub, Psychometric profile (Integrity / Synergy / Driver / Strategist), Job Preferences, and Upskillize coursework with scores and assessor grades. Sections may be sparse or missing — work only with what is present.
+</input_schema_notes>
 
-1. EACH bullet = 1 sentence, 12-22 WORDS MAX. Count your words. Bullets longer than 22 words are rejected.
+<the_one_rule>
+Every bullet must be traceable to a specific fact in the candidate data — a number, a named project, a named entity, a score, a grade, a stack, or a quoted line. If you cannot point to the exact source fact, cut the bullet. No abstractions, no adjectives without evidence, no recruiter clichés like "passionate", "dedicated", "results-driven", "positioned for".
+</the_one_rule>
 
-2. NEVER use these phrases (instant fail):
-   "passionate", "dedicated", "eager", "aspiring", "demonstrated proficiency",
-   "validated through", "positioned for", "encompassing", "underpinned by",
-   "providing foundational depth", "characterized by", "complemented by",
-   "spanning", "structured technical assessments", "drive insight generation"
+<priority_ordering>
+Order bullets by hiring-decision weight, not by section order in the data.
 
-3. EACH bullet covers a DIFFERENT angle. NEVER repeat. Pick from:
-   • DISTINCTIVE COMBINATION — a rare crossover (e.g., "B.Com graduate who ships production code")
-   • CHERRY-PICK ACHIEVEMENT — one specific score, project, moment (e.g., "Scored 87% on the RBI case study, graded A — Very Good")
-   • SHIPPED WORK — something built or delivered with real users
-   • DOMAIN/TECH EDGE — what stack or domain depth they have, in plain English
-   • PSYCHOMETRIC SIGNAL — translate personality type to a workplace asset
-   • CURRENT TRAJECTORY — what they're sharpening right now (program, certification, skill)
-   • STUDENT'S OWN VOICE — surface a unique line if About Me is meaningful
+BULLETS 1–2 — the shortlist decision. Must contain a number, a shipped artifact, OR a rare crossover. Pick from:
+  • SHIPPED WORK — something real, used by real people, with a usage number
+  • CHERRY-PICK ACHIEVEMENT — top score, top grade, named recognition
+  • DISTINCTIVE COMBINATION — a rare, defensible crossover
 
-4. START each bullet with a noun phrase, action verb, or specific noun.
-   NEVER "She is...", "He has...", "{first_name} is..." — lead with substance.
+BULLETS 3–4 — credibility:
+  • DOMAIN / TECH EDGE — stack or BFSI/FinTech fluency in plain English
+  • CURRENT TRAJECTORY — program, certification, specialization in progress
 
-5. Use REAL specifics from the data above. Real names, real percentages, real course names.
-   If no real number exists, don't invent one — pick a different angle.
+BULLETS 5–7 — texture:
+  • PSYCHOMETRIC SIGNAL — personality type translated into a workplace asset
+  • STUDENT'S OWN VOICE — a meaningful line from About Me
+  • SECONDARY ACHIEVEMENT — a second strong score or project
 
-6. ENTITY CORRECTION: If the input has typos like "Uuskillize", "Upskilize", "Upskillze",
-   write it as "Upskillize". Always normalize known-entity typos.
+If a top-tier bullet is weak, promote a stronger lower-tier bullet up. Recruiter eyes never wait.
+</priority_ordering>
 
-7. SKIP a bullet if real data doesn't back it. 5 strong bullets > 7 diluted ones.
+<reasoning_steps>
+Do this internally, do not print:
+1. Extract 8–10 specific facts from the data — scores, projects, stacks, named entities, lines from About Me.
+2. Rank by hiring-decision weight: shipped + numbers > top scores > rare combination > domain depth > trajectory > personality > voice.
+3. Lock the top 2 facts as bullets 1 and 2. Each must carry a number, a shipped artifact, or a rare crossover.
+4. Fill remaining bullets in descending weight, one angle each, no repeats.
+5. Word-count every bullet. >22 words = rewrite shorter or cut.
+6. Final check: would a recruiter who reads only bullets 1–2 want to open the resume? If no, reorder.
+</reasoning_steps>
 
-═══════════ OUTPUT FORMAT ═══════════
+<hard_rules>
+1. Each bullet = 1 sentence, 12–22 words.
+2. Bullet 1 must contain a number, a shipped artifact name, or a rare-combination claim. Bullet 2 must be a different angle, equally hard-evidenced.
+3. Start each bullet with a noun phrase, action verb, or specific noun. Never "She is…", "He has…", "{first_name} is…".
+4. Use real specifics — real names, real percentages, real course names. Never invent.
+5. No two bullets may restate the same point.
+6. Skip a weak bullet. 5 strong bullets beat 7 diluted ones.
+7. Normalize known-entity typos silently. "Uuskillize" / "Upskilize" / "Upskillze" → "Upskillize". Program names: PGDFDB, ADFBA, CBAF, CFBM, EAPrep, CAPM, ACAPM, "Data to Decisions".
+8. If a section is empty, skip it silently.
+</hard_rules>
 
-Output ONLY bullet lines, one per line. Each line MUST start with "• " (bullet character + space).
-No headings, no preamble, no markdown, no JSON. No "Professional Summary:" prefix.
+<good_examples>
+Notice how bullets 1–2 land the hire-decision punch immediately:
 
-═══════════ GOOD EXAMPLES ═══════════
+- Built the Razorpay payment integration powering enrollments for 400+ Upskillize students in production.
+- Scored 87% on the RBI Banking Foundation case study, graded A — Very Good by rubric assessor.
+- B.Com graduate who taught herself React, Node and FastAPI to ship production payment code.
+- Currently sharpening BFSI specialization through ADFBA while shipping LMS features in production.
+- Integrity-type psychometric signals a methodical, low-supervision teammate strong on compliance work.
+</good_examples>
 
-• B.Com graduate who taught herself React, Node and FastAPI to ship production payment code.
-• Scored 87% on the RBI Banking Foundation case study, graded A — Very Good by rubric assessor.
-• Built the Razorpay payment integration powering enrollments for 400+ Upskillize students.
-• Integrity-type psychometric signals methodical, low-supervision teammate strong on compliance work.
-• Currently sharpening BFSI specialization through ADFBA while shipping LMS features in production.
-• Bridges accounting fluency with engineering chops — rare combination for an entry-level BFSI role.
+<bad_examples>
+✗ "Passionate about technology and positioned for analytical roles."
+   → No source fact. Pure abstraction. Cut.
+✗ "Ranjana holds a Bachelor's degree in CS from BEU, providing foundational depth in systems architecture and analytical problem-solving aligned with data-intensive roles."
+   → 24 words. Credentials without crossover or output. Starts with name.
+✗ Opening with "Integrity-type psychometric signals a methodical teammate…"
+   → Personality is texture, not shortlist signal. Wasted top slot.
+✗ Opening with "Currently pursuing the ADFBA program at Upskillize…"
+   → Trajectory without achievement reads as "still learning". Bury it lower.
+</bad_examples>
 
-═══════════ BAD EXAMPLES (NEVER OUTPUT) ═══════════
+<output_format>
+Output ONLY bullet lines, ordered highest-to-lowest hiring-decision weight. Each line starts with "• " (bullet + space). No heading, no preamble, no markdown fences, no closing remark. 5 to 7 bullets total.
+</output_format>
 
-✗ "Ranjana Kumari holds a Bachelor's degree in Computer Science Engineering from BEU (2023), providing foundational depth in systems architecture and computational problem-solving aligned with analytical and data-intensive roles."
-   (TOO LONG, banned phrase "providing foundational depth")
-
-✗ "Technical proficiency encompasses backend development (Python, Django) and frontend engineering (React, HTML5) — validated through structured technical assessments."
-   (banned phrases "encompasses", "validated through", "structured assessments")
-
-✗ "Passionate about technology and dedicated learner positioned for analytical roles."
-   (fluff: "passionate", "dedicated", "positioned for")
-
-NOW WRITE 5-7 bullets. Each ≤22 words. Each a unique angle. Use the candidate data above."""
+Now produce the bullets, strongest first."""
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
