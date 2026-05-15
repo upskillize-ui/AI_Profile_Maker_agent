@@ -483,6 +483,25 @@ class ProfileRenderer:
             "slug":             slug,
             "visibility":       visibility,
             "profile_url":      f"{agent_base}/api/v1/profile/public/{slug}",
+
+            # Backward-compat top-level keys (v10/v11 templates referenced these
+            # directly without the `computed.` prefix). v12 template does not
+            # use them, but keeping them defined prevents UndefinedError when
+            # a stale template is still on disk.
+            "total_courses":     computed.get("total_courses", len(student_data.get("courses", []) or [])),
+            "completed_courses": computed.get("completed_courses", 0),
+            "total_assignments": computed.get("total_assignments", len(student_data.get("assignments", []) or [])),
+            "total_quizzes":     computed.get("total_quizzes", len(student_data.get("test_scores", []) or [])),
+            "total_case_studies": computed.get("total_case_studies", len(student_data.get("case_studies", []) or [])),
+            "total_tests":       computed.get("total_tests", 0),
+            "total_hours":       computed.get("total_hours", 0),
+            "overall_score":     computed.get("overall_score", 0),
+            "best_test_score":   computed.get("best_test_score", 0),
+            "avg_test_score":    computed.get("avg_test_score", 0),
+            "improvement_pct":   computed.get("improvement_pct", 0),
+            "consistency_score": computed.get("consistency_score", 0),
+            "ats_score":         (profile_data.get("ats_data", {}) or {}).get("score", 0),
+            "top_role":          (profile_data.get("role_matches", [{}]) or [{}])[0],
         }
 
         template = _env.get_template("profile_template.html")
