@@ -211,19 +211,121 @@ def _compute_perf_snapshot(student_data: Dict, profile_data: Dict, computed: Dic
 # Activity counts (command bar chips)
 # ═══════════════════════════════════════════
 
-def _compute_activity_counts(student_data: Dict, profile_data: Dict, computed: Dict) -> Dict[str, Any]:
+def _compute_activity_counts(student_data: Dict, profile_data: Dict, computed: Dict,
+                              combined_assessments: List[Dict]) -> Dict[str, Any]:
+    """Counts must match what the corresponding template panel renders, line-for-line."""
     courses = student_data.get("courses", []) or []
     return {
-        "enrolled_courses": computed.get("total_courses") or len(courses),
+        "enrolled_courses": len(courses),
         "capstones":        len(student_data.get("capstone_projects", []) or []),
-        "case_studies":     computed.get("total_case_studies") or len(student_data.get("case_studies", []) or []),
-        "assignments":      computed.get("total_assignments") or len(student_data.get("assignments", []) or []),
-        "assessments":      computed.get("total_quizzes")    or len(student_data.get("test_scores", []) or []),
+        "case_studies":     len(student_data.get("case_studies", []) or []),
+        "assignments":      len(student_data.get("assignments", []) or []),
+        "assessments":      len(combined_assessments),
         "mock_interviews":  len(student_data.get("mock_interviews", []) or []),
-        "mock_tests":       len(student_data.get("mock_tests", []) or student_data.get("quiz_scores", []) or []),
+        "mock_tests":       len(student_data.get("mock_tests", []) or []),
         "industry":         len(student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or []),
         "hackathons":       len(student_data.get("hackathons", []) or []),
     }
+
+
+# ═══════════════════════════════════════════
+# Combined Assessments (exams + module quizzes)
+# ═══════════════════════════════════════════
+
+def _combine_assessments(student_data: Dict) -> List[Dict]:
+    """Merge formal exams (test_scores) with module quizzes (quiz_scores) into one
+    list, computing percentages where missing, and normalising field names so the
+    template can iterate one consistent shape."""
+    rows = []
+
+    for t in (student_data.get("test_scores", []) or []):
+        score = t.get("score") or 0
+        max_score = t.get("total_marks") or t.get("max_score") or 100
+        pct = t.get("percentage")
+        if pct is None and max_score:
+            try:
+                pct = round(float(score) / float(max_score) * 100, 1)
+            except (TypeError, ValueError, ZeroDivisionError):
+                pct = 0
+        rows.append({
+            "title":       t.get("subject") or t.get("exam_name") or "Assessment",
+            "course_name": t.get("course_name") or "",
+            "topic":       t.get("topic") or "",
+            "submitted_at": str(t.get("submitted_at") or t.get("exam_date") or ""),
+            "percentage":  round(pct or 0, 1),
+            "score":       score,
+            "max_score":   max_score,
+            "grade":       t.get("grade") or "",
+            "kind":        "exam",
+        })
+
+    for q in (student_data.get("quiz_scores", []) or []):
+        score = q.get("score") or 0
+        max_score = q.get("total_marks") or q.get("max_score") or 100
+        pct = q.get("percentage")
+        if pct is None and max_score:
+            try:
+                pct = round(float(score) / float(max_score) * 100, 1)
+            except (TypeError, ValueError, ZeroDivisionError):
+                pct = 0
+        rows.append({
+            "title":       q.get("quiz_title") or q.get("title") or "Module Quiz",
+            "course_name": q.get("course_name") or "",
+            "topic":       "",
+            "submitted_at": str(q.get("submitted_at") or ""),
+            "percentage":  round(pct or 0, 1),
+            "score":       score,
+            "max_score":   max_score,
+            "grade":       "Pass" if q.get("passed") else ("Fail" if q.get("passed") is False else ""),
+            "kind":        "quiz",
+        })
+
+    # Sort by percentage descending — best work surfaces first
+    rows.sort(key=lambda r: r["percentage"], reverse=True)
+    return rows
+
+
+# ═══════════════════════════════════════════
+# Course enrichment (quiz stats per course)
+# ═══════════════════════════════════════════
+
+def _enrich_courses(student_data: Dict) -> List[Dict]:
+    """Attach per-course quiz aggregates so each Enrolled Courses card can show
+    real progress detail — module count, quiz attempts, average quiz score."""
+    raw_courses = student_data.get("courses", []) or []
+    quiz_scores = student_data.get("quiz_scores", []) or []
+
+    by_course: Dict[str, List[Dict]] = {}
+    for q in quiz_scores:
+        key = (q.get("course_name") or "").strip().lower()
+        if key:
+            by_course.setdefault(key, []).append(q)
+
+    out = []
+    for c in raw_courses:
+        course = dict(c)
+        cn = (course.get("course_name") or "").strip().lower()
+        quizzes = by_course.get(cn, [])
+        if quizzes:
+            pcts = []
+            for q in quizzes:
+                p = q.get("percentage")
+                if p is None and q.get("total_marks"):
+                    try:
+                        p = float(q.get("score") or 0) / float(q["total_marks"]) * 100
+                    except (TypeError, ValueError, ZeroDivisionError):
+                        p = 0
+                if p is not None:
+                    pcts.append(max(0, min(100, float(p))))
+            course["quiz_count"] = len(quizzes)
+            course["quiz_avg_pct"] = round(sum(pcts) / len(pcts), 1) if pcts else 0
+            course["quiz_best_pct"] = round(max(pcts), 1) if pcts else 0
+        else:
+            course["quiz_count"] = 0
+            course["quiz_avg_pct"] = 0
+            course["quiz_best_pct"] = 0
+        out.append(course)
+    return out
 
 
 # ═══════════════════════════════════════════
@@ -383,9 +485,13 @@ class ProfileRenderer:
 
         computed = student_data.get("computed", {}) or {}
 
+        # NEW v12.3: combined assessments + course enrichment
+        combined_assessments = _combine_assessments(student_data)
+        enriched_courses     = _enrich_courses(student_data)
+
         # Derivations
         perf_snapshot     = _compute_perf_snapshot(student_data, profile_data, computed)
-        activity_counts   = _compute_activity_counts(student_data, profile_data, computed)
+        activity_counts   = _compute_activity_counts(student_data, profile_data, computed, combined_assessments)
         cohort_comparison = _compute_cohort_comparison(perf_snapshot, profile_data.get("performance_data", {}) or {})
         mock_domains      = _compute_mock_domains(student_data, profile_data, perf_snapshot)
         achievement_cards = _compute_achievement_cards(student_data, profile_data)
@@ -446,13 +552,13 @@ class ProfileRenderer:
             "languages_data":  student_data.get("languages_data", []) or personal.get("languages") or [],
 
             # Top Performance — raw rows for all 10 internal tabs
-            "courses_data":         student_data.get("courses", []) or [],
+            "courses_data":         enriched_courses,
             "capstone_projects":    student_data.get("capstone_projects", []) or [],
             "case_studies_raw":     student_data.get("case_studies", []) or [],
             "assignments_raw":      student_data.get("assignments", []) or [],
-            "test_scores_raw":      best_test_scores,
+            "test_scores_raw":      combined_assessments,
             "mock_interviews_raw":  student_data.get("mock_interviews", []) or [],
-            "mock_tests_raw":       student_data.get("mock_tests", []) or student_data.get("quiz_scores", []) or [],
+            "mock_tests_raw":       student_data.get("mock_tests", []) or [],
             "industry_sessions_raw": student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or [],
             "hackathons_raw":       student_data.get("hackathons", []) or [],
 

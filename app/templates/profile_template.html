@@ -188,6 +188,17 @@ section:last-of-type{border-bottom:none;}
 .perf-status.active{background:rgba(245,184,0,0.15);color:var(--gold-bright);border:1px solid rgba(245,184,0,0.35);}
 .perf-more{text-align:center;padding:14px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold);border-top:1px solid rgba(255,255,255,0.05);}
 
+/* DUAL SCORE (Faculty + AI agent) — shown on cards where both exist */
+.perf-score-dual{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
+.perf-score-pill{display:flex;align-items:baseline;gap:6px;font-family:'DM Mono',monospace;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);padding:4px 10px;border-radius:100px;}
+.perf-score-pill .ps-label{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.5);font-weight:600;}
+.perf-score-pill .ps-val{font-size:15px;font-weight:600;color:#EDF0F5;line-height:1;}
+.perf-score-pill .ps-pct{font-size:10px;color:rgba(255,255,255,0.45);}
+.perf-score-pill.faculty{border-color:rgba(123,91,217,0.32);background:rgba(123,91,217,0.08);}
+.perf-score-pill.faculty .ps-label{color:#A586E8;}
+.perf-score-pill.ai{border-color:rgba(0,196,160,0.32);background:rgba(0,196,160,0.08);}
+.perf-score-pill.ai .ps-label{color:var(--teal);}
+
 /* COHORT */
 .cohort-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
 .cohort-headline{background:linear-gradient(165deg,#0E1A2E,#1A2744);color:#fff;padding:28px 32px;border-radius:14px;border:1px solid rgba(200,153,42,0.18);position:relative;overflow:hidden;}
@@ -380,6 +391,27 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
 </head>
 <body>
 
+{# ─── Dual-score macro: renders faculty + AI agent scores side-by-side
+     Falls back gracefully when only one score is present. ─── #}
+{% macro dual_score(faculty, ai, max_score, agent_label='AI') -%}
+  {% set has_faculty = faculty is not none and (faculty|float(0) > 0 or faculty == 0) %}
+  {% set has_ai = ai is not none and ai|float(0) > 0 %}
+  {% if has_faculty and has_ai %}
+    <div class="perf-score-dual">
+      <div class="perf-score-pill faculty"><span class="ps-label">Faculty</span><span class="ps-val">{{ faculty|int }}</span>{% if max_score %}<span class="ps-pct">/ {{ max_score|int }}</span>{% endif %}</div>
+      <div class="perf-score-pill ai"><span class="ps-label">{{ agent_label }}</span><span class="ps-val">{{ ai|int }}</span>{% if max_score %}<span class="ps-pct">/ {{ max_score|int }}</span>{% endif %}</div>
+    </div>
+  {% elif has_ai %}
+    <div class="perf-score-dual">
+      <div class="perf-score-pill ai"><span class="ps-label">{{ agent_label }}</span><span class="ps-val">{{ ai|int }}</span>{% if max_score %}<span class="ps-pct">/ {{ max_score|int }}</span>{% endif %}</div>
+    </div>
+  {% elif has_faculty %}
+    <div class="perf-score">{{ faculty|int }}<span class="perf-score-pct">{% if max_score %}/{{ max_score|int }}{% else %}%{% endif %}</span></div>
+  {% else %}
+    <div class="perf-score">0<span class="perf-score-pct">%</span></div>
+  {% endif %}
+{%- endmacro %}
+
 {# ─── Jinja convenience flags ─── #}
 {% set JUNK = ['','test','asdf','qwerty','tbd','n/a','na','-','--','none','null','undefined','0','.','sample','example','lorem'] %}
 {% set has_summary = professional_summary and (professional_summary|trim)|length > 20 %}
@@ -417,9 +449,9 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         {% if hero_eyebrow_tags and hero_eyebrow_tags|length > 0 %}
           {{ hero_eyebrow_tags | join(' &middot; ') | safe }}
         {% elif is_fresher %}
-          Fresher &middot; Upskillize Learner
+          Fresher &middot; Upskillize Candidate
         {% else %}
-          Professional &middot; Upskillize Learner
+          Professional &middot; Upskillize Candidate
         {% endif %}
       </div>
       <h1 class="hero-name">{{ student_name }}</h1>
@@ -617,14 +649,21 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
     {% if courses_data and courses_data|length > 0 %}
     <div class="perf-card">
       {% for c in courses_data[:10] %}
-      {% set cs = c.completion_status or c.status or 'enrolled' %}
-      {% set pct = c.progress_percentage or c.score or 0 %}
-      {% set rclass = 'r1' if cs == 'completed' else ('r2' if cs in ('in_progress','active','started') else 'r6') %}
+      {% set cs = (c.completion_status or 'enrolled')|lower %}
+      {% set pct = c.progress_percentage or 0 %}
+      {% set rclass = 'r1' if cs == 'completed' else ('r2' if cs in ('in_progress','active','started','enrolled') else 'r6') %}
       <div class="perf-item {{ rclass }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
           <div class="perf-name">{{ c.course_name or 'Course' }}</div>
-          <div class="perf-context"><span>Upskillize</span>{% if c.module_name %} · {{ c.module_name }}{% endif %}{% if c.sessions_done and c.total_sessions %} · {{ c.sessions_done }} / {{ c.total_sessions }} Sessions{% endif %}{% if c.start_date or c.end_date %} · {{ c.start_date or '' }}{% if c.end_date %} — {{ c.end_date }}{% endif %}{% endif %}</div>
+          <div class="perf-context">
+            {% if c.category %}<span>{{ c.category }}</span>{% else %}<span>Upskillize</span>{% endif %}
+            {% if c.difficulty_level %} · {{ c.difficulty_level|capitalize }}{% endif %}
+            {% if c.total_modules and c.total_modules > 0 %} · {{ c.total_modules }} Module{% if c.total_modules != 1 %}s{% endif %}{% endif %}
+            {% if c.quiz_count and c.quiz_count > 0 %} · {{ c.quiz_count }} Quiz Attempt{% if c.quiz_count != 1 %}s{% endif %}{% if c.quiz_avg_pct > 0 %} · {{ c.quiz_avg_pct }}% Avg{% endif %}{% endif %}
+            {% if c.enrolled_at %} · Enrolled {{ (c.enrolled_at|string)[:10] }}{% endif %}
+            {% if cs == 'completed' and c.completed_at %} · Completed {{ (c.completed_at|string)[:10] }}{% endif %}
+          </div>
         </div>
         <div>
           <div class="perf-score">{{ pct|int }}<span class="perf-score-pct">%</span></div>
@@ -640,18 +679,22 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="capstones">
     {% if capstone_projects and capstone_projects|length > 0 %}
     <div class="perf-card">
-      {% for cp in capstone_projects[:8] %}
-      {% set sc = cp.score or cp.rubric_pct or cp.percentage or 0 %}
+      {% for cp in capstone_projects[:10] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
           <div class="perf-name">{{ cp.title or cp.project_name or 'Capstone' }}</div>
-          <div class="perf-context">{% if cp.course_name %}<span>{{ cp.course_name }}</span>{% endif %}{% if cp.duration %} · {{ cp.duration }}{% endif %}{% if cp.submitted_at %} · {{ cp.submitted_at }}{% endif %}</div>
+          <div class="perf-context">
+            {% if cp.course_name %}<span>{{ cp.course_name }}</span>{% endif %}
+            {% if cp.duration %} · {{ cp.duration }}{% endif %}
+            {% if cp.submitted_at %} · {{ (cp.submitted_at|string)[:10] }}{% endif %}
+            {% if cp.ai_grade_label or cp.ai_grade %} · Rubric: {{ cp.ai_grade_label or cp.ai_grade }}{% endif %}
+          </div>
         </div>
-        <div><div class="perf-score">{{ sc|int }}</div><div class="perf-score-meta">{{ cp.grade_label or cp.status or 'Graded' }}</div></div>
+        {{ dual_score(cp.faculty_score or cp.grade, cp.ai_score or cp.rubric_pct, cp.max_score, 'Rubric AI') }}
       </div>
       {% endfor %}
-      {% if activity_counts.capstones > capstone_projects|length %}<div class="perf-more">+ {{ activity_counts.capstones - capstone_projects|length }} More Capstones in Portfolio</div>{% endif %}
+      {% if activity_counts.capstones > capstone_projects[:10]|length %}<div class="perf-more">+ {{ activity_counts.capstones - 10 }} More Capstones in Portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No capstones yet</b>Capstones unlock at the end of each Upskillize track.</div>{% endif %}
   </div>
@@ -660,18 +703,21 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="casestudies">
     {% if case_studies_raw and case_studies_raw|length > 0 %}
     <div class="perf-card">
-      {% for c in case_studies_raw[:8] %}
-      {% set cp = ((c.score or c.ai_score or 0) / (c.max_score or 100) * 100) if (c.max_score or 100) > 0 else 0 %}
+      {% for c in case_studies_raw[:10] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
           <div class="perf-name">{{ c.title or 'Case Study' }}</div>
-          <div class="perf-context">{% if c.course_name %}<span>{{ c.course_name }}</span>{% endif %}{% if c.submitted_at %} · {{ c.submitted_at }}{% endif %}</div>
+          <div class="perf-context">
+            {% if c.course_name %}<span>{{ c.course_name }}</span>{% endif %}
+            {% if c.submitted_at %} · {{ (c.submitted_at|string)[:10] }}{% endif %}
+            {% if c.ai_grade_label or c.ai_grade %} · AiRev: {{ c.ai_grade_label or c.ai_grade }}{% endif %}
+          </div>
         </div>
-        <div><div class="perf-score">{{ cp|int }}</div><div class="perf-score-meta">{{ c.ai_grade or 'AiRev Score' }}</div></div>
+        {{ dual_score(c.faculty_score or c.score, c.ai_score, c.max_score, 'AiRev') }}
       </div>
       {% endfor %}
-      {% if activity_counts.case_studies > case_studies_raw|length %}<div class="perf-more">+ {{ activity_counts.case_studies - case_studies_raw|length }} More Case Studies in Portfolio</div>{% endif %}
+      {% if activity_counts.case_studies > case_studies_raw[:10]|length %}<div class="perf-more">+ {{ activity_counts.case_studies - 10 }} More Case Studies in Portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No case studies yet</b>AiRev-reviewed case studies appear here once submitted.</div>{% endif %}
   </div>
@@ -681,73 +727,96 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
     {% if assignments_raw and assignments_raw|length > 0 %}
     <div class="perf-card">
       {% set sorted_assigns = assignments_raw|sort(attribute='rubric_pct',reverse=true) %}
-      {% for a in sorted_assigns[:8] %}
-      {% set ap = a.rubric_pct if a.rubric_pct else ((a.score/a.max_score*100) if a.max_score and a.max_score > 0 else (a.score or 0)) %}
+      {% for a in sorted_assigns[:10] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
           <div class="perf-name">{{ a.title or 'Assignment' }}</div>
-          <div class="perf-context">{% if a.course_name %}<span>{{ a.course_name }}</span>{% endif %}{% if a.module_name %} · {{ a.module_name }}{% endif %}{% if a.submitted_at %} · {{ a.submitted_at }}{% endif %}</div>
+          <div class="perf-context">
+            {% if a.course_name %}<span>{{ a.course_name }}</span>{% endif %}
+            {% if a.module_name %} · {{ a.module_name }}{% endif %}
+            {% if a.submitted_at %} · {{ (a.submitted_at|string)[:10] }}{% endif %}
+            {% if a.ai_grade_label or a.rubric_grade %} · Rubric: {{ a.ai_grade_label or a.rubric_grade }}{% endif %}
+          </div>
         </div>
-        <div><div class="perf-score">{{ ap|int }}</div><div class="perf-score-meta">{{ a.rubric_grade or a.grade_label or 'Score' }}</div></div>
+        {{ dual_score(a.faculty_score, a.ai_score or a.rubric_pct, a.max_score, 'Rubric AI') }}
       </div>
       {% endfor %}
-      {% if activity_counts.assignments > assignments_raw|length %}<div class="perf-more">+ {{ activity_counts.assignments - assignments_raw|length }} More Assignments in Portfolio</div>{% endif %}
+      {% if activity_counts.assignments > sorted_assigns[:10]|length %}<div class="perf-more">+ {{ activity_counts.assignments - 10 }} More Assignments in Portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No graded assignments yet</b>Submit assignments on the LMS to populate this ranking.</div>{% endif %}
   </div>
 
-  {# ── Assessments ── #}
+  {# ── Assessments (formal exams + module quizzes, sorted best-first) ── #}
   <div class="itab-panel" data-tab-group="perf" data-tab-id="assessments">
     {% if test_scores_raw and test_scores_raw|length > 0 %}
     <div class="perf-card">
-      {% for t in test_scores_raw[:8] %}
-      {% set tp = t.percentage or t.score or 0 %}
+      {% for t in test_scores_raw[:10] %}
+      {% set tp = t.percentage or 0 %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ t.subject or t.topic or t.exam_name or 'Assessment' }}</div>
-          <div class="perf-context">{% if t.course_name %}<span>{{ t.course_name }}</span>{% endif %}{% if t.exam_date %} · {{ t.exam_date }}{% endif %}</div>
+          <div class="perf-name">{{ t.title }}</div>
+          <div class="perf-context">
+            {% if t.course_name %}<span>{{ t.course_name }}</span>{% endif %}
+            {% if t.topic %} · {{ t.topic|capitalize }}{% endif %}
+            {% if t.kind == 'quiz' %} · Module Quiz{% else %} · Exam{% endif %}
+            {% if t.submitted_at %} · {{ (t.submitted_at|string)[:10] }}{% endif %}
+          </div>
         </div>
-        <div><div class="perf-score">{{ tp|int }}</div><div class="perf-score-meta">{% if t.grade %}Grade {{ t.grade }}{% else %}Score{% endif %}</div></div>
+        <div>
+          <div class="perf-score">{{ tp|int }}<span class="perf-score-pct">%</span></div>
+          <div class="perf-score-meta">{% if t.grade %}Grade {{ t.grade }}{% else %}{{ t.score|int }} / {{ t.max_score|int }}{% endif %}</div>
+        </div>
       </div>
       {% endfor %}
-      {% if activity_counts.assessments > test_scores_raw|length %}<div class="perf-more">+ {{ activity_counts.assessments - test_scores_raw|length }} More Assessments in Portfolio</div>{% endif %}
     </div>
-    {% else %}<div class="empty-tile"><b>No assessments yet</b>Take module assessments on the LMS.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No assessments yet</b>Take module assessments or quizzes on the LMS — both formal exams and module checkpoints appear here.</div>{% endif %}
   </div>
 
   {# ── Mock Interviews ── #}
   <div class="itab-panel" data-tab-group="perf" data-tab-id="mock-int">
     {% if mock_interviews_raw and mock_interviews_raw|length > 0 %}
     <div class="perf-card">
-      {% for m in mock_interviews_raw[:8] %}
+      {% for m in mock_interviews_raw[:10] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
           <div class="perf-name">{{ m.title or m.topic or 'Mock Interview' }}</div>
-          <div class="perf-context">{% if m.duration %}<span>{{ m.duration }}</span> · {% endif %}{% if m.interviewer %}{{ m.interviewer }}{% endif %}{% if m.scheduled_at %} · {{ m.scheduled_at }}{% endif %}</div>
+          <div class="perf-context">
+            {% if m.duration_minutes %}<span>{{ m.duration_minutes }} min</span>{% elif m.duration %}<span>{{ m.duration }}</span>{% endif %}
+            {% if m.interviewer %} · {{ m.interviewer }}{% endif %}
+            {% if m.submitted_at %} · {{ (m.submitted_at|string)[:10] }}{% elif m.scheduled_at %} · {{ (m.scheduled_at|string)[:10] }}{% endif %}
+          </div>
         </div>
-        <div><div class="perf-score">{{ (m.score or m.overall_score or 0)|int }}</div><div class="perf-score-meta">Score / 100</div></div>
+        {{ dual_score(m.faculty_score or m.faculty_score_alt or m.score or m.overall_score, m.ai_score, 100, 'InterviewIQ') }}
       </div>
       {% endfor %}
     </div>
     {% else %}<div class="empty-tile"><b>No mock interviews yet</b>Mock interviews with industry mentors via InterviewIQ appear here once completed.</div>{% endif %}
   </div>
 
-  {# ── Mock Tests ── #}
+  {# ── Mock Tests (TestGen / BrainDrill) ── #}
   <div class="itab-panel" data-tab-group="perf" data-tab-id="mock-test">
     {% if mock_tests_raw and mock_tests_raw|length > 0 %}
     <div class="perf-card">
-      {% for t in mock_tests_raw[:8] %}
-      {% set tp = t.percentage or t.score or 0 %}
+      {% for t in mock_tests_raw[:10] %}
+      {% set tp = t.percentage if t.percentage is not none else ((t.score/t.total_marks*100) if t.total_marks and t.total_marks > 0 else (t.score or 0)) %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ t.title or t.test_name or 'Mock Test' }}</div>
-          <div class="perf-context">{% if t.duration %}<span>{{ t.duration }}</span>{% endif %}{% if t.test_type %} · {{ t.test_type }}{% endif %}{% if t.attempted_at %} · {{ t.attempted_at }}{% endif %}</div>
+          <div class="perf-name">{{ t.title or t.test_name or t.exam_name or 'TestGen Practice' }}</div>
+          <div class="perf-context">
+            {% if t.course_name %}<span>{{ t.course_name }}</span>{% endif %}
+            {% if t.test_type %} · {{ t.test_type|capitalize }}{% else %} · TestGen{% endif %}
+            {% if t.time_taken_minutes %} · {{ t.time_taken_minutes }} min{% endif %}
+            {% if t.attempted_at %} · {{ (t.attempted_at|string)[:10] }}{% elif t.submitted_at %} · {{ (t.submitted_at|string)[:10] }}{% endif %}
+          </div>
         </div>
-        <div><div class="perf-score">{{ tp|int }}</div><div class="perf-score-meta">Score / 100</div></div>
+        <div>
+          <div class="perf-score">{{ tp|int }}<span class="perf-score-pct">%</span></div>
+          <div class="perf-score-meta">{% if t.grade %}Grade {{ t.grade }}{% else %}{{ (t.score or 0)|int }} / {{ (t.total_marks or 100)|int }}{% endif %}</div>
+        </div>
       </div>
       {% endfor %}
     </div>
@@ -758,7 +827,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="industry">
     {% if industry_sessions_raw and industry_sessions_raw|length > 0 %}
     <div class="perf-card">
-      {% for s in industry_sessions_raw[:8] %}
+      {% for s in industry_sessions_raw[:10] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
@@ -776,7 +845,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="hack">
     {% if hackathons_raw and hackathons_raw|length > 0 %}
     <div class="perf-card">
-      {% for h in hackathons_raw[:8] %}
+      {% for h in hackathons_raw[:10] %}
       {% set rank = h.rank or h.placement %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>

@@ -59,6 +59,12 @@ class DataCollector:
         semester_results = self._get_semester_results(stu_id)
         job_preferences = self._get_job_preferences(student_id)
 
+        # v12.4: real data for the perf tabs that were previously empty
+        mock_tests        = self._get_mock_tests(stu_id)
+        mock_interviews   = self._get_mock_interviews(stu_id)
+        industry_sessions = self._get_industry_sessions(stu_id)
+        hackathons        = self._get_hackathons(stu_id)
+
         computed = self._compute_metrics(
             test_scores=test_scores, case_studies=case_studies,
             assignments=assignments, quiz_scores=quiz_scores,
@@ -87,6 +93,11 @@ class DataCollector:
             "hobbies_data": personal.get("hobbies_list", []),
             "lms_education": personal.get("lms_education", []),
             "lms_work_experience": personal.get("lms_work_experience", []),
+            # v12.4
+            "mock_tests": mock_tests,
+            "mock_interviews": mock_interviews,
+            "industry_sessions": industry_sessions,
+            "hackathons": hackathons,
         }
         return clean_data(result)
 
@@ -278,10 +289,34 @@ class DataCollector:
     # ─── Case Studies ────────────────────────────────────
 
     def _get_case_studies(self, student_id: int) -> List[Dict]:
+        # v12.4: exposes BOTH faculty_score (manual mentor grade) AND ai_score (AiRev agent grade)
         query_variants = [
-            """SELECT css.id AS submission_id, csd.title,
+            ("with rubric_results join", """
+               SELECT css.id AS submission_id, csd.title,
                       csd.max_score, css.grade AS score,
-                      css.feedback, css.rubric_scores,
+                      css.grade AS faculty_score,
+                      css.feedback AS faculty_feedback, css.rubric_scores,
+                      css.notes, css.submitted_at, css.status,
+                      c.course_name,
+                      rr.total_score AS ai_score,
+                      rr.percentage AS ai_percentage,
+                      rr.grade AS ai_grade,
+                      rr.grade_label AS ai_grade_label,
+                      rr.overall_feedback AS ai_feedback
+               FROM case_study_submissions css
+               JOIN case_studies csd ON csd.id = css.case_study_id
+               LEFT JOIN courses c ON c.id = csd.course_id
+               LEFT JOIN rubric_results rr ON rr.submission_id = css.id
+                   AND (rr.evaluation_type = 'case_study' OR rr.evaluation_type IS NULL)
+               WHERE css.student_id = :sid
+                 AND css.status IN ('reviewed','graded','mentor_reviewed','completed')
+               ORDER BY css.grade DESC"""),
+            ("dedicated columns", """
+               SELECT css.id AS submission_id, csd.title,
+                      csd.max_score, css.grade AS score,
+                      css.grade AS faculty_score,
+                      css.ai_score, css.ai_feedback,
+                      css.feedback AS faculty_feedback, css.rubric_scores,
                       css.notes, css.submitted_at, css.status,
                       c.course_name
                FROM case_study_submissions css
@@ -289,36 +324,45 @@ class DataCollector:
                LEFT JOIN courses c ON c.id = csd.course_id
                WHERE css.student_id = :sid
                  AND css.status IN ('reviewed','graded','mentor_reviewed','completed')
-               ORDER BY css.grade DESC""",
-            """SELECT css.id AS submission_id, csd.title,
-                      css.grade AS score, css.feedback,
+               ORDER BY css.grade DESC"""),
+            ("legacy minimal", """
+               SELECT css.id AS submission_id, csd.title,
+                      css.grade AS score, css.grade AS faculty_score,
+                      css.feedback AS faculty_feedback,
                       css.notes, css.status, css.submitted_at
                FROM case_study_submissions css
                JOIN case_studies csd ON csd.id = css.case_study_id
                WHERE css.student_id = :sid
-               ORDER BY css.grade DESC""",
+               ORDER BY css.grade DESC"""),
         ]
-        for i, query in enumerate(query_variants):
+        for label, query in query_variants:
             try:
                 rows = self.db.execute(text(query), {"sid": student_id}).mappings().all()
                 if rows:
-                    logger.info(f"case_studies: {len(rows)} rows (variant {i+1})")
+                    logger.info(f"case_studies: {len(rows)} rows ('{label}')")
                     return clean_data([dict(r) for r in rows])
             except Exception as e:
-                logger.info(f"case_studies variant {i+1} failed: {e}")
+                logger.info(f"case_studies '{label}' failed: {e}")
         return []
                
 
     # ─── Assignments (rubric JOIN FIXED) ─────────────────
 
     def _get_assignments(self, student_id: int) -> List[Dict]:
+        # v12.4: returns BOTH faculty_score and ai_score so the template can show both
         primary_query = """
             SELECT asub.id,
+                asub.grade AS faculty_score,
+                COALESCE(rr.total_score, 0) AS ai_score,
+                rr.percentage AS ai_percentage,
                 COALESCE(rr.total_score, asub.grade, 0) AS score,
                 COALESCE(rr.max_score, a.total_marks, 100) AS max_score,
                 rr.percentage AS rubric_pct,
-                rr.grade AS rubric_grade, rr.grade_label,
+                rr.grade AS ai_grade, rr.grade_label AS ai_grade_label,
+                rr.grade AS rubric_grade,
                 COALESCE(rr.overall_feedback, asub.feedback) AS feedback,
+                rr.overall_feedback AS ai_feedback,
+                asub.feedback AS faculty_feedback,
                 rr.strengths, rr.top_competencies,
                 asub.status, asub.submitted_at, a.title,
                 a.course_id, c.course_name
@@ -332,8 +376,8 @@ class DataCollector:
             ORDER BY rr.percentage DESC, asub.submitted_at DESC
         """
         fallback_query = """
-            SELECT asub.id, asub.grade AS score, asub.feedback,
-                   asub.status, asub.submitted_at, a.title,
+            SELECT asub.id, asub.grade AS score, asub.grade AS faculty_score,
+                   asub.feedback, asub.status, asub.submitted_at, a.title,
                    a.total_marks AS max_score, a.course_id, c.course_name
             FROM assignment_submissions asub
             JOIN assignments a ON a.id = asub.assignment_id
@@ -350,6 +394,158 @@ class DataCollector:
                 return result
             except Exception as e:
                 logger.info(f"assignments {label} query failed: {e}")
+        return []
+
+    # ─── Mock Tests (TestGen / BrainDrill — INVERSE of test_scores) ──
+    def _get_mock_tests(self, student_id: int) -> List[Dict]:
+        """TestGen / BrainDrill practice attempts — the user's `lms.upskillize.com/student/testgen`
+        page. INVERSE filter from _get_test_scores (which excludes these)."""
+        queries = [
+            ("results+exams (testgen filter)", """
+                SELECT r.id, r.score, r.total_marks, r.percentage,
+                       r.grade, r.time_taken_minutes,
+                       r.submitted_at AS attempted_at,
+                       e.exam_name AS title, e.exam_type AS test_type,
+                       c.course_name
+                FROM results r
+                JOIN exams e ON e.id = r.exam_id
+                LEFT JOIN courses c ON c.id = e.course_id
+                WHERE r.student_id = :sid
+                  AND LOWER(e.exam_type) IN
+                      ('brain_drill','testgen','practice_test','ai_generated',
+                       'practice','braindrill','brain-drill')
+                ORDER BY r.submitted_at DESC
+            """),
+            ("testgen_attempts table", """
+                SELECT * FROM testgen_attempts WHERE student_id = :sid
+                ORDER BY id DESC LIMIT 20
+            """),
+            ("brain_drill_attempts table", """
+                SELECT * FROM brain_drill_attempts WHERE student_id = :sid
+                ORDER BY id DESC LIMIT 20
+            """),
+            ("test_attempts table", """
+                SELECT * FROM test_attempts WHERE student_id = :sid
+                ORDER BY id DESC LIMIT 20
+            """),
+        ]
+        for label, q in queries:
+            try:
+                rows = self.db.execute(text(q), {"sid": student_id}).mappings().all()
+                if rows:
+                    logger.info(f"mock_tests (TestGen): {len(rows)} rows from '{label}'")
+                    return clean_data([dict(r) for r in rows])
+            except Exception as e:
+                logger.info(f"mock_tests '{label}' failed: {e}")
+        return []
+
+    # ─── Mock Interviews (InterviewIQ) ────────────────────
+    def _get_mock_interviews(self, student_id: int) -> List[Dict]:
+        queries = [
+            ("mock_interviews + reviews", """
+                SELECT mi.id,
+                       mi.score AS faculty_score,
+                       mi.overall_score AS faculty_score_alt,
+                       mi.feedback AS faculty_feedback,
+                       mi.duration_minutes, mi.scheduled_at AS submitted_at,
+                       COALESCE(mi.interview_type, mi.topic, 'Mock Interview') AS title,
+                       mi.interviewer,
+                       ir.overall_score AS ai_score, ir.feedback AS ai_feedback
+                FROM mock_interviews mi
+                LEFT JOIN interview_reviews ir ON ir.interview_id = mi.id
+                WHERE mi.student_id = :sid
+                ORDER BY mi.scheduled_at DESC LIMIT 20
+            """),
+            ("mock_interviews simple", """
+                SELECT id, score, feedback, scheduled_at AS submitted_at,
+                       interview_type AS title, status
+                FROM mock_interviews WHERE student_id = :sid
+                ORDER BY id DESC LIMIT 20
+            """),
+            ("interview_attempts", """
+                SELECT * FROM interview_attempts WHERE student_id = :sid
+                ORDER BY id DESC LIMIT 20
+            """),
+            ("interview_sessions", """
+                SELECT * FROM interview_sessions WHERE student_id = :sid
+                ORDER BY id DESC LIMIT 20
+            """),
+            ("interviewiq_sessions", """
+                SELECT * FROM interviewiq_sessions WHERE student_id = :sid
+                ORDER BY id DESC LIMIT 20
+            """),
+        ]
+        for label, q in queries:
+            try:
+                rows = self.db.execute(text(q), {"sid": student_id}).mappings().all()
+                if rows:
+                    logger.info(f"mock_interviews: {len(rows)} rows from '{label}'")
+                    return clean_data([dict(r) for r in rows])
+            except Exception as e:
+                logger.info(f"mock_interviews '{label}' failed: {e}")
+        return []
+
+    # ─── Industry Sessions (live mentor masterclasses) ────
+    def _get_industry_sessions(self, student_id: int) -> List[Dict]:
+        # Try dedicated tables first
+        for table in ("industry_sessions", "industry_session_attendance",
+                      "session_attendance", "masterclass_attendance",
+                      "live_session_attendance"):
+            try:
+                rows = self.db.execute(
+                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC LIMIT 15"),
+                    {"sid": student_id},
+                ).mappings().all()
+                if rows:
+                    logger.info(f"industry_sessions from {table}: {len(rows)}")
+                    return clean_data([dict(r) for r in rows])
+            except Exception:
+                continue
+
+        # Fall back to assignment_submissions filtered by type/category — try several columns
+        type_filters = [
+            ("a.type", "industry_session"),
+            ("a.type", "industry"),
+            ("a.assignment_type", "industry_session"),
+            ("a.category", "industry_session"),
+            ("a.coursework_type", "industry_session"),
+        ]
+        for col, val in type_filters:
+            try:
+                rows = self.db.execute(text(f"""
+                    SELECT asub.id, asub.grade AS faculty_score, asub.feedback,
+                           asub.status, asub.submitted_at, a.title,
+                           a.total_marks AS max_score, c.course_name,
+                           rr.total_score AS ai_score, rr.percentage AS ai_percentage,
+                           rr.overall_feedback AS ai_feedback
+                    FROM assignment_submissions asub
+                    JOIN assignments a ON a.id = asub.assignment_id
+                    LEFT JOIN courses c ON c.id = a.course_id
+                    LEFT JOIN rubric_results rr ON rr.submission_id = asub.id
+                    WHERE asub.student_id = :sid AND LOWER({col}) = :tv
+                    ORDER BY asub.submitted_at DESC LIMIT 15
+                """), {"sid": student_id, "tv": val.lower()}).mappings().all()
+                if rows:
+                    logger.info(f"industry_sessions from coursework where {col}='{val}': {len(rows)}")
+                    return clean_data([dict(r) for r in rows])
+            except Exception:
+                continue
+        return []
+
+    # ─── Hackathons ───────────────────────────────────────
+    def _get_hackathons(self, student_id: int) -> List[Dict]:
+        for table in ("hackathons", "hackathon_participation",
+                      "hackathon_submissions", "student_hackathons"):
+            try:
+                rows = self.db.execute(
+                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC LIMIT 10"),
+                    {"sid": student_id},
+                ).mappings().all()
+                if rows:
+                    logger.info(f"hackathons from {table}: {len(rows)}")
+                    return clean_data([dict(r) for r in rows])
+            except Exception:
+                continue
         return []
 
     # ─── Quiz Scores (EXCLUDES TestGen) ──────────────────
@@ -423,13 +619,48 @@ class DataCollector:
     # ─── Capstone Projects ───────────────────────────────
 
     def _get_capstone_projects(self, student_id: int) -> list:
+        # v12.4: try dedicated tables first, then fall back to assignment_submissions
+        # filtered by type — handles LMSs that store capstones in unified coursework
         for table in ("capstone_projects", "capstone_submissions", "student_capstones"):
             try:
                 rows = self.db.execute(
-                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC LIMIT 5"),
+                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC LIMIT 8"),
                     {"sid": student_id},
                 ).mappings().all()
-                if rows: return clean_data([dict(r) for r in rows])
+                if rows:
+                    logger.info(f"capstones from {table}: {len(rows)}")
+                    return clean_data([dict(r) for r in rows])
+            except Exception:
+                continue
+
+        # Coursework-table fallback
+        type_filters = [
+            ("a.type", "capstone"),
+            ("a.assignment_type", "capstone"),
+            ("a.category", "capstone"),
+            ("a.coursework_type", "capstone"),
+            ("a.type", "capstone_project"),
+        ]
+        for col, val in type_filters:
+            try:
+                rows = self.db.execute(text(f"""
+                    SELECT asub.id, asub.grade AS faculty_score, asub.feedback AS faculty_feedback,
+                           asub.status, asub.submitted_at, a.title,
+                           a.total_marks AS max_score, c.course_name,
+                           rr.total_score AS ai_score, rr.percentage AS ai_percentage,
+                           rr.grade AS ai_grade, rr.grade_label AS ai_grade_label,
+                           rr.overall_feedback AS ai_feedback,
+                           COALESCE(rr.total_score, asub.grade, 0) AS score
+                    FROM assignment_submissions asub
+                    JOIN assignments a ON a.id = asub.assignment_id
+                    LEFT JOIN courses c ON c.id = a.course_id
+                    LEFT JOIN rubric_results rr ON rr.submission_id = asub.id
+                    WHERE asub.student_id = :sid AND LOWER({col}) = :tv
+                    ORDER BY asub.submitted_at DESC LIMIT 8
+                """), {"sid": student_id, "tv": val.lower()}).mappings().all()
+                if rows:
+                    logger.info(f"capstones from coursework where {col}='{val}': {len(rows)}")
+                    return clean_data([dict(r) for r in rows])
             except Exception:
                 continue
         return []
