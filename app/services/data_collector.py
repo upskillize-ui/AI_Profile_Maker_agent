@@ -619,27 +619,38 @@ class DataCollector:
     # ─── Capstone Projects ───────────────────────────────
 
     def _get_capstone_projects(self, student_id: int) -> list:
-        # v12.4: try dedicated tables first, then fall back to assignment_submissions
-        # filtered by type — handles LMSs that store capstones in unified coursework
-        for table in ("capstone_projects", "capstone_submissions", "student_capstones"):
+        # v12.5: expanded table + FK hunt. The LMS exposes /student/capstones endpoint
+        # but the underlying table name varies. Try every plausible combination.
+        table_variants = [
+            ("capstones",            "student_id"),
+            ("capstones",            "user_id"),
+            ("capstone_projects",    "student_id"),
+            ("capstone_projects",    "user_id"),
+            ("capstone_submissions", "student_id"),
+            ("capstone_submissions", "user_id"),
+            ("student_capstones",    "student_id"),
+            ("student_capstones",    "user_id"),
+        ]
+        for table, fk in table_variants:
             try:
                 rows = self.db.execute(
-                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC LIMIT 8"),
+                    text(f"SELECT * FROM {table} WHERE {fk} = :sid ORDER BY id DESC LIMIT 8"),
                     {"sid": student_id},
                 ).mappings().all()
                 if rows:
-                    logger.info(f"capstones from {table}: {len(rows)}")
+                    logger.info(f"capstones from {table}.{fk}: {len(rows)}")
                     return clean_data([dict(r) for r in rows])
-            except Exception:
-                continue
+            except Exception as e:
+                logger.debug(f"capstone table {table}.{fk} failed: {e}")
 
-        # Coursework-table fallback
+        # Coursework-table fallback (capstone stored as assignment.type='capstone' etc)
         type_filters = [
             ("a.type", "capstone"),
             ("a.assignment_type", "capstone"),
             ("a.category", "capstone"),
             ("a.coursework_type", "capstone"),
             ("a.type", "capstone_project"),
+            ("a.type", "Capstone"),
         ]
         for col, val in type_filters:
             try:
@@ -663,6 +674,7 @@ class DataCollector:
                     return clean_data([dict(r) for r in rows])
             except Exception:
                 continue
+        logger.info("capstones: NONE found across all 8 table variants + 6 coursework filters")
         return []
 
     # ─── Semester Results ────────────────────────────────

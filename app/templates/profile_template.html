@@ -186,6 +186,8 @@ section:last-of-type{border-bottom:none;}
 .perf-status{display:inline-block;padding:3px 10px;border-radius:100px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;margin-top:6px;line-height:1.4;}
 .perf-status.completed{background:rgba(0,196,160,0.18);color:var(--teal);border:1px solid rgba(0,196,160,0.3);}
 .perf-status.active{background:rgba(245,184,0,0.15);color:var(--gold-bright);border:1px solid rgba(245,184,0,0.35);}
+.perf-status.enrolled{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.12);}
+.perf-badge-mini{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:8px;background:rgba(245,184,0,0.12);color:var(--gold-bright);border:1px solid rgba(245,184,0,0.25);font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;vertical-align:middle;}
 .perf-more{text-align:center;padding:14px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold);border-top:1px solid rgba(255,255,255,0.05);}
 
 /* DUAL SCORE (Faculty + AI agent) — shown on cards where both exist */
@@ -393,8 +395,23 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
 
 {# ─── Dual-score macro: renders faculty + AI agent scores side-by-side
      Falls back gracefully when only one score is present. ─── #}
+{# v12.5 fmt_date — '2026-05-08T17:53:42' → '8 May 2026' #}
+{% macro fmt_date(s) -%}
+  {%- if not s -%}{%- else -%}
+    {%- set d = (s|string).split('T')[0] -%}
+    {%- if d|length >= 10 -%}
+      {%- set months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] -%}
+      {{ d[8:10]|int }} {{ months[(d[5:7]|int) - 1] }} {{ d[0:4] }}
+    {%- else -%}{{ d }}{%- endif -%}
+  {%- endif -%}
+{%- endmacro %}
+
 {% macro dual_score(faculty, ai, max_score, agent_label='AI') -%}
-  {% set has_faculty = faculty is not none and (faculty|float(0) > 0 or faculty == 0) %}
+  {# v12.4.1 fix — coerce Undefined→None so |float doesn't raise UndefinedError #}
+  {% set faculty = faculty|default(none, true) if faculty is defined else none %}
+  {% set ai = ai|default(none, true) if ai is defined else none %}
+  {% set max_score = max_score|default(none, true) if max_score is defined else none %}
+  {% set has_faculty = faculty is not none and (faculty|float(0) > 0 or faculty|float(-1) == 0) %}
   {% set has_ai = ai is not none and ai|float(0) > 0 %}
   {% if has_faculty and has_ai %}
     <div class="perf-score-dual">
@@ -651,7 +668,10 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% for c in courses_data[:10] %}
       {% set cs = (c.completion_status or 'enrolled')|lower %}
       {% set pct = c.progress_percentage or 0 %}
-      {% set rclass = 'r1' if cs == 'completed' else ('r2' if cs in ('in_progress','active','started','enrolled') else 'r6') %}
+      {# v12.5: derive a status from progress if completion_status is missing/ambiguous #}
+      {% set status_text = 'Completed' if (cs == 'completed' or pct >= 100) else ('In Progress' if pct > 0 else 'Enrolled') %}
+      {% set status_class = 'completed' if status_text == 'Completed' else ('active' if status_text == 'In Progress' else 'enrolled') %}
+      {% set rclass = 'r1' if status_text == 'Completed' else ('r2' if status_text == 'In Progress' else 'r6') %}
       <div class="perf-item {{ rclass }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
@@ -661,13 +681,13 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
             {% if c.difficulty_level %} · {{ c.difficulty_level|capitalize }}{% endif %}
             {% if c.total_modules and c.total_modules > 0 %} · {{ c.total_modules }} Module{% if c.total_modules != 1 %}s{% endif %}{% endif %}
             {% if c.quiz_count and c.quiz_count > 0 %} · {{ c.quiz_count }} Quiz Attempt{% if c.quiz_count != 1 %}s{% endif %}{% if c.quiz_avg_pct > 0 %} · {{ c.quiz_avg_pct }}% Avg{% endif %}{% endif %}
-            {% if c.enrolled_at %} · Enrolled {{ (c.enrolled_at|string)[:10] }}{% endif %}
-            {% if cs == 'completed' and c.completed_at %} · Completed {{ (c.completed_at|string)[:10] }}{% endif %}
+            {% if c.enrolled_at %} · Enrolled {{ fmt_date(c.enrolled_at) }}{% endif %}
+            {% if status_text == 'Completed' and c.completed_at %} · Completed {{ fmt_date(c.completed_at) }}{% endif %}
           </div>
         </div>
         <div>
           <div class="perf-score">{{ pct|int }}<span class="perf-score-pct">%</span></div>
-          <div class="perf-status {{ 'completed' if cs == 'completed' else ('active' if cs in ('in_progress','active','started') else '') }}">{% if cs == 'completed' %}✓ Completed{% elif cs in ('in_progress','active','started') %}Active{% else %}Enrolled{% endif %}</div>
+          <div class="perf-status {{ status_class }}">{% if status_text == 'Completed' %}✓ {% endif %}{{ status_text }}</div>
         </div>
       </div>
       {% endfor %}
@@ -687,7 +707,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
           <div class="perf-context">
             {% if cp.course_name %}<span>{{ cp.course_name }}</span>{% endif %}
             {% if cp.duration %} · {{ cp.duration }}{% endif %}
-            {% if cp.submitted_at %} · {{ (cp.submitted_at|string)[:10] }}{% endif %}
+            {% if cp.submitted_at %} · {{ fmt_date(cp.submitted_at) }}{% endif %}
             {% if cp.ai_grade_label or cp.ai_grade %} · Rubric: {{ cp.ai_grade_label or cp.ai_grade }}{% endif %}
           </div>
         </div>
@@ -699,50 +719,76 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
     {% else %}<div class="empty-tile"><b>No capstones yet</b>Capstones unlock at the end of each Upskillize track.</div>{% endif %}
   </div>
 
-  {# ── Case Studies ── #}
+  {# ── Case Studies (v12.5 — deduped by title, best score only) ── #}
   <div class="itab-panel" data-tab-group="perf" data-tab-id="casestudies">
     {% if case_studies_raw and case_studies_raw|length > 0 %}
+    {# Dedupe by title — group, keep highest score #}
+    {% set ns = namespace(seen={}, best=[]) %}
+    {% for c in case_studies_raw %}
+      {% set t = (c.title or 'Case Study')|string %}
+      {% set sc = (c.ai_score or c.faculty_score or c.score or 0)|float(0) %}
+      {% if t not in ns.seen or sc > ns.seen[t].score %}
+        {% set _ = ns.seen.update({t: {'row': c, 'score': sc, 'count': (ns.seen[t].count + 1) if t in ns.seen else 1}}) %}
+      {% else %}
+        {% set _ = ns.seen.update({t: {'row': ns.seen[t].row, 'score': ns.seen[t].score, 'count': ns.seen[t].count + 1}}) %}
+      {% endif %}
+    {% endfor %}
+    {% set deduped = ns.seen.values()|sort(attribute='score', reverse=true)|list %}
     <div class="perf-card">
-      {% for c in case_studies_raw[:10] %}
+      {% for entry in deduped[:10] %}
+      {% set c = entry.row %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ c.title or 'Case Study' }}</div>
+          <div class="perf-name">{{ c.title or 'Case Study' }}{% if entry.count > 1 %} <span class="perf-badge-mini">{{ entry.count }} attempts · best score</span>{% endif %}</div>
           <div class="perf-context">
             {% if c.course_name %}<span>{{ c.course_name }}</span>{% endif %}
-            {% if c.submitted_at %} · {{ (c.submitted_at|string)[:10] }}{% endif %}
+            {% if c.module_name %} · {{ c.module_name }}{% endif %}
+            {% if c.submitted_at %} · Submitted {{ fmt_date(c.submitted_at) }}{% endif %}
             {% if c.ai_grade_label or c.ai_grade %} · AiRev: {{ c.ai_grade_label or c.ai_grade }}{% endif %}
+            {% if c.status and c.status != 'reviewed' %} · {{ c.status|capitalize }}{% endif %}
           </div>
         </div>
         {{ dual_score(c.faculty_score or c.score, c.ai_score, c.max_score, 'AiRev') }}
       </div>
       {% endfor %}
-      {% if activity_counts.case_studies > case_studies_raw[:10]|length %}<div class="perf-more">+ {{ activity_counts.case_studies - 10 }} More Case Studies in Portfolio</div>{% endif %}
+      {% if deduped|length > 10 %}<div class="perf-more">+ {{ deduped|length - 10 }} more case studies in portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No case studies yet</b>AiRev-reviewed case studies appear here once submitted.</div>{% endif %}
   </div>
 
-  {# ── Assignments ── #}
+  {# ── Assignments (v12.5 — deduped, best score) ── #}
   <div class="itab-panel" data-tab-group="perf" data-tab-id="assignments">
     {% if assignments_raw and assignments_raw|length > 0 %}
+    {% set ns = namespace(seen={}) %}
+    {% for a in assignments_raw %}
+      {% set t = (a.title or 'Assignment')|string %}
+      {% set sc = (a.rubric_pct or a.ai_score or a.faculty_score or a.score or 0)|float(0) %}
+      {% if t not in ns.seen or sc > ns.seen[t].score %}
+        {% set _ = ns.seen.update({t: {'row': a, 'score': sc, 'count': (ns.seen[t].count + 1) if t in ns.seen else 1}}) %}
+      {% else %}
+        {% set _ = ns.seen.update({t: {'row': ns.seen[t].row, 'score': ns.seen[t].score, 'count': ns.seen[t].count + 1}}) %}
+      {% endif %}
+    {% endfor %}
+    {% set deduped = ns.seen.values()|sort(attribute='score', reverse=true)|list %}
     <div class="perf-card">
-      {% set sorted_assigns = assignments_raw|sort(attribute='rubric_pct',reverse=true) %}
-      {% for a in sorted_assigns[:10] %}
+      {% for entry in deduped[:10] %}
+      {% set a = entry.row %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ a.title or 'Assignment' }}</div>
+          <div class="perf-name">{{ a.title or 'Assignment' }}{% if entry.count > 1 %} <span class="perf-badge-mini">{{ entry.count }} attempts · best score</span>{% endif %}</div>
           <div class="perf-context">
             {% if a.course_name %}<span>{{ a.course_name }}</span>{% endif %}
             {% if a.module_name %} · {{ a.module_name }}{% endif %}
-            {% if a.submitted_at %} · {{ (a.submitted_at|string)[:10] }}{% endif %}
+            {% if a.submitted_at %} · Submitted {{ fmt_date(a.submitted_at) }}{% endif %}
             {% if a.ai_grade_label or a.rubric_grade %} · Rubric: {{ a.ai_grade_label or a.rubric_grade }}{% endif %}
           </div>
         </div>
         {{ dual_score(a.faculty_score, a.ai_score or a.rubric_pct, a.max_score, 'Rubric AI') }}
       </div>
       {% endfor %}
-      {% if activity_counts.assignments > sorted_assigns[:10]|length %}<div class="perf-more">+ {{ activity_counts.assignments - 10 }} More Assignments in Portfolio</div>{% endif %}
+      {% if deduped|length > 10 %}<div class="perf-more">+ {{ deduped|length - 10 }} more assignments in portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No graded assignments yet</b>Submit assignments on the LMS to populate this ranking.</div>{% endif %}
   </div>
@@ -761,7 +807,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
             {% if t.course_name %}<span>{{ t.course_name }}</span>{% endif %}
             {% if t.topic %} · {{ t.topic|capitalize }}{% endif %}
             {% if t.kind == 'quiz' %} · Module Quiz{% else %} · Exam{% endif %}
-            {% if t.submitted_at %} · {{ (t.submitted_at|string)[:10] }}{% endif %}
+            {% if t.submitted_at %} · {{ fmt_date(t.submitted_at) }}{% endif %}
           </div>
         </div>
         <div>
@@ -786,7 +832,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
           <div class="perf-context">
             {% if m.duration_minutes %}<span>{{ m.duration_minutes }} min</span>{% elif m.duration %}<span>{{ m.duration }}</span>{% endif %}
             {% if m.interviewer %} · {{ m.interviewer }}{% endif %}
-            {% if m.submitted_at %} · {{ (m.submitted_at|string)[:10] }}{% elif m.scheduled_at %} · {{ (m.scheduled_at|string)[:10] }}{% endif %}
+            {% if m.submitted_at %} · {{ fmt_date(m.submitted_at) }}{% elif m.scheduled_at %} · {{ fmt_date(m.scheduled_at) }}{% endif %}
           </div>
         </div>
         {{ dual_score(m.faculty_score or m.faculty_score_alt or m.score or m.overall_score, m.ai_score, 100, 'InterviewIQ') }}
@@ -810,7 +856,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
             {% if t.course_name %}<span>{{ t.course_name }}</span>{% endif %}
             {% if t.test_type %} · {{ t.test_type|capitalize }}{% else %} · TestGen{% endif %}
             {% if t.time_taken_minutes %} · {{ t.time_taken_minutes }} min{% endif %}
-            {% if t.attempted_at %} · {{ (t.attempted_at|string)[:10] }}{% elif t.submitted_at %} · {{ (t.submitted_at|string)[:10] }}{% endif %}
+            {% if t.attempted_at %} · {{ fmt_date(t.attempted_at) }}{% elif t.submitted_at %} · {{ fmt_date(t.submitted_at) }}{% endif %}
           </div>
         </div>
         <div>
