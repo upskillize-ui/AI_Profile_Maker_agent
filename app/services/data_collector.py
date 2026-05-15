@@ -45,6 +45,11 @@ class DataCollector:
         stu_id = sid_row["id"] if sid_row else student_id
         logger.info(f"Mapped user_id={student_id} -> students.id={stu_id}")
 
+        # v12.6: one-shot schema discovery — logs the REAL table names that exist
+        # for capstones / mock interviews / industry / tests so we stop guessing.
+        # Read-only INFORMATION_SCHEMA query, runs once per profile generation.
+        self._probe_schema(stu_id)
+
         personal = self._get_personal_info(student_id)
         courses = self._get_courses(stu_id)
         test_scores = self._get_test_scores(stu_id)
@@ -100,6 +105,60 @@ class DataCollector:
             "hackathons": hackathons,
         }
         return clean_data(result)
+
+    # ─── v12.6 Schema Discovery ──────────────────────────
+    # Runs once per profile generation. Logs the actual table names that exist
+    # for the buckets we keep failing to query (capstones, mock interviews,
+    # industry sessions, tests) plus the per-table foreign-key columns. The
+    # idea is: instead of guessing table+FK combinations forever, dump what's
+    # actually there and let the operator paste the log line back so v12.7's
+    # SQL can be written against real tables.
+
+    def _probe_schema(self, student_id: int) -> None:
+        try:
+            buckets = {
+                "capstone":  ["%capstone%"],
+                "mock_intv": ["%mock_interview%", "%interview_review%", "%mock_int%"],
+                "industry":  ["%industry%", "%guest_lecture%", "%masterclass%"],
+                "tests":     ["%exam%", "%test_result%", "%practice_test%", "%testgen%", "%mock_test%"],
+                "rubric":    ["%rubric%", "%airev%", "%case_study_review%"],
+            }
+            for bucket, patterns in buckets.items():
+                found = []
+                for pat in patterns:
+                    try:
+                        rows = self.db.execute(text("""
+                            SELECT TABLE_NAME
+                            FROM INFORMATION_SCHEMA.TABLES
+                            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE :pat
+                        """), {"pat": pat}).fetchall()
+                        for r in rows: found.append(r[0])
+                    except Exception:
+                        continue
+                found = sorted(set(found))
+                if found:
+                    logger.info(f"[schema] {bucket}: {found}")
+                    # For each found table, log its FK-shaped columns so we know
+                    # whether to filter on student_id, user_id, or something else.
+                    for tname in found[:4]:
+                        try:
+                            cols = self.db.execute(text("""
+                                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t
+                                  AND (COLUMN_NAME LIKE '%user%id%' OR COLUMN_NAME LIKE '%student%id%'
+                                       OR COLUMN_NAME = 'uid' OR COLUMN_NAME = 'sid')
+                            """), {"t": tname}).fetchall()
+                            fk_cols = [c[0] for c in cols]
+                            cnt = self.db.execute(
+                                text(f"SELECT COUNT(*) FROM `{tname}`")
+                            ).scalar()
+                            logger.info(f"[schema]   {tname} fk_cols={fk_cols} total_rows={cnt}")
+                        except Exception as e:
+                            logger.info(f"[schema]   {tname} probe failed: {e}")
+                else:
+                    logger.info(f"[schema] {bucket}: (no tables matched any of {patterns})")
+        except Exception as e:
+            logger.warning(f"[schema] probe failed: {e}")
 
     # ─── Personal Info (with hobbies) ────────────────────
 

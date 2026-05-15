@@ -53,36 +53,95 @@ class AchievementEngine:
         }
 
     def _generate_headline(self, d: Dict, role_matches: list = None) -> str:
-        """Fully dynamic — uses CourseIntelligence for any course."""
+        """v12.6: Single best-fit role + concise punch line.
+        Previously this returned the top 3 roles concatenated with ' | ' which
+        crowded the hero. Now: one role (the highest match) followed by a
+        ' · ' separator and a tagline derived from the student's strongest
+        differentiator (education / projects / current course track).
+        """
         # Priority 1: scored role matches from RoleMatcher
+        primary = None
         if role_matches and len(role_matches) > 0:
-            seen, unique = set(), []
-            for r in role_matches[:3]:
-                title = r["role_title"]
-                if title.lower() not in seen:
-                    seen.add(title.lower())
-                    unique.append(title)
-            return " | ".join(unique)
+            primary = role_matches[0].get("role_title")
 
         # Priority 2: derive directly from enrolled courses
-        courses = d.get("courses", []) or []
-        if courses:
-            try:
-                intel = self.course_intel.analyze(courses)
-                if intel.get("roles"):
-                    return " | ".join(intel["roles"][:3])
-            except Exception as e:
-                logger.info(f"course_intel headline derivation failed: {e}")
+        if not primary:
+            courses = d.get("courses", []) or []
+            if courses:
+                try:
+                    intel = self.course_intel.analyze(courses)
+                    if intel.get("roles"):
+                        primary = intel["roles"][0]
+                except Exception as e:
+                    logger.info(f"course_intel headline derivation failed: {e}")
 
         # Priority 3: current designation
-        personal = d.get("personal", {}) or {}
-        designation = (personal.get("current_designation") or "").strip()
-        employer = (personal.get("current_employer") or "").strip()
-        if designation:
-            return f"{designation} at {employer}" if employer else designation
+        if not primary:
+            personal = d.get("personal", {}) or {}
+            designation = (personal.get("current_designation") or "").strip()
+            employer = (personal.get("current_employer") or "").strip()
+            if designation:
+                return f"{designation} at {employer}" if employer else designation
 
-        # Priority 4: generic
-        return "Financial Services Professional"
+        if not primary:
+            return "Financial Services Professional"
+
+        tagline = self._build_punch_line(d, primary, role_matches)
+        return f"{primary} · {tagline}" if tagline else primary
+
+    def _build_punch_line(self, d: Dict, primary_role: str, role_matches: list = None) -> str:
+        """Compose a short, factual tagline that highlights the student's edge.
+        Examples this produces:
+          'B.Tech CSE bridging Full-Stack Python into FinTech'
+          'BFSI track with 3 Industry-Validated Certificates'
+          'Banking Foundation + Payments & Cards specialist'
+        Always factual — pulls from real data only, never invented.
+        """
+        bits = []
+
+        # Education signal
+        edu_list = d.get("education", []) or d.get("lms_education", []) or []
+        edu_short = None
+        for edu in edu_list[:1]:
+            deg = (edu.get("degree") or "").strip()
+            field = (edu.get("field_of_study") or "").strip()
+            if deg and field:
+                edu_short = f"{deg} {field}"
+            elif deg:
+                edu_short = deg
+
+        # Strongest tech skill cluster (if primary role is non-BFSI)
+        tech_cluster = None
+        skills_obj = d.get("all_skills") or {}
+        tech_skills = skills_obj.get("technical_skills") or []
+        if tech_skills:
+            top = tech_skills[0] if isinstance(tech_skills[0], str) else (tech_skills[0].get("name") if isinstance(tech_skills[0], dict) else "")
+            if top:
+                tech_cluster = top
+
+        # Current LMS track (for BFSI roles)
+        completed = []
+        for c in (d.get("courses", []) or []):
+            cs = (c.get("completion_status") or "").lower()
+            pct = c.get("progress_percentage") or 0
+            if cs == "completed" or pct >= 100:
+                completed.append(c.get("course_name") or "")
+        completed = [c for c in completed if c][:2]
+
+        # Build tagline based on role category cues
+        role_lower = primary_role.lower()
+        is_tech_role = any(t in role_lower for t in ("developer", "engineer", "data analyst", "data scientist", "fintech", "product analyst"))
+
+        if is_tech_role and edu_short and tech_cluster:
+            bits.append(f"{edu_short} bridging {tech_cluster} into FinTech")
+        elif edu_short and completed:
+            bits.append(f"{edu_short} · {' + '.join(completed)} certified")
+        elif completed:
+            bits.append(f"{' + '.join(completed)} certified")
+        elif edu_short:
+            bits.append(edu_short)
+
+        return bits[0] if bits else ""
 
     def _top_achievements(self, d: Dict, name: str) -> List[Dict]:
         achievements = []

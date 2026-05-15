@@ -248,14 +248,18 @@ class RoleMatcher:
         return keywords
 
     def _lms_keyword_score(self, lms_keywords: Set[str], role_keywords: set) -> int:
-        matched = lms_keywords & role_keywords
+        # v12.6: case-insensitive intersection — role catalogue uses 'SQL'/'API'/'CI/CD',
+        # extracted keywords are lowercased, so the raw set-intersection misses matches.
+        rk_lower = {k.lower() for k in role_keywords}
+        matched = {k.lower() for k in lms_keywords} & rk_lower
         if not matched: return 0
-        return round(len(matched) / len(role_keywords) * 50)
+        return round(len(matched) / len(rk_lower) * 50)
 
     def _background_keyword_score(self, bg_keywords: Set[str], role_keywords: set) -> int:
-        matched = bg_keywords & role_keywords
+        rk_lower = {k.lower() for k in role_keywords}
+        matched = {k.lower() for k in bg_keywords} & rk_lower
         if not matched: return 0
-        return round(len(matched) / len(role_keywords) * 15)
+        return round(len(matched) / len(rk_lower) * 15)
 
     def _education_fit_score(self, role_education: list, student_education: list) -> int:
         if not student_education: return 0
@@ -302,16 +306,69 @@ class RoleMatcher:
     # ─── Main matching ───
 
     def match_roles(self, student_data: Dict[str, Any]) -> List[Dict]:
-        """Dynamic path first (any course), legacy ROLE_DATABASE fallback."""
+        """v12.6: BLEND dynamic (course-derived) + static (background-derived) roles
+        with category-diversity enforcement so background-fit roles (e.g. Tech roles
+        for a B.Tech CSE student) always surface alongside course-derived BFSI roles.
+        """
         courses = student_data.get("courses", []) or []
+        dynamic_matches = []
         if courses:
             try:
                 intel = self.course_intel.analyze(courses)
                 if intel and intel.get("roles"):
-                    return self._match_dynamic(student_data, intel)
+                    dynamic_matches = self._match_dynamic(student_data, intel)
             except Exception as e:
-                logger.warning(f"CourseIntel match failed, falling back to static: {e}")
-        return self._match_static_legacy(student_data)
+                logger.warning(f"CourseIntel match failed: {e}")
+
+        static_matches = self._match_static_legacy(student_data)
+
+        # Dedupe across both paths — keep the higher score per role_title.
+        seen = {}
+        for m in dynamic_matches + static_matches:
+            title = m["role_title"]
+            if title not in seen or m["match_percentage"] > seen[title]["match_percentage"]:
+                seen[title] = m
+        merged = sorted(seen.values(), key=lambda x: x["match_percentage"], reverse=True)
+
+        if not merged:
+            return []
+
+        # Bucket roles into "primary category" groups so we can enforce diversity.
+        # The bucket key is the role's category field which the static catalogue
+        # populates as Banking / Risk / FinTech / Insurance / Technology / etc.
+        def bucket(m):
+            cat = (m.get("category") or "Other").lower()
+            if cat in ("technology", "tech"): return "tech"
+            if cat in ("banking", "bfsi", "fintech", "risk", "insurance"): return "bfsi"
+            return "other"
+
+        # If we have both 'tech' AND 'bfsi' roles in the merged pool, ensure the
+        # top 5 includes at least one tech AND at least one bfsi — even if their
+        # scores would otherwise have been pushed down.
+        tech_roles = [m for m in merged if bucket(m) == "tech"]
+        bfsi_roles = [m for m in merged if bucket(m) == "bfsi"]
+
+        top = []
+        used = set()
+        if tech_roles and bfsi_roles:
+            # Take top BFSI (course-driven main path)
+            for m in bfsi_roles[:3]:
+                if m["role_title"] not in used:
+                    top.append(m); used.add(m["role_title"])
+            # Guarantee at least 2 tech roles
+            for m in tech_roles[:2]:
+                if m["role_title"] not in used:
+                    top.append(m); used.add(m["role_title"])
+            # Fill remainder by score
+            for m in merged:
+                if len(top) >= 5: break
+                if m["role_title"] not in used:
+                    top.append(m); used.add(m["role_title"])
+            top.sort(key=lambda x: x["match_percentage"], reverse=True)
+            return top[:5]
+
+        # Single-category pool — return top 5 by score
+        return merged[:5]
 
     def _match_dynamic(self, student_data: Dict[str, Any], intel: Dict) -> List[Dict]:
         derived_roles = intel.get("roles", [])
@@ -380,7 +437,14 @@ class RoleMatcher:
             if not has_lms_courses:
                 total = min(50, total)
             final_match = max(0, min(99, total))
-            if final_match >= role_info.get("min_score", 25):
+            # v12.6: when education AND background BOTH match strongly, the student
+            # really is a fit even if LMS courses aren't in this domain. Lower the
+            # threshold by 10 so tech roles surface for a B.Tech CSE + Python student
+            # doing BFSI courses (and vice versa).
+            effective_min = role_info.get("min_score", 25)
+            if edu_score >= 12 and bg_score >= 6:
+                effective_min = max(20, effective_min - 10)
+            if final_match >= effective_min:
                 matched_kw = all_keywords & role_keywords
                 missing_kw = role_keywords - all_keywords
                 matches.append({
