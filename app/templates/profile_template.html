@@ -1,398 +1,580 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ student_name or 'Student' }} — Upskillize Profile</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ student_name }} — Upskillize AI Profile</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-/* ═══ LIGHT THEME (default) ═══ */
-:root,[data-theme="light"]{
-  --ink:#0B1628;--ink-2:#1a2744;--gold:#C8992A;--gold-2:#F5B800;
-  --teal:#0F6E56;--teal-soft:#E1F5EE;--teal-bd:#9FE1CB;--orange:#E8521A;
-  --cream:#FAF7F0;--cream-2:#EDE7D8;--paper:#FFFFFF;
-  --body:#1F2937;--body-2:#475569;--hint:#6B7280;--faint:#94A3B8;
-  --rule:#E5E7EB;--good:#0F6E56;--mid:#B47914;--low:#A32D2D;
-  --hero-bg:#0B1628;--hero-text:#FAF7F0;
-  --serif:'Playfair Display',Georgia,serif;
-  --sans:'Plus Jakarta Sans',system-ui,sans-serif;
-  --mono:'DM Mono',ui-monospace,monospace;
+:root{
+  --bg:#0B1426;--bg2:#162236;--bg3:#1E3050;--border:#243B5F;
+  --text:#E2E8F0;--muted:#94A3B8;--subtle:#64748B;
+  --accent:#3B82F6;--gold:#D4A017;--green:#10B981;--red:#EF4444;--purple:#8B5CF6;--teal:#14B8A6;--orange:#F59E0B;
+  --accent-soft:rgba(59,130,246,.12);--gold-soft:rgba(212,160,23,.12);--green-soft:rgba(16,185,129,.12);--red-soft:rgba(239,68,68,.12);--purple-soft:rgba(139,92,246,.12);--teal-soft:rgba(20,184,166,.12);
+  --font-display:'Fraunces',serif;--font-body:'Plus Jakarta Sans',sans-serif;
+  --radius:12px;
 }
-/* ═══ DARK THEME ═══ */
-
-  [data-theme="dark"]{
-  --ink:#E8E4DD;--ink-2:#D4CFC6;--gold:#E8B84B;--gold-2:#F5C842;
-  --teal:#34D399;--teal-soft:rgba(52,211,153,.12);--teal-bd:rgba(52,211,153,.3);--orange:#FB923C;
-  --cream:#0B1628;--cream-2:#142036;--paper:#101D30;
-  --body:#CBD5E1;--body-2:#94A3B8;--hint:#64748B;--faint:#475569;
-  --rule:#1E3050;--good:#34D399;--mid:#FBBF24;--low:#F87171;
-  --hero-bg:#071020;--hero-text:#E8E4DD;
+[data-theme="light"]{
+  --bg:#F8FAFC;--bg2:#FFFFFF;--bg3:#F1F5F9;--border:#E2E8F0;
+  --text:#1E293B;--muted:#64748B;--subtle:#94A3B8;
+  --accent-soft:rgba(59,130,246,.08);--gold-soft:rgba(212,160,23,.08);--green-soft:rgba(16,185,129,.08);--red-soft:rgba(239,68,68,.08);--purple-soft:rgba(139,92,246,.08);--teal-soft:rgba(20,184,166,.08);
 }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:900px;margin:0 auto;padding:24px 20px 60px}
+a{color:var(--accent);text-decoration:none}
 
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--sans);background:var(--cream);color:var(--body);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;transition:background .3s,color .3s}
-a{color:inherit;text-decoration:none}a:hover{color:var(--gold)}
-.page{max-width:880px;margin:0 auto;padding:0 0 56px}
+/* ── Theme Toggle ── */
+.theme-btn{position:fixed;top:16px;right:16px;z-index:99;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:.2s}
+.theme-btn:hover{border-color:var(--accent);color:var(--accent)}
 
-/* ═══ THEME TOGGLE ═══ */
-.theme-toggle{position:fixed;top:16px;right:16px;z-index:100;width:44px;height:44px;border-radius:50%;border:1px solid var(--rule);background:var(--paper);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.12);transition:all .3s}
-.theme-toggle:hover{transform:scale(1.1);box-shadow:0 4px 16px rgba(0,0,0,.18)}
-.theme-toggle svg{width:20px;height:20px;color:var(--gold);fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-[data-theme="dark"] .sun-icon{display:block}[data-theme="dark"] .moon-icon{display:none}
-[data-theme="light"] .sun-icon{display:none}[data-theme="light"] .moon-icon{display:block}
+/* ── Section ── */
+.section{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:16px;position:relative;overflow:hidden}
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.section-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.section-title{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--text)}
+.section-badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;margin-left:auto}
 
-/* ═══ HERO ═══ */
-.hero{background:var(--hero-bg);color:var(--hero-text);padding:32px 36px 28px;border-radius:0 0 16px 16px;position:relative}
-.hero::after{content:'';position:absolute;top:0;right:0;width:50%;height:100%;background:radial-gradient(ellipse at 80% 20%,rgba(200,153,42,.08) 0%,transparent 70%);pointer-events:none}
-.hero-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:8px}
-.hero-grid{display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center}
-.hero-photo{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-2));display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-weight:600;font-size:36px;color:var(--ink);overflow:hidden;box-shadow:0 0 0 3px rgba(200,153,42,.25),0 8px 24px rgba(0,0,0,.3);flex-shrink:0}
-.hero-photo img{width:100%;height:100%;object-fit:cover}
-.hero-info .name{font-family:var(--serif);font-weight:700;font-size:32px;line-height:1.15;letter-spacing:-.5px;margin-bottom:4px}
-.hero-info .badge{display:inline-block;font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;padding:3px 10px;border-radius:4px;background:rgba(200,153,42,.15);color:var(--gold);border:1px solid rgba(200,153,42,.4);margin-left:12px;vertical-align:7px}
-.hero-info .headline{font-size:15px;font-weight:500;color:var(--gold);margin:4px 0 10px;line-height:1.4}
-.hero-info .top-match{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:rgba(250,247,240,.55);text-transform:uppercase;margin-bottom:10px}
-.hero-info .top-match b{color:var(--gold);font-weight:600}
-.hero-info .contact{font-size:12px;color:rgba(250,247,240,.6);line-height:1.8}
-.hero-info .contact b{color:var(--hero-text);font-weight:500}
-.hero-info .contact a{color:var(--hero-text);border-bottom:1px solid rgba(250,247,240,.2);padding-bottom:1px}
-.hero-info .contact .sep{color:rgba(250,247,240,.25);margin:0 8px}
-.hero-ats{text-align:right;padding-left:20px;border-left:1px solid rgba(200,153,42,.2);min-width:90px}
-.hero-ats .num{font-family:var(--serif);font-weight:700;font-size:44px;line-height:1;color:var(--gold)}
-.hero-ats .num span{font-size:18px;color:rgba(250,247,240,.4);font-weight:500}
-.hero-ats .lbl{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:rgba(250,247,240,.45);text-transform:uppercase;margin-top:6px}
+/* ── Placeholder ── */
+.placeholder{text-align:center;padding:20px 16px;border:1px dashed var(--border);border-radius:8px;background:var(--bg3)}
+.placeholder-icon{font-size:24px;margin-bottom:8px;opacity:.5}
+.placeholder-text{font-size:13px;color:var(--muted);margin-bottom:4px}
+.placeholder-action{font-size:12px;color:var(--subtle);font-style:italic}
 
-/* ═══ SECTION ═══ */
-.section{background:var(--paper);border:1px solid var(--rule);border-radius:14px;margin:10px 36px 0;padding:18px 24px 20px;transition:background .3s,border-color .3s}
-.sec-eyebrow{display:flex;align-items:center;gap:14px;margin-bottom:16px}
-.sec-mark{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--gold);text-transform:uppercase;font-weight:600;flex-shrink:0}
-.sec-rule{flex:1;height:1px;background:var(--cream-2)}
-.sec-sub{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--hint);text-transform:uppercase}
+/* ── Hero ── */
+.hero{background:linear-gradient(135deg,#0B1628 0%,#1A3258 50%,#0D1B33 100%);border-radius:16px;padding:32px;margin-bottom:16px;position:relative;overflow:hidden}
+[data-theme="light"] .hero{background:linear-gradient(135deg,#1E3A5F 0%,#2C5282 50%,#1A365D 100%)}
+.hero::before{content:'';position:absolute;top:-50%;right:-20%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,.08) 0%,transparent 70%)}
+.hero-grid{display:flex;align-items:center;gap:20px;position:relative;z-index:1}
+.hero-avatar{width:72px;height:72px;border-radius:16px;background:rgba(59,130,246,.2);border:2px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:28px;font-weight:700;font-family:var(--font-display);flex-shrink:0;overflow:hidden}
+.hero-avatar img{width:100%;height:100%;object-fit:cover}
+.hero-info{flex:1;min-width:0}
+.hero-name{font-family:var(--font-display);font-size:26px;font-weight:800;color:#fff;margin-bottom:2px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hero-badge{font-size:10px;padding:3px 10px;border-radius:99px;font-weight:600}
+.badge-fresher{background:rgba(16,185,129,.15);color:#34D399;border:1px solid rgba(16,185,129,.2)}
+.badge-pro{background:rgba(212,160,23,.15);color:var(--gold);border:1px solid rgba(212,160,23,.2)}
+.hero-headline{font-size:14px;color:rgba(147,197,253,.8);margin-bottom:6px;font-weight:500}
+.hero-meta{font-size:12px;color:rgba(148,163,184,.7);display:flex;flex-wrap:wrap;gap:12px}
+.hero-links{display:flex;gap:6px;margin-top:8px}
+.hero-links a{font-size:11px;padding:4px 12px;border:1px solid rgba(255,255,255,.15);border-radius:99px;color:rgba(255,255,255,.6);transition:.2s}
+.hero-links a:hover{border-color:rgba(255,255,255,.4);color:#fff}
+.hero-ats{text-align:center;flex-shrink:0}
+.hero-ats .num{font-family:var(--font-display);font-size:36px;font-weight:800;color:var(--gold)}
+.hero-ats .lbl{font-size:9px;color:rgba(148,163,184,.6);text-transform:uppercase;letter-spacing:1px}
 
-/* ═══ SUMMARY ═══ */
-.summary-bullets{list-style:none;padding:0;margin:0}
-.summary-bullets li{font-size:13.5px;line-height:1.75;color:var(--ink);padding:0 0 10px 24px;position:relative;border-bottom:1px dashed var(--cream-2);margin-bottom:10px}
-.summary-bullets li:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
-.summary-bullets li::before{content:"✦";position:absolute;left:0;top:1px;color:var(--gold);font-size:10px}
+/* ── Grid ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}}
 
-/* ═══ COURSES ═══ */
-.courses-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
-.course-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:14px 16px;transition:transform .15s,box-shadow .15s}
-.course-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.06)}
-.course-card .nm{font-size:13px;font-weight:700;color:var(--ink);line-height:1.35;margin-bottom:4px}
-.course-card .cd{font-size:11px;color:var(--body-2);line-height:1.45;margin-bottom:8px}
-.course-card .bot{display:flex;justify-content:space-between;align-items:center}
-.chip{font-family:var(--mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;padding:3px 8px;border-radius:4px}
-.chip-done{background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal-bd)}
-.chip-active{background:rgba(200,153,42,.1);color:var(--gold);border:1px solid rgba(200,153,42,.35)}
-.chip-enrolled{background:var(--paper);color:var(--body-2);border:1px solid var(--rule)}
-.pct-label{font-family:var(--mono);font-size:10px;color:var(--hint)}
+/* ── Tags ── */
+.tag{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;margin:2px}
+.tag-tech{background:var(--accent-soft);color:var(--accent)}
+.tag-tool{background:var(--purple-soft);color:var(--purple)}
+.tag-soft{background:var(--green-soft);color:var(--green)}
+.tag-gold{background:var(--gold-soft);color:var(--gold)}
 
-/* ═══ BEST TILL DATE ═══ */
-.cat-label{font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;font-weight:600;margin:0 0 8px}
-.cat-gold{color:var(--gold)}.cat-teal{color:var(--teal)}.cat-orange{color:var(--orange)}.cat-ink{color:var(--ink)}
-.best-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
-.best-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;border-top:3px solid var(--gold);transition:transform .15s}
-.best-card:hover{transform:translateY(-2px)}
-.best-card.alt{border-top-color:var(--teal)}.best-card.alt2{border-top-color:var(--orange)}
-.best-tag{font-family:var(--mono);font-size:9px;letter-spacing:.18em;color:var(--gold);text-transform:uppercase;font-weight:600}
-.best-card.alt .best-tag{color:var(--teal)}.best-card.alt2 .best-tag{color:var(--orange)}
-.best-pct{font-family:var(--serif);font-weight:700;font-size:28px;line-height:1}
-.best-pct .u{font-size:14px;color:var(--faint);font-weight:500}
-.best-pct.teal{color:var(--good)}.best-pct.mid{color:var(--mid)}.best-pct.low{color:var(--low)}
-.best-title{font-size:13px;font-weight:600;color:var(--ink);line-height:1.4}
-.best-meta{font-family:var(--mono);font-size:10px;color:var(--hint)}
-.best-desc{font-size:11.5px;color:var(--body-2);line-height:1.55}
-.best-grade{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--paper);border:1px solid var(--rule);color:var(--body-2);align-self:flex-start}
-.capstone-card{background:var(--hero-bg);color:var(--hero-text);padding:18px 20px;border-radius:12px}
-.capstone-card .ch{font-size:15px;font-weight:700;color:var(--gold);margin-bottom:5px}
-.capstone-card .cm{font-family:var(--mono);font-size:10px;color:rgba(250,247,240,.5);text-transform:uppercase;margin-bottom:8px}
-.capstone-card .cdd{font-size:12.5px;color:rgba(250,247,240,.8);line-height:1.6;margin-bottom:8px}
-.capstone-card .ct{display:flex;flex-wrap:wrap;gap:5px}
-.capstone-card .ct span{font-family:var(--mono);font-size:10px;padding:2px 8px;background:rgba(200,153,42,.1);border:1px solid rgba(200,153,42,.3);color:var(--gold);border-radius:4px}
+/* ── Cards inside sections ── */
+.item-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:8px}
+.item-card:last-child{margin-bottom:0}
+.item-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px}
+.item-sub{font-size:12px;color:var(--muted)}
+.item-desc{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6}
 
-/* ═══ PERSONALITY / HOBBIES ═══ */
-.persona-type{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:14px 18px;margin-bottom:10px}
-.persona-type .pl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--hint);text-transform:uppercase}
-.persona-type .pv{font-size:18px;font-weight:700;color:var(--ink);margin-top:3px}
-.persona-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
-.persona-cell{background:var(--cream);border:1px solid var(--cream-2);border-radius:8px;padding:11px 14px}
-.persona-cell .pl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--gold);text-transform:uppercase;margin-bottom:5px}
-.persona-cell .pv{font-size:12px;color:var(--body);line-height:1.55}
-.hobbies-row{display:flex;flex-wrap:wrap;gap:6px}
-.hobbies-row span{font-size:12px;font-weight:500;padding:5px 14px;background:var(--cream);border:1px solid var(--cream-2);color:var(--ink);border-radius:99px;transition:all .15s}
-.hobbies-row span:hover{border-color:var(--gold);color:var(--gold)}
+/* ── Progress bar ── */
+.progress-track{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:6px}
+.progress-fill{height:100%;border-radius:2px;transition:width .4s}
 
-/* ═══ PREFERENCES ═══ */
-.pref-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.pref-cell{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:12px 16px}
-.pref-cell .pl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--gold);text-transform:uppercase;margin-bottom:4px}
-.pref-cell .pv{font-size:13px;color:var(--ink);font-weight:600}
+/* ── Score badge ── */
+.score{font-family:var(--font-display);font-size:22px;font-weight:700;flex-shrink:0}
+.score-sm{font-size:16px}
 
-/* ═══ TIMELINE ═══ */
-.tl{display:flex;flex-direction:column;gap:8px}
-.tl-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:14px 18px;border-left:3px solid var(--gold);transition:transform .15s}
-.tl-card:hover{transform:translateX(4px)}
-.tl-card.edu{border-left-color:var(--teal)}
-.tl-title{font-size:14px;font-weight:700;color:var(--ink);margin-bottom:2px}
-.tl-org{font-size:13px;color:var(--body);margin-bottom:4px}
-.tl-meta{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--hint);text-transform:uppercase;margin-bottom:6px}
-.tl-meta span+span:before{content:"·";margin:0 6px;color:var(--faint)}
-.tl-desc{font-size:12.5px;color:var(--body-2);line-height:1.6}
+/* ── Timeline ── */
+.timeline-item{padding-left:20px;border-left:2px solid var(--border);margin-bottom:16px;position:relative}
+.timeline-item::before{content:'';position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.timeline-item:last-child{margin-bottom:0}
 
-/* ═══ PROJECTS ═══ */
-.proj-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.proj-card{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:14px 16px;transition:transform .15s}
-.proj-card:hover{transform:translateY(-2px)}
-.proj-title{font-size:13.5px;font-weight:700;color:var(--ink);margin-bottom:5px}
-.proj-desc{font-size:12px;color:var(--body-2);line-height:1.6;margin-bottom:9px}
-.proj-tech{display:flex;flex-wrap:wrap;gap:5px}
-.proj-tech span{font-family:var(--mono);font-size:10px;padding:2px 8px;background:var(--paper);border:1px solid var(--rule);color:var(--body-2);border-radius:4px}
+/* ── Metric row ── */
+.metric-row{display:flex;gap:10px;margin-bottom:12px}
+.metric-box{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.metric-val{font-family:var(--font-display);font-size:24px;font-weight:700;color:var(--text)}
+.metric-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
 
-/* ═══ SKILLS ═══ */
-.skills-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.skill-col{background:var(--cream);border:1px solid var(--cream-2);border-radius:10px;padding:14px 16px}
-.skill-h{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.16em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--cream-2)}
-.skill-list{display:flex;flex-wrap:wrap;gap:5px}
-.skill-list span{font-size:11px;font-weight:500;padding:4px 10px;background:var(--paper);border:1px solid var(--rule);color:var(--body);border-radius:99px;transition:all .15s}
-.skill-list span:hover{border-color:var(--gold);color:var(--gold)}
+/* ── Role match ── */
+.role-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:10px}
+.role-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.role-name{font-size:14px;font-weight:700;color:var(--text)}
 
-/* ═══ CERTIFICATES ═══ */
-.certs{display:flex;flex-direction:column;gap:8px}
-.cert-row{background:var(--cream);border:1px solid var(--cream-2);border-radius:8px;padding:12px 16px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}
-.cert-name{font-size:13px;font-weight:700;color:var(--ink)}
-.cert-meta{font-family:var(--mono);font-size:10px;color:var(--hint);margin-top:2px}
-.cert-date{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--gold);text-transform:uppercase}
+/* ── Bullet list ── */
+.bullet{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start}
+.bullet::before{content:'•';color:var(--accent);font-size:18px;line-height:1.4;flex-shrink:0}
 
-/* ═══ EMPTY STATE ═══ */
-.empty{background:var(--cream);border:1px dashed var(--cream-2);border-radius:10px;padding:20px;text-align:center;color:var(--hint);font-size:12.5px;line-height:1.6}
-.empty b{color:var(--ink);font-weight:700}
+/* ── Footer ── */
+.footer{text-align:center;padding:24px 0;border-top:1px solid var(--border);margin-top:24px}
+.footer-title{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px}
+.footer-sub{font-size:12px;color:var(--muted);margin-bottom:10px}
+.source-tags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+.source-tag{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:600}
 
-/* ═══ FOOTER ═══ */
-.footer{margin:24px 36px 0;padding:20px 0 0;border-top:1px solid var(--cream-2);text-align:center}
-.footer-mark{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--hint);text-transform:uppercase}
-.footer-mark .gold{color:var(--gold);font-weight:600}
-.footer-sources{display:inline-flex;gap:6px;margin-top:6px;flex-wrap:wrap;justify-content:center}
-.footer-sources span{font-family:var(--mono);font-size:9px;letter-spacing:.14em;padding:3px 10px;background:var(--cream);border:1px solid var(--cream-2);color:var(--body-2);border-radius:99px;text-transform:uppercase}
-.footer-link{font-family:var(--mono);font-size:10px;color:var(--gold);margin-top:10px;display:block;word-break:break-all}
-
-@media print{body{background:#fff}.page{max-width:none;padding:0}.hero,.section,.footer{margin-left:0;margin-right:0}.section{break-inside:avoid}.hero{border-radius:0}.theme-toggle{display:none}}
-@media(max-width:720px){.hero{padding:22px 18px}.hero-grid{display:grid;grid-template-columns:96px 1fr auto;gap:20px;align-items:center}.hero-ats{grid-column:1/-1;border-left:none;border-top:1px solid rgba(200,153,42,.2);padding:12px 0 0;text-align:left;margin-top:6px}.hero-info .name{font-size:24px}.section{margin:10px 16px 0;padding:16px 16px 18px}.courses-grid{grid-template-columns:1fr}.best-row,.proj-grid,.persona-grid,.pref-grid,.skills-grid{grid-template-columns:1fr}.footer{margin:20px 16px 0}.theme-toggle{top:10px;right:10px;width:36px;height:36px}}
+@media print{
+  body{background:#fff;color:#000}
+  .theme-btn,.hero-links,.placeholder{display:none}
+  .section{box-shadow:none;border:1px solid #ddd}
+}
 </style>
 </head>
 <body>
-{% set JUNK = ['','test','asdf','qwerty','tbd','n/a','na','-','--','none','null','undefined','0','.','sample','example','lorem'] %}
-{% set has_summary = professional_summary and (professional_summary|trim)|length > 20 %}
-{% set has_courses = courses_data and courses_data|length > 0 %}
-{% set has_personality = personality_data and personality_data.personality_type %}
-{% set has_work = work_experience and work_experience|length > 0 %}
-{% set has_projects = projects_data and projects_data|length > 0 %}
-{% set has_skills = skills_data and ((skills_data.get('technical_skills',[])|length > 0) or (skills_data.get('soft_skills',[])|length > 0) or (skills_data.get('tools',[])|length > 0)) %}
-{% set has_hobbies = hobbies_data and hobbies_data|length > 0 %}
-{% set has_edu = education_data and education_data|length > 0 %}
-{% set has_certs = certifications_data and certifications_data|length > 0 %}
-{% set ats_score = (ats_data.total_score if ats_data and ats_data.total_score else 0) %}
-{% set top_role = role_matches[0] if role_matches and role_matches|length > 0 else None %}
-{% set has_prefs = job_preferences and (job_preferences.preferred_role or job_preferences.work_mode or job_preferences.preferred_location) %}
-{% set has_career_goals = (personal_career_goals and personal_career_goals|trim|length > 5) if personal_career_goals is defined else false %}
-
-<!-- DARK MODE TOGGLE -->
-<button class="theme-toggle" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'" aria-label="Toggle dark mode">
-<svg class="moon-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-<svg class="sun-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+<button class="theme-btn" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('profile-theme',document.documentElement.dataset.theme)}catch(e){}" title="Toggle theme">
+  <span id="theme-icon">☀</span>
 </button>
+<script>try{const t=localStorage.getItem('profile-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 
-<div class="page">
+<div class="wrap">
 
-<!-- ═══ HERO ═══ -->
+{# ════════════════════════════════════════════════════════════ #}
+{# 1. HERO SECTION                                            #}
+{# ════════════════════════════════════════════════════════════ #}
 <div class="hero">
-  <div class="hero-eyebrow">✦ Upskillize · Profile IQ · Verified Credentials</div>
   <div class="hero-grid">
-    <div class="hero-photo">{% if student_photo_url %}<img src="{{ student_photo_url }}" alt="{{ student_name }}">{% else %}{{ (student_name or 'S')[0]|upper }}{% endif %}</div>
+    <div class="hero-avatar">
+      {% if student_photo_url %}<img src="{{ student_photo_url }}" alt="{{ student_name }}" onerror="this.style.display='none';this.parentNode.textContent='{{ student_name[0]|upper }}'">
+      {% else %}{{ student_name[0]|upper }}{% endif %}
+    </div>
     <div class="hero-info">
-      <div class="name">{{ student_name or 'Student' }}{% if is_fresher %}<span class="badge">Fresher</span>{% elif is_working_professional %}<span class="badge">Professional</span>{% endif %}</div>
-      {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
-      {% if top_role %}<div class="top-match">Top match — <b>{{ top_role.role_title }} · {{ top_role.match_percentage }}%</b></div>{% endif %}
-      <div class="contact">
-        {% if student_location %}<b>{{ student_location }}</b>{% endif %}
-        {% if student_email %}{% if student_location %}<span class="sep">·</span>{% endif %}<a href="mailto:{{ student_email }}">{{ student_email }}</a>{% endif %}
-        {% if student_phone %}<span class="sep">·</span>{{ student_phone }}{% endif %}
-        {% if linkedin_url or github_url or portfolio_url %}<br>
+      <div class="hero-name">
+        {{ student_name }}
+        {% if is_fresher %}<span class="hero-badge badge-fresher">● Fresher</span>
+        {% else %}<span class="hero-badge badge-pro">● Working Professional</span>{% endif %}
+      </div>
+      <div class="hero-headline">{{ headline }}</div>
+      <div class="hero-meta">
+        {% if student_email %}<span>{{ student_email }}</span>{% endif %}
+        {% if student_phone %}<span>{{ student_phone }}</span>{% endif %}
+        {% if student_location %}<span>{{ student_location }}</span>{% endif %}
+      </div>
+      <div class="hero-links">
         {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank">LinkedIn</a>{% endif %}
-        {% if github_url %}{% if linkedin_url %}<span class="sep">·</span>{% endif %}<a href="{{ github_url }}" target="_blank">GitHub</a>{% endif %}
-        {% if portfolio_url %}{% if linkedin_url or github_url %}<span class="sep">·</span>{% endif %}<a href="{{ portfolio_url }}" target="_blank">Portfolio</a>{% endif %}{% endif %}
+        {% if github_url %}<a href="{{ github_url }}" target="_blank">GitHub</a>{% endif %}
+        {% if portfolio_url %}<a href="{{ portfolio_url }}" target="_blank">Portfolio</a>{% endif %}
       </div>
     </div>
-    {% if ats_score and ats_score > 20 %}<div class="hero-ats"><div class="num">{{ ats_score }}<span>/100</span></div><div class="lbl">ATS Score</div></div>{% endif %}
+    {% if ats_data and ats_data.ats_score is defined and ats_data.ats_score > 15 %}
+    <div class="hero-ats">
+      <div class="num">{{ ats_data.ats_score }}</div>
+      <div class="lbl">ATS Score</div>
+    </div>
+    {% endif %}
   </div>
 </div>
 
-<!-- ═══ 01 SUMMARY ═══ -->
-{% if has_summary %}
+{# ════════════════════════════════════════════════════════════ #}
+{# 2. PROFESSIONAL SUMMARY                                    #}
+{# ════════════════════════════════════════════════════════════ #}
 <div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">01 / Professional summary</span><span class="sec-rule"></span><span class="sec-sub">Strongest signals</span></div>
-  {% set raw = professional_summary|trim %}
-  {% if '•' in raw %}
-    <ul class="summary-bullets">{% for part in raw.split('•') %}{% set clean = part|trim %}{% if clean and clean|length > 5 %}<li>{{ clean }}</li>{% endif %}{% endfor %}</ul>
-  {% elif '\n' in raw and (raw.split('\n')|length) >= 3 %}
-    <ul class="summary-bullets">{% for line in raw.split('\n') %}{% set clean = line|trim %}{% if clean[:2] in ('- ','* ') %}{% set clean = clean[2:]|trim %}{% elif clean[:1] in ('-','*') %}{% set clean = clean[1:]|trim %}{% endif %}{% if clean and clean|length > 5 %}<li>{{ clean }}</li>{% endif %}{% endfor %}</ul>
-  {% else %}<p style="font-size:13.5px;line-height:1.75;color:var(--body);max-width:680px">{{ raw }}</p>{% endif %}
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">✦</div>
+    <div class="section-title">Professional Summary</div>
+  </div>
+  {% if professional_summary %}
+    {% set lines = professional_summary.split('\n') %}
+    {% for line in lines %}
+      {% set clean = line.strip().lstrip('•-▸● ') %}
+      {% if clean %}<div class="bullet">{{ clean }}</div>{% endif %}
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">✦</div>
+      <div class="placeholder-text">Complete your profile to generate an AI-powered summary</div>
+      <div class="placeholder-action">Add education, skills, and experience in your LMS profile</div>
+    </div>
+  {% endif %}
 </div>
-{% endif %}
 
-<!-- ═══ 02 COURSES ═══ -->
-{% if has_courses %}
+{# ════════════════════════════════════════════════════════════ #}
+{# ── LMS VERIFIED DATA SECTION ──                            #}
+{# ════════════════════════════════════════════════════════════ #}
+
+{# 3. LMS COURSE PROGRESS #}
 <div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">02 / Courses enrolled</span><span class="sec-rule"></span><span class="sec-sub">{{ completed_courses or 0 }}/{{ total_courses or courses_data|length }} completed</span></div>
-  <div class="courses-grid">{% set ns = namespace(seen=[]) %}{% for course in courses_data[:12] %}{% set cnm = (course.course_name or '')|trim %}{% if cnm|length > 1 and cnm|lower not in JUNK and cnm|lower not in ns.seen %}{% set _ = ns.seen.append(cnm|lower) %}{% set cs = course.completion_status or course.status or 'enrolled' %}
-    <div class="course-card">
-      <div class="nm">{{ cnm }}</div>
-      {% if course.description and (course.description|trim)|length > 10 %}<div class="cd">{{ (course.description|trim)[:90] }}</div>{% elif course.category %}<div class="cd">{{ course.category }}</div>{% endif %}
-      <div class="bot">
-        <span class="chip {{ 'chip-done' if cs == 'completed' else ('chip-active' if cs in ('in_progress','active','started') else 'chip-enrolled') }}">{{ 'Done' if cs == 'completed' else ('Active' if cs in ('in_progress','active','started') else 'Enrolled') }}</span>
-        {% if course.progress_percentage %}<span class="pct-label">{{ course.progress_percentage }}%</span>{% endif %}
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--teal-soft);color:var(--teal)">📚</div>
+    <div class="section-title">Course Progress</div>
+    {% if total_courses > 0 %}<span class="section-badge" style="background:var(--teal-soft);color:var(--teal)">{{ total_courses }} enrolled</span>{% endif %}
+  </div>
+  {% if courses_data and courses_data|length > 0 %}
+    {% for c in courses_data %}
+    <div class="item-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="item-title">{{ c.course_name or 'Course' }}</div>
+        <span class="score-sm" style="color:{% if (c.progress_percentage or 0) >= 100 %}var(--green){% elif (c.progress_percentage or 0) > 50 %}var(--accent){% else %}var(--gold){% endif %}">{{ c.progress_percentage or 0 }}%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:{{ c.progress_percentage or 0 }}%;background:{% if (c.progress_percentage or 0) >= 100 %}var(--green){% elif (c.progress_percentage or 0) > 50 %}var(--accent){% else %}var(--gold){% endif %}"></div></div>
+      <div class="item-sub" style="margin-top:6px">
+        {% if c.completion_status == 'completed' %}<span class="tag tag-gold">✓ Completed</span>{% else %}<span class="tag" style="background:var(--accent-soft);color:var(--accent)">In Progress</span>{% endif %}
       </div>
     </div>
-  {% endif %}{% endfor %}</div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">📚</div>
+      <div class="placeholder-text">No courses enrolled yet</div>
+      <div class="placeholder-action">Enroll in a course to start building your verified learning profile</div>
+    </div>
+  {% endif %}
 </div>
-{% endif %}
 
-<!-- ═══ 03 BEST TILL DATE ═══ -->
-{% set has_any_best = (best_test_scores and best_test_scores|length > 0) or (best_assignments and best_assignments|length > 0) or (best_case_studies and best_case_studies|length > 0) or (case_study_highlights and case_study_highlights|length > 0) or (capstone_projects and capstone_projects|length > 0) or capstone_project %}
-{% if has_any_best %}
+{# 4. ASSESSMENT BEST SCORES #}
 <div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">03 / Best till date</span><span class="sec-rule"></span><span class="sec-sub">Top performances</span></div>
-  {% if best_assignments and best_assignments|length > 0 %}
-  <div class="cat-label cat-gold">Assignments</div>
-  <div class="best-row">{% for a in best_assignments[:2] %}{% set ap = a.rubric_pct if a.rubric_pct else ((a.score/a.max_score*100) if a.max_score and a.max_score > 0 else 0) %}{% set ac = 'teal' if ap >= 70 else ('mid' if ap >= 40 else 'low') %}
-    <div class="best-card"><div class="best-tag">Assignment</div><div class="best-pct {{ ac }}">{{ "%.0f"|format(ap) }}<span class="u">%</span></div>{% if a.rubric_grade or a.grade_label %}<div class="best-grade">{{ a.rubric_grade or '' }}{% if a.grade_label %} · {{ a.grade_label }}{% endif %}</div>{% endif %}<div class="best-title">{{ a.title or 'Assignment' }}</div>{% if a.course_name %}<div class="best-meta">{{ a.course_name }}</div>{% endif %}{% if a.feedback and (a.feedback|trim)|length > 5 %}<div class="best-desc">{{ (a.feedback|trim)[:160] }}</div>{% endif %}</div>
-  {% endfor %}</div>{% endif %}
-
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">📊</div>
+    <div class="section-title">Assessment Scores</div>
+    {% if best_test_scores|length > 0 %}<span class="section-badge" style="background:var(--gold-soft);color:var(--gold)">Best of {{ total_assessments }} taken</span>{% endif %}
+  </div>
   {% if best_test_scores and best_test_scores|length > 0 %}
-  <div class="cat-label cat-teal">Assessments</div>
-  <div class="best-row">{% for t in best_test_scores[:2] %}{% set tp = t.percentage or t.score or 0 %}{% set tc = 'teal' if tp >= 70 else ('mid' if tp >= 40 else 'low') %}
-    <div class="best-card alt"><div class="best-tag">Assessment</div><div class="best-pct {{ tc }}">{{ "%.0f"|format(tp) }}<span class="u">%</span></div>{% if t.grade %}<div class="best-grade">Grade {{ t.grade }}</div>{% endif %}<div class="best-title">{{ t.subject or t.topic or 'Assessment' }}</div>{% if t.course_name %}<div class="best-meta">{{ t.course_name }}</div>{% endif %}</div>
-  {% endfor %}</div>{% endif %}
+    {% for ts in best_test_scores[:4] %}
+    <div class="item-card" style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div class="item-title">{{ ts.subject or ts.topic or ts.course_name or 'Assessment' }}</div>
+        <div class="item-sub">{% if ts.course_name %}{{ ts.course_name }}{% endif %}{% if ts.grade %} · Grade: {{ ts.grade }}{% endif %}</div>
+      </div>
+      <div class="score" style="color:{% if (ts.percentage or 0) >= 80 %}var(--green){% elif (ts.percentage or 0) >= 60 %}var(--gold){% else %}var(--red){% endif %}">{{ ts.percentage or ts.score or 0 }}%</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">📊</div>
+      <div class="placeholder-text">No assessments taken yet</div>
+      <div class="placeholder-action">Take a quiz or test to showcase your knowledge</div>
+    </div>
+  {% endif %}
+</div>
 
-  {% set csl = best_case_studies if best_case_studies and best_case_studies|length > 0 else (case_study_highlights if case_study_highlights and case_study_highlights|length > 0 else []) %}
-  {% if csl|length > 0 %}
-  <div class="cat-label cat-orange">Case Studies</div>
-  <div class="best-row">{% for c in csl[:2] %}{% if best_case_studies %}{% set cp = ((c.score or c.ai_score or 0)/(c.max_score or 100)*100) if (c.max_score or 100) > 0 else 0 %}{% else %}{% set cp = c.score_pct or 0 %}{% endif %}{% set cc = 'teal' if cp >= 70 else ('mid' if cp >= 40 else 'low') %}
-    <div class="best-card alt2"><div class="best-tag">Case Study</div><div class="best-pct {{ cc }}">{{ "%.0f"|format(cp) }}<span class="u">%</span></div>{% if c.ai_grade %}<div class="best-grade">{{ c.ai_grade }}</div>{% endif %}<div class="best-title">{{ c.title or 'Case Study' }}</div>{% if c.course_name %}<div class="best-meta">{{ c.course_name }}</div>{% endif %}{% if c.ai_feedback and (c.ai_feedback|trim)|length > 5 %}<div class="best-desc">{{ (c.ai_feedback|trim)[:160] }}</div>{% endif %}</div>
-  {% endfor %}</div>{% endif %}
+<div class="grid2">
+{# 5. BEST CASE STUDIES #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">📋</div>
+    <div class="section-title">Case Studies</div>
+  </div>
+  {% if best_case_studies and best_case_studies|length > 0 %}
+    {% for cs in best_case_studies[:2] %}
+    <div class="item-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div class="item-title">{{ cs.title or 'Case Study' }}</div>
+        <div class="score-sm" style="color:var(--green)">{{ cs.score or 0 }}%</div>
+      </div>
+      <div class="item-sub">{{ cs.course_name or '' }}{% if cs.ai_grade %} · {{ cs.ai_grade }}{% endif %}</div>
+      {% if cs.ai_feedback %}<div class="item-desc" style="font-size:12px">{{ cs.ai_feedback[:150] }}{% if cs.ai_feedback|length > 150 %}...{% endif %}</div>{% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">📋</div>
+      <div class="placeholder-text">No case studies yet</div>
+      <div class="placeholder-action">Submit a case study to demonstrate analytical skills</div>
+    </div>
+  {% endif %}
+</div>
 
-  {% set capl = capstone_projects if capstone_projects and capstone_projects|length > 0 else ([capstone_project] if capstone_project else []) %}
-  {% if capl|length > 0 %}
-  <div class="cat-label cat-ink">Capstone Projects</div>
-  <div class="best-row">{% for cp in capl[:2] %}
-    <div class="capstone-card"><div class="ch">{{ cp.title or cp.project_name or 'Capstone' }}</div>{% if cp.course_name or cp.status %}<div class="cm">{% if cp.course_name %}{{ cp.course_name }}{% endif %}{% if cp.status %} · {{ cp.status }}{% endif %}</div>{% endif %}{% if cp.description and (cp.description|trim)|length > 10 %}<div class="cdd">{{ cp.description[:200]|trim }}</div>{% endif %}{% if cp.technologies or cp.tech_stack %}<div class="ct">{% set techs = cp.technologies or cp.tech_stack %}{% if techs is string %}{% for t in techs.split(',') %}{% if t|trim|length > 1 %}<span>{{ t|trim }}</span>{% endif %}{% endfor %}{% elif techs is iterable %}{% for t in techs %}<span>{{ t }}</span>{% endfor %}{% endif %}</div>{% endif %}</div>
-  {% endfor %}</div>{% endif %}
+{# 6. BEST ASSIGNMENTS #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">📝</div>
+    <div class="section-title">Assignments</div>
+  </div>
+  {% if best_assignments and best_assignments|length > 0 %}
+    {% for a in best_assignments[:2] %}
+    <div class="item-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div class="item-title">{{ a.title or 'Assignment' }}</div>
+        {% if a.score %}<div class="score-sm" style="color:var(--accent)">{{ a.score }}</div>{% endif %}
+      </div>
+      <div class="item-sub">{{ a.course_name or '' }}{% if a.status %} · {{ a.status }}{% endif %}</div>
+      {% if a.feedback %}<div class="item-desc" style="font-size:12px">{{ a.feedback[:120] }}{% if a.feedback|length > 120 %}...{% endif %}</div>{% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">📝</div>
+      <div class="placeholder-text">No assignments yet</div>
+      <div class="placeholder-action">Complete assignments to show your work</div>
+    </div>
+  {% endif %}
+</div>
+</div>
+
+{# 7. CAPSTONE PROJECT #}
+{% if capstone_project %}
+<div class="section" style="border-left:3px solid var(--gold)">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">🎯</div>
+    <div class="section-title">Capstone Project</div>
+    <span class="section-badge" style="background:var(--gold-soft);color:var(--gold)">Featured</span>
+  </div>
+  <div class="item-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="item-title" style="font-size:16px">{{ capstone_project.title or 'Capstone Project' }}</div>
+      {% if capstone_project.score %}<div class="score" style="color:var(--gold)">{{ capstone_project.score }}{% if capstone_project.max_score %}/{{ capstone_project.max_score }}{% endif %}</div>{% endif %}
+    </div>
+    {% if capstone_project.description %}<div class="item-desc">{{ capstone_project.description }}</div>{% endif %}
+    {% if capstone_project.tech_stack %}<div style="margin-top:8px">{% for t in capstone_project.tech_stack.split(',') %}<span class="tag tag-tech">{{ t.strip() }}</span>{% endfor %}</div>{% endif %}
+  </div>
 </div>
 {% else %}
 <div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">03 / Best till date</span><span class="sec-rule"></span></div>
-  <div class="empty"><b>No graded work yet.</b><br>Complete assignments, assessments and case studies to unlock this section.</div>
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">🎯</div>
+    <div class="section-title">Capstone Project</div>
+  </div>
+  <div class="placeholder">
+    <div class="placeholder-icon">🎯</div>
+    <div class="placeholder-text">No capstone project yet</div>
+    <div class="placeholder-action">This will be featured prominently once submitted</div>
+  </div>
 </div>
 {% endif %}
 
-<!-- ═══ 04 PERSONALITY & HOBBIES ═══ -->
+{# 8. CERTIFICATES #}
 <div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">04 / Personality &amp; hobbies</span><span class="sec-rule"></span><span class="sec-sub">Psychometric</span></div>
-  {% if has_personality %}
-    <div class="persona-type"><div class="pl">Type</div><div class="pv">{{ personality_data.personality_type }}</div></div>
-    <div class="persona-grid">
-      {% if personality_data.traits and (personality_data.traits|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Key traits</div><div class="pv">{{ personality_data.traits|trim }}</div></div>{% endif %}
-      {% if personality_data.work_style and (personality_data.work_style|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Work style</div><div class="pv">{{ personality_data.work_style|trim }}</div></div>{% endif %}
-      {% if personality_data.communication and (personality_data.communication|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Communication</div><div class="pv">{{ personality_data.communication|trim }}</div></div>{% endif %}
-      {% if personality_data.leadership and (personality_data.leadership|trim)|length > 2 %}<div class="persona-cell"><div class="pl">Team role</div><div class="pv">{{ personality_data.leadership|trim }}</div></div>{% endif %}
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">🏆</div>
+    <div class="section-title">Certificates</div>
+  </div>
+  {% if certifications_data and certifications_data|length > 0 %}
+    {% for cert in certifications_data %}
+    <div class="item-card" style="display:flex;align-items:center;gap:12px">
+      <div style="width:36px;height:36px;border-radius:50%;border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">🏆</div>
+      <div>
+        <div class="item-title">{{ cert.course_name or cert.name or 'Certificate' }}</div>
+        <div class="item-sub">{{ cert.certificate_id or '' }}{% if cert.issue_date %} · {{ cert.issue_date }}{% endif %}</div>
+      </div>
     </div>
-  {% else %}<div class="empty"><b>Psychometric not yet completed.</b><br>Take the test on the LMS to unlock.</div>{% endif %}
-  {% if has_hobbies %}<div style="margin-top:14px"><div class="cat-label cat-gold">Hobbies &amp; Interests</div><div class="hobbies-row">{% set hns = namespace(seen=[]) %}{% for h in hobbies_data %}{% set hh = (h|string|trim) %}{% if hh|length > 1 and hh|lower not in JUNK and hh|lower not in hns.seen %}{% set _ = hns.seen.append(hh|lower) %}<span>{{ hh }}</span>{% endif %}{% endfor %}</div></div>{% endif %}
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">🏆</div>
+      <div class="placeholder-text">No certificates earned yet</div>
+      <div class="placeholder-action">Complete a course to earn your first certificate</div>
+    </div>
+  {% endif %}
 </div>
 
-<!-- ═══ 05 CAREER GOALS (separate from job preferences) ═══ -->
+{# 9. PERSONALITY & TRAITS #}
 <div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">05 / Career goals</span><span class="sec-rule"></span><span class="sec-sub">Vision</span></div>
-  {% if has_career_goals %}<p style="font-size:13.5px;line-height:1.75;color:var(--body)">{{ personal_career_goals|trim }}</p>
-  {% else %}<div class="empty"><b>Career goals not yet defined.</b><br>Share your 3-5 year vision on the LMS Profile → Job Preferences → Career Goals.</div>{% endif %}
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">🧠</div>
+    <div class="section-title">Personality & Work Style</div>
+  </div>
+  {% if personality_data and personality_data.personality_type %}
+    <div style="text-align:center;padding:12px 0">
+      <div style="font-size:28px;margin-bottom:6px">{{ personality_data.icon or '🧠' }}</div>
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text)">{{ personality_data.personality_type }}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px;max-width:400px;margin-left:auto;margin-right:auto">{{ personality_data.desc or '' }}</div>
+    </div>
+    {% if personality_data.traits %}
+    <div class="grid2" style="margin-top:12px">
+      {% if personality_data.work_style %}<div class="item-card"><div class="item-sub">Work Style</div><div class="item-title" style="font-size:13px">{{ personality_data.work_style }}</div></div>{% endif %}
+      {% if personality_data.communication %}<div class="item-card"><div class="item-sub">Communication</div><div class="item-title" style="font-size:13px">{{ personality_data.communication }}</div></div>{% endif %}
+      {% if personality_data.leadership %}<div class="item-card"><div class="item-sub">Leadership</div><div class="item-title" style="font-size:13px">{{ personality_data.leadership }}</div></div>{% endif %}
+    </div>
+    {% endif %}
+    <div style="font-size:11px;color:var(--subtle);text-align:center;margin-top:10px">From Psychometric Assessment</div>
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">🧠</div>
+      <div class="placeholder-text">Personality traits not available</div>
+      <div class="placeholder-action">Take the psychometric test to reveal your work personality</div>
+    </div>
+  {% endif %}
 </div>
 
-<!-- ═══ 06 JOB PREFERENCES ═══ -->
-{% if has_prefs %}
+{# ════════════════════════════════════════════════════════════ #}
+{# ── EXTERNAL DATA — from Resume, LinkedIn, GitHub ──        #}
+{# ════════════════════════════════════════════════════════════ #}
+
+<div class="grid2">
+{# 10. EDUCATION #}
 <div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">06 / Job preferences</span><span class="sec-rule"></span><span class="sec-sub">Open to opportunities</span></div>
-  <div class="pref-grid">
-    {% if job_preferences.preferred_role %}<div class="pref-cell"><div class="pl">Target role</div><div class="pv">{{ job_preferences.preferred_role }}</div></div>{% endif %}
-    {% if job_preferences.preferred_location %}<div class="pref-cell"><div class="pl">Location</div><div class="pv">{{ job_preferences.preferred_location }}</div></div>{% endif %}
-    {% if job_preferences.preferred_industry %}<div class="pref-cell"><div class="pl">Industry</div><div class="pv">{{ job_preferences.preferred_industry }}</div></div>{% endif %}
-    {% if job_preferences.work_mode %}<div class="pref-cell"><div class="pl">Work mode</div><div class="pv">{{ job_preferences.work_mode }}</div></div>{% endif %}
-    {% if job_preferences.employment_type %}<div class="pref-cell"><div class="pl">Type</div><div class="pv">{{ job_preferences.employment_type }}</div></div>{% endif %}
-    {% if job_preferences.expected_salary_min and job_preferences.expected_salary_max %}<div class="pref-cell"><div class="pl">Salary (LPA)</div><div class="pv">₹{{ job_preferences.expected_salary_min }}–{{ job_preferences.expected_salary_max }}</div></div>{% endif %}
-    {% if job_preferences.notice_period %}<div class="pref-cell"><div class="pl">Notice</div><div class="pv">{{ job_preferences.notice_period }}</div></div>{% endif %}
-    {% if job_preferences.company_size %}<div class="pref-cell"><div class="pl">Company size</div><div class="pv">{{ job_preferences.company_size }}</div></div>{% endif %}
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">🎓</div>
+    <div class="section-title">Education</div>
+  </div>
+  {% if education_data and education_data|length > 0 %}
+    {% for edu in education_data %}
+    <div class="timeline-item">
+      <div class="item-title">{{ edu.degree or '' }} {{ edu.field_of_study or '' }}</div>
+      <div class="item-sub" style="color:var(--accent)">{{ edu.institution or '' }}</div>
+      <div class="item-sub">{{ edu.year or '' }}{% if edu.percentage %} · {{ edu.percentage }}%{% endif %}</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">🎓</div>
+      <div class="placeholder-text">Education not added</div>
+      <div class="placeholder-action">Add in LMS profile or upload resume</div>
+    </div>
+  {% endif %}
+</div>
+
+{# 11. WORK EXPERIENCE #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--green-soft);color:var(--green)">💼</div>
+    <div class="section-title">Experience</div>
+  </div>
+  {% if work_experience and work_experience|length > 0 %}
+    {% for w in work_experience %}
+    <div class="timeline-item">
+      <div class="item-title">{{ w.title or w.role or 'Role' }}</div>
+      <div class="item-sub" style="color:var(--accent)">{{ w.company or '' }}</div>
+      <div class="item-sub">{{ w.duration or '' }}{% if w.start_date %} · {{ w.start_date }}{% endif %}</div>
+      {% if w.description %}<div class="item-desc">{{ w.description }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    {% if is_fresher %}
+    <div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">
+      <span class="tag" style="background:var(--green-soft);color:var(--green)">Fresher</span>
+      <div style="margin-top:8px">Ready to begin professional career</div>
+    </div>
+    {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">💼</div>
+      <div class="placeholder-text">No experience added</div>
+      <div class="placeholder-action">Upload resume or add on LinkedIn</div>
+    </div>
+    {% endif %}
+  {% endif %}
+</div>
+</div>
+
+{# 12. SKILLS #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">⚡</div>
+    <div class="section-title">Skills & Competencies</div>
+  </div>
+  {% if skills_data %}
+    {% if skills_data.technical_skills %}
+    <div style="margin-bottom:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--subtle);font-weight:600;margin-bottom:6px">Technical</div>
+      {% for s in skills_data.technical_skills %}
+        <span class="tag tag-tech">{{ s.name if s.name is defined else s }}</span>
+      {% endfor %}
+    </div>{% endif %}
+    {% if skills_data.tools %}
+    <div style="margin-bottom:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--subtle);font-weight:600;margin-bottom:6px">Tools</div>
+      {% for s in skills_data.tools %}
+        <span class="tag tag-tool">{{ s.name if s.name is defined else s }}</span>
+      {% endfor %}
+    </div>{% endif %}
+    {% if skills_data.soft_skills %}
+    <div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--subtle);font-weight:600;margin-bottom:6px">Soft Skills</div>
+      {% for s in skills_data.soft_skills %}
+        <span class="tag tag-soft">{{ s.name if s.name is defined else s }}</span>
+      {% endfor %}
+    </div>{% endif %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">⚡</div>
+      <div class="placeholder-text">No skills detected</div>
+      <div class="placeholder-action">Add key skills in LMS profile or upload resume</div>
+    </div>
+  {% endif %}
+</div>
+
+{# 13. ELIGIBLE JOB ROLES #}
+{% if role_matches and role_matches|length > 0 %}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--teal-soft);color:var(--teal)">◎</div>
+    <div class="section-title">Eligible Job Roles</div>
+  </div>
+  {% for r in role_matches[:3] %}
+  <div class="role-card">
+    <div class="role-header">
+      <div class="role-name">{{ r.role_title }}</div>
+      <div class="score" style="color:var(--gold)">{{ r.match_percentage or r.score or 0 }}%</div>
+    </div>
+    <div class="progress-track"><div class="progress-fill" style="width:{{ r.match_percentage or r.score or 0 }}%;background:var(--accent)"></div></div>
+    {% if r.matched_keywords %}
+    <div style="margin-top:8px">
+      {% for kw in r.matched_keywords %}<span class="tag" style="background:var(--green-soft);color:var(--green);font-size:10px">✓ {{ kw }}</span>{% endfor %}
+      {% if r.missing_keywords %}{% for kw in r.missing_keywords[:3] %}<span class="tag" style="background:var(--gold-soft);color:var(--gold);font-size:10px">+ {{ kw }}</span>{% endfor %}{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 14. PROJECTS #}
+{% if projects_data and projects_data|length > 0 %}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">🚀</div>
+    <div class="section-title">Projects</div>
+  </div>
+  {% for p in projects_data[:4] %}
+  <div class="item-card" style="border-left:2px solid var(--purple)">
+    <div class="item-title">{{ p.name or p.title or 'Project' }}</div>
+    {% if p.description %}<div class="item-desc">{{ p.description }}</div>{% endif %}
+    {% if p.technologies or p.languages %}
+    <div style="margin-top:6px">
+      {% for t in (p.technologies or p.languages or '').split(',') %}
+        {% if t.strip() %}<span class="tag tag-tech">{{ t.strip() }}</span>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 15. JOB PREFERENCES #}
+{% if job_preferences and (job_preferences.preferred_role or job_preferences.work_mode or job_preferences.preferred_location) %}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--teal-soft);color:var(--teal)">🎯</div>
+    <div class="section-title">Job Preferences</div>
+  </div>
+  <div class="grid2">
+    {% if job_preferences.preferred_role %}<div class="item-card"><div class="item-sub">Target Role</div><div class="item-title" style="font-size:13px">{{ job_preferences.preferred_role }}</div></div>{% endif %}
+    {% if job_preferences.preferred_industry or job_preferences.industries %}<div class="item-card"><div class="item-sub">Industry</div><div class="item-title" style="font-size:13px">{{ job_preferences.preferred_industry or job_preferences.industries }}</div></div>{% endif %}
+    {% if job_preferences.work_mode %}<div class="item-card"><div class="item-sub">Work Mode</div><div class="item-title" style="font-size:13px">{{ job_preferences.work_mode }}</div></div>{% endif %}
+    {% if job_preferences.preferred_location %}<div class="item-card"><div class="item-sub">Location</div><div class="item-title" style="font-size:13px">{{ job_preferences.preferred_location }}</div></div>{% endif %}
   </div>
 </div>
 {% endif %}
 
-<!-- ═══ 07 EXPERIENCE ═══ -->
-{% if has_work %}
+{# 16. SEMESTER RESULTS #}
+{% if semester_results and semester_results|length > 0 %}
 <div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">07 / Experience</span><span class="sec-rule"></span><span class="sec-sub">Resume &amp; LinkedIn</span></div>
-  <div class="tl">{% set ens = namespace(seen=[]) %}{% for exp in work_experience[:5] %}{% set k = ((exp.title or '')|trim|lower) ~ '|' ~ ((exp.company or '')|trim|lower) %}{% if k|length > 2 and k not in ens.seen %}{% set _ = ens.seen.append(k) %}
-    <div class="tl-card"><div class="tl-title">{{ exp.title or 'Role' }}</div>{% if exp.company %}<div class="tl-org">{{ exp.company }}</div>{% endif %}{% if exp.duration %}<div class="tl-meta"><span>{{ exp.duration }}</span></div>{% endif %}{% if exp.description and (exp.description|trim)|length > 5 %}<div class="tl-desc">{{ (exp.description|trim)[:220] }}</div>{% endif %}</div>
-  {% endif %}{% endfor %}</div>
-</div>
-{% endif %}
-
-<!-- ═══ 08 EDUCATION ═══ -->
-{% if has_edu %}
-<div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">08 / Education</span><span class="sec-rule"></span><span class="sec-sub">Academic background</span></div>
-  <div class="tl">{% set ens = namespace(seen=[]) %}{% for edu in education_data[:5] %}{% set k = ((edu.degree or '')|trim|lower) ~ '|' ~ ((edu.institution or '')|trim|lower) %}{% if k|length > 2 and k not in ens.seen %}{% set _ = ens.seen.append(k) %}
-    <div class="tl-card edu"><div class="tl-title">{{ edu.degree or 'Degree' }}{% if edu.field_of_study %} — {{ edu.field_of_study }}{% endif %}</div>{% if edu.institution %}<div class="tl-org">{{ edu.institution }}</div>{% endif %}<div class="tl-meta">{% if edu.year %}<span>{{ edu.year }}</span>{% endif %}{% if edu.percentage %}<span>{{ edu.percentage }}</span>{% endif %}{% if edu.cgpa %}<span>CGPA {{ edu.cgpa }}</span>{% endif %}</div></div>
-  {% endif %}{% endfor %}</div>
-</div>
-{% endif %}
-
-<!-- ═══ 09 BEST PROJECTS (max 2) ═══ -->
-{% if has_projects %}
-<div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">09 / Best projects</span><span class="sec-rule"></span><span class="sec-sub">Resume · GitHub</span></div>
-  <div class="proj-grid">{% set pns = namespace(seen=[]) %}{% for proj in projects_data[:2] %}{% set pt = (proj.title or '')|trim %}{% if pt|length > 2 and pt|lower not in JUNK and pt|lower not in pns.seen %}{% set _ = pns.seen.append(pt|lower) %}
-    <div class="proj-card"><div class="proj-title">{{ pt }}</div>{% if proj.description and (proj.description|trim)|length > 8 %}<div class="proj-desc">{{ (proj.description|trim)[:180] }}</div>{% endif %}{% if proj.technologies_used %}<div class="proj-tech">{% set techs = proj.technologies_used %}{% if techs is string %}{% for t in techs.split(',') %}{% if t|trim|length > 1 %}<span>{{ t|trim }}</span>{% endif %}{% endfor %}{% elif techs is iterable %}{% for t in techs %}<span>{{ t }}</span>{% endfor %}{% endif %}</div>{% endif %}</div>
-  {% endif %}{% endfor %}</div>
-</div>
-{% endif %}
-
-<!-- ═══ 10 SKILLS ═══ -->
-{% if has_skills %}
-<div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">10 / Skills</span><span class="sec-rule"></span><span class="sec-sub">Technical · Soft · Tools</span></div>
-  <div class="skills-grid">
-    <div class="skill-col"><div class="skill-h">Technical</div><div class="skill-list">{% set tns = namespace(seen=[]) %}{% for sk in skills_data.get('technical_skills',[]) %}{% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}{% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in tns.seen %}{% set _ = tns.seen.append(nm|lower) %}<span>{{ nm }}</span>{% endif %}{% endfor %}</div></div>
-    <div class="skill-col"><div class="skill-h">Soft skills</div><div class="skill-list">{% set sns = namespace(seen=[]) %}{% for sk in skills_data.get('soft_skills',[]) %}{% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}{% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in sns.seen %}{% set _ = sns.seen.append(nm|lower) %}<span>{{ nm }}</span>{% endif %}{% endfor %}</div></div>
-    <div class="skill-col"><div class="skill-h">Tools</div><div class="skill-list">{% set lns = namespace(seen=[]) %}{% for sk in skills_data.get('tools',[]) %}{% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}{% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in lns.seen %}{% set _ = lns.seen.append(nm|lower) %}<span>{{ nm }}</span>{% endif %}{% endfor %}</div></div>
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">📊</div>
+    <div class="section-title">Academic Results</div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    {% for sr in semester_results[:6] %}
+    <div class="item-card" style="flex:1;min-width:120px;text-align:center">
+      <div class="score-sm" style="color:var(--accent)">{{ sr.cgpa or sr.percentage or sr.gpa or '–' }}</div>
+      <div class="item-sub">{{ sr.semester or sr.term or sr.label or 'Result' }}</div>
+    </div>
+    {% endfor %}
   </div>
 </div>
 {% endif %}
 
-<!-- ═══ 11 CERTIFICATES ═══ -->
-{% if has_certs %}
-<div class="section">
-  <div class="sec-eyebrow"><span class="sec-mark">11 / Certificates</span><span class="sec-rule"></span><span class="sec-sub">{{ certifications_data|length }} earned</span></div>
-  <div class="certs">{% for cert in certifications_data[:6] %}
-    <div class="cert-row"><div><div class="cert-name">{{ cert.certificate_name or cert.name or 'Certificate' }}</div>{% if cert.course_name %}<div class="cert-meta">{{ cert.course_name }}</div>{% endif %}</div>{% if cert.issued_at %}<div class="cert-date">{{ cert.issued_at }}</div>{% endif %}</div>
-  {% endfor %}</div>
-</div>
-{% endif %}
-
-<!-- ═══ FOOTER ═══ -->
+{# ════════════════════════════════════════════════════════════ #}
+{# FOOTER                                                      #}
+{# ════════════════════════════════════════════════════════════ #}
 <div class="footer">
-  <div class="footer-mark">✦ Generated by <span class="gold">Upskillize Profile IQ</span></div>
-  {% if data_sources %}<div class="footer-sources">{% for src in data_sources %}<span>{% if src == 'lms' %}LMS{% elif src == 'resume' %}Resume{% elif src == 'github' %}GitHub{% elif src == 'linkedin' %}LinkedIn{% elif src == 'lms_profile' %}Profile{% else %}{{ src }}{% endif %}</span>{% endfor %}</div>{% endif %}
-  {% if profile_url %}<a class="footer-link" href="{{ profile_url }}">{{ profile_url }}</a>{% endif %}
+  <div class="footer-title">Professional Profile</div>
+  <div class="footer-sub">AI-powered profile from verified credentials, assessments & psychometric data</div>
+  <div class="source-tags">
+    {% for src in data_sources %}
+    <span class="source-tag" style="background:var(--accent-soft);color:var(--accent)">{{ src }}</span>
+    {% endfor %}
+  </div>
+  {% if profile_url %}<div style="margin-top:10px;font-size:11px;color:var(--subtle)"><a href="{{ profile_url }}">{{ profile_url }}</a></div>{% endif %}
+  <div style="font-size:11px;color:var(--subtle);margin-top:6px">Powered by Upskillize · © 2026</div>
 </div>
 
 </div>
