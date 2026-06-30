@@ -1,26 +1,55 @@
 """
-Summary Agent v9 — Recruiter-grade bullets (Sonnet)
-═══════════════════════════════════════════════════
-Generates 5-7 PUNCHY bullet points that highlight what makes a candidate
-UNIQUE — not generic. Each bullet ≤22 words, drawn from a different angle
-(distinctive combination, cherry-pick achievement, shipped work,
-domain edge, psychometric signal, current trajectory, student's own voice).
+Summary Agent v11 — Dynamic, honest, recruiter-grade bullets
+═════════════════════════════════════════════════════════════
+Generates 3–5 bullet points grounded entirely in real student data.
+No hallucination, no inflation, no marketing language.
 
-v9 fixes from v8:
-  • Single, complete f-string prompt (v8 had two prompts pasted together,
-    broken indentation, and lost {data_str} injection — file wouldn't import)
-  • {data_str} is properly injected so Sonnet sees the candidate data
-  • Bumped max_tokens 600 → 900 for richer output
-  • Banned-phrase list expanded
-  • Entity normalization (Uuskillize → Upskillize) handled in-prompt
+v11 fixes from v10:
+  • Dynamic prompt: sections activate/deactivate based on available data.
+    Sparse-data students get a shorter, focused prompt. Rich-data students
+    get the full structure. No wasted tokens on empty sections.
+  • Smart angle selection: _determine_lead_angle() picks the strongest
+    data signal, not random rotation. Seed still varies phrasing within
+    the chosen angle.
+  • Real examples embedded in prompt for each student archetype
+    (working professional, fresher with scores, sparse/new student,
+    career-pivot student).
+  • Banned-phrase list is explicit and expanded — catches common AI
+    inflation patterns before they reach output.
+  • Template fallback rewritten: sentences combine related facts
+    naturally instead of one-fact-per-bullet.
+  • _clean_bullets() now also strips banned marketing phrases as a
+    final safety net.
 """
 
 import os
+import hashlib
 import logging
 import httpx
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
+
+# ── Phrases that must never appear in output ──────────────────
+BANNED_PHRASES = [
+    "passionate about", "dedicated to", "motivated by",
+    "results-driven", "hard-working", "self-starter",
+    "go-getter", "detail-oriented", "team player",
+    "positioned for", "poised to", "uniquely qualified",
+    "rare combination", "distinctive crossover", "unique blend",
+    "sustained commitment", "deep specialisation", "deep expertise",
+    "measurable output", "measurable impact", "proven track record",
+    "performance highlights", "key results", "standout result",
+    "industry-validated", "industry-ready", "job-ready",
+    "currently sharpening", "actively building expertise",
+    "emerging professional", "aspiring professional",
+    "dynamic professional", "versatile professional",
+    "strong foundation", "solid foundation", "robust foundation",
+    "well-rounded", "well-positioned", "well-equipped",
+    "cutting-edge", "state-of-the-art", "next-generation",
+    "leveraging", "synergy", "synergistic",
+    "holistic", "comprehensive understanding",
+]
 
 
 class SummaryAgent:
@@ -28,6 +57,10 @@ class SummaryAgent:
     def __init__(self):
         self.api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         self.has_api = bool(self.api_key)
+
+    # ═══════════════════════════════════════════════════════════
+    #  PUBLIC ENTRY POINT
+    # ═══════════════════════════════════════════════════════════
 
     async def generate(self, student_data: Dict[str, Any]) -> str:
         personal = student_data.get("personal", {})
@@ -49,15 +82,22 @@ class SummaryAgent:
             personality, all_skills, student_data,
         )
 
+        ctx["_seed"] = self._variety_seed(name, ctx)
+        ctx["_archetype"] = self._detect_archetype(ctx)
+        ctx["_lead_angle"] = self._determine_lead_angle(ctx)
+        ctx["_differentiators"] = self._find_differentiators(ctx)
+
         if self.has_api:
             try:
-                return await self._ai_bullet_summary(name, first_name, ctx)
+                return await self._ai_summary(name, first_name, ctx)
             except Exception as e:
-                logger.warning(f"AI summary failed, using template fallback: {e}")
+                logger.warning("AI summary failed, falling back to template: %s", e)
 
-        return self._template_bullet_summary(name, first_name, ctx)
+        return self._template_summary(name, first_name, ctx)
 
-    # ─── Context builder ──────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════
+    #  CONTEXT BUILDER
+    # ═══════════════════════════════════════════════════════════
 
     def _build_context(self, personal, computed, courses, education,
                        work_experience, case_studies, certifications,
@@ -66,19 +106,16 @@ class SummaryAgent:
         edu_str = ""
         if education:
             e = education[0]
-            degree = e.get("degree", "")
-            inst = e.get("institution", "")
-            field = e.get("field_of_study", "")
-            year = e.get("year", "")
             parts = []
-            if degree:
-                parts.append(degree)
-            if field and field.lower() not in (degree or "").lower():
+            if e.get("degree"):
+                parts.append(e["degree"])
+            field = e.get("field_of_study", "")
+            if field and field.lower() not in (e.get("degree") or "").lower():
                 parts.append(f"in {field}")
-            if inst:
-                parts.append(f"from {inst}")
-            if year:
-                parts.append(f"({year})")
+            if e.get("institution"):
+                parts.append(f"from {e['institution']}")
+            if e.get("year"):
+                parts.append(f"({e['year']})")
             edu_str = " ".join(parts)
 
         work_strs = []
@@ -99,17 +136,25 @@ class SummaryAgent:
             if isinstance(sk, dict) and sk.get("name"):
                 top_skills.append(sk["name"])
 
-        top_courses = [c.get("course_name", "") for c in courses if c.get("course_name")][:4]
+        top_courses = [
+            c.get("course_name", "") for c in courses if c.get("course_name")
+        ][:4]
 
+        best_case_title = ""
+        best_case_score = 0
         best_case = ""
         if case_studies:
-            sorted_cs = sorted(case_studies, key=lambda x: float(x.get("score", 0) or 0), reverse=True)
+            sorted_cs = sorted(
+                case_studies,
+                key=lambda x: float(x.get("score", 0) or 0),
+                reverse=True,
+            )
             if sorted_cs:
-                top_case = sorted_cs[0]
-                title = top_case.get("title", "")
-                score = top_case.get("score", 0)
-                if title and score:
-                    best_case = f'"{title}" ({score}%)'
+                top = sorted_cs[0]
+                best_case_title = top.get("title", "")
+                best_case_score = float(top.get("score", 0) or 0)
+                if best_case_title and best_case_score:
+                    best_case = f'"{best_case_title}" ({best_case_score:.0f}%)'
 
         cert_names = []
         for c in certifications[:5]:
@@ -118,255 +163,150 @@ class SummaryAgent:
                 cert_names.append(n)
 
         domain = self._derive_domain(top_courses, education, work_experience, personal)
-
-        career_goals = personal.get("career_goals", "") or ""
-        preferred_role = personal.get("preferred_role", "") or ""
-        current_designation = personal.get("current_designation", "") or ""
-        current_employer = personal.get("current_employer", "") or ""
-        work_years = personal.get("work_experience_years", "") or ""
+        hobbies = personal.get("hobbies", "") or personal.get("interests", "") or ""
         about_me = personal.get("about_me", "") or personal.get("bio", "") or ""
-        linkedin_headline = personal.get("linkedin_headline", "") or ""
-        linkedin_summary = personal.get("linkedin_summary", "") or ""
 
         return {
-            "domain":               domain,
-            "edu_str":              edu_str,
-            "work_strs":            work_strs,
-            "top_skills":           top_skills,
-            "top_courses":          top_courses,
-            "best_case":            best_case,
-            "cert_names":           cert_names,
-            "career_goals":         career_goals,
-            "preferred_role":       preferred_role,
-            "current_designation":  current_designation,
-            "current_employer":     current_employer,
-            "work_years":           work_years,
-            "about_me":             about_me,
-            "linkedin_headline":    linkedin_headline,
-            "linkedin_summary":     linkedin_summary,
-            "personality_type":     personality.get("personality_type", ""),
-            "personality_traits":   personality.get("traits_json", "") or personality.get("traits", ""),
-            "work_style":           personality.get("work_style", ""),
-            "overall_score":        computed.get("overall_score", 0),
-            "best_test_score":      computed.get("best_test_score", 0),
-            "avg_test_score":       computed.get("avg_test_score", 0),
+            "domain": domain, "edu_str": edu_str,
+            "edu_degree": education[0].get("degree", "") if education else "",
+            "edu_field": education[0].get("field_of_study", "") if education else "",
+            "edu_institution": education[0].get("institution", "") if education else "",
+            "work_strs": work_strs, "work_count": len(work_experience),
+            "top_skills": top_skills, "top_courses": top_courses,
+            "best_case": best_case, "best_case_title": best_case_title,
+            "best_case_score": best_case_score, "cert_names": cert_names,
+            "career_goals": personal.get("career_goals", "") or "",
+            "preferred_role": personal.get("preferred_role", "") or "",
+            "current_designation": personal.get("current_designation", "") or "",
+            "current_employer": personal.get("current_employer", "") or "",
+            "work_years": personal.get("work_experience_years", "") or "",
+            "about_me": about_me, "hobbies": hobbies,
+            "linkedin_headline": personal.get("linkedin_headline", "") or "",
+            "linkedin_summary": personal.get("linkedin_summary", "") or "",
+            "personality_type": personality.get("personality_type", ""),
+            "personality_traits": personality.get("traits_json", "") or personality.get("traits", ""),
+            "work_style": personality.get("work_style", ""),
+            "overall_score": computed.get("overall_score", 0),
+            "best_test_score": computed.get("best_test_score", 0),
+            "avg_test_score": computed.get("avg_test_score", 0),
             "total_assessments": (
                 computed.get("total_tests", 0)
                 + computed.get("total_quizzes", 0)
                 + computed.get("total_case_studies", 0)
             ),
-            "total_case_studies":   computed.get("total_case_studies", 0),
-            "completed_courses":    computed.get("completed_courses", 0),
-            "total_courses":        computed.get("total_courses", 0),
-            "training_hours":       computed.get("total_hours", 0),
-            "improvement_pct":      computed.get("improvement_pct", 0),
-            "consistency":          computed.get("consistency_score", 0),
+            "total_case_studies": computed.get("total_case_studies", 0),
+            "completed_courses": computed.get("completed_courses", 0),
+            "total_courses": computed.get("total_courses", 0),
+            "training_hours": computed.get("total_hours", 0),
+            "improvement_pct": computed.get("improvement_pct", 0),
+            "consistency": computed.get("consistency_score", 0),
         }
 
-    # ─── AI generation (Sonnet, single clean prompt) ──────────
+    # ═══════════════════════════════════════════════════════════
+    #  INTELLIGENCE LAYER
+    # ═══════════════════════════════════════════════════════════
 
-    async def _ai_bullet_summary(self, name: str, first_name: str, ctx: Dict) -> str:
-        """Single Sonnet call, single clean f-string prompt."""
+    def _variety_seed(self, name: str, ctx: Dict) -> int:
+        fingerprint = (
+            f"{name}|{ctx.get('edu_str','')}|{len(ctx.get('work_strs',[]))}|"
+            f"{ctx.get('best_case_score',0)}|{ctx.get('overall_score',0)}|"
+            f"{ctx.get('personality_type','')}|{ctx.get('hobbies','')}"
+        )
+        return int(hashlib.md5(fingerprint.encode()).hexdigest()[:8], 16)
 
-        # Build a structured data dump
-        data_lines = [f"Candidate Name: {name}"]
-        if ctx["edu_str"]:
-            data_lines.append(f"Education: {ctx['edu_str']}")
+    def _detect_archetype(self, ctx: Dict) -> str:
+        """Classify this student so the prompt loads the right examples."""
+        if ctx["current_designation"] and ctx["current_employer"]:
+            return "working_professional"
         if ctx["work_strs"]:
-            data_lines.append(f"Work Experience: {' | '.join(ctx['work_strs'])}")
-        if ctx["current_designation"] or ctx["current_employer"]:
-            cd = ctx["current_designation"]
-            ce = ctx["current_employer"]
-            wy = ctx["work_years"]
-            cur = f"Current: {cd}" if cd else "Current: "
-            if ce:
-                cur += f" at {ce}"
-            if wy:
-                cur += f" ({wy} years exp)"
-            data_lines.append(cur)
-        if ctx["top_skills"]:
-            data_lines.append(f"Top Skills: {', '.join(ctx['top_skills'])}")
-        if ctx["top_courses"]:
-            data_lines.append(f"Areas of Focus: {', '.join(ctx['top_courses'])}")
-        if ctx["best_case"]:
-            data_lines.append(f"Best Case Study: {ctx['best_case']}")
-        if ctx["cert_names"]:
-            data_lines.append(f"Certifications: {', '.join(ctx['cert_names'])}")
-        if ctx["overall_score"] > 0:
-            data_lines.append(f"Overall Performance Score: {ctx['overall_score']}%")
-        if ctx["best_test_score"] > 0:
-            data_lines.append(f"Best Assessment Score: {ctx['best_test_score']}%")
-        if ctx["total_assessments"] > 0:
-            data_lines.append(f"Total Assessments Completed: {ctx['total_assessments']}")
+            return "experienced_fresher"
+        if ctx["completed_courses"] == 0 and ctx["best_test_score"] == 0:
+            return "new_student"
+        if ctx["completed_courses"] > 0 or ctx["best_test_score"] > 0:
+            return "active_learner"
+        return "new_student"
+
+    def _determine_lead_angle(self, ctx: Dict) -> str:
+        """Pick the strongest available signal to lead with.
+        Not random — data-driven. The seed varies phrasing WITHIN
+        the chosen angle, but the angle itself is always the strongest."""
+
+        # Tier 1: Currently employed
+        if ctx["current_designation"] and ctx["current_employer"]:
+            return "current_role"
+
+        # Tier 2: Has work experience (even if not current)
+        if ctx["work_strs"]:
+            return "work_experience"
+
+        # Tier 3: Has meaningful scores (case study or assessment >= 60%)
+        if ctx["best_case_score"] >= 60 or ctx["best_test_score"] >= 60:
+            return "scores"
+
+        # Tier 4: Has completed courses
         if ctx["completed_courses"] > 0:
-            data_lines.append(f"Courses Completed: {ctx['completed_courses']} of {ctx['total_courses']}")
-        if ctx["training_hours"] > 0:
-            data_lines.append(f"Training Hours: {ctx['training_hours']}")
-        if ctx["personality_type"]:
-            data_lines.append(f"Personality Type (Psychometric): {ctx['personality_type']}")
-        if ctx["personality_traits"]:
-            data_lines.append(f"Key Traits: {ctx['personality_traits']}")
-        if ctx["work_style"]:
-            data_lines.append(f"Work Style: {ctx['work_style']}")
-        if ctx["linkedin_headline"]:
-            data_lines.append(f"LinkedIn Headline: {ctx['linkedin_headline']}")
-        if ctx["career_goals"]:
-            data_lines.append(f"Career Goals: {ctx['career_goals']}")
-        if ctx["preferred_role"]:
-            data_lines.append(f"Preferred Role: {ctx['preferred_role']}")
-        if ctx.get("about_me"):
-            data_lines.append(f"About Me (student's own words): {ctx['about_me']}")
-        if ctx["domain"]:
-            data_lines.append(f"Industry Domain: {ctx['domain']}")
+            return "courses"
 
-        data_str = "\n".join(data_lines)
+        # Tier 5: Has education
+        if ctx["edu_str"]:
+            return "education"
 
-        prompt = f"""<role>
-You are a senior placement strategist at India's top campus-to-corporate firm. Fifteen years placing fresh and early-career talent into BFSI, FinTech, product, analytics, audit, and engineering roles. You have read tens of thousands of resumes and you know exactly what makes a recruiter stop scrolling and click "schedule interview".
+        # Tier 6: Has career goals
+        if ctx["career_goals"] or ctx["preferred_role"]:
+            return "goals"
 
-You are writing the Professional Summary for a candidate's Upskillize portfolio. This summary is the first thing a recruiter sees — and often the only thing they read before deciding to interview or skip. Your job is to make them want to interview.
-</role>
+        return "education"
 
-<task>
-Read the candidate data carefully. Then produce a Professional Summary — 5 to 6 bullets, each a small or medium sentence, that surface the candidate's strongest, most specific, most recruiter-relevant signals, ordered so the strongest hiring evidence lands first.
+    def _find_differentiators(self, ctx: Dict) -> List[str]:
+        diffs = []
+        edu_field = (ctx.get("edu_field") or "").lower()
+        domain = (ctx.get("domain") or "").lower()
 
-The output must be grounded entirely in the data provided. Nothing invented, nothing inflated.
-</task>
+        if edu_field and domain:
+            edu_tech = any(k in edu_field for k in ["computer", "software", "it", "cse"])
+            domain_bfsi = any(k in domain for k in ["banking", "finance", "bfsi", "fintech"])
+            edu_bfsi = any(k in edu_field for k in ["commerce", "finance", "banking", "bba", "mba"])
+            domain_tech = any(k in domain for k in ["software", "engineering", "development"])
+            if edu_tech and domain_bfsi:
+                diffs.append("tech-to-bfsi-crossover")
+            elif edu_bfsi and domain_tech:
+                diffs.append("commerce-to-tech-crossover")
+            elif not edu_tech and not edu_bfsi:
+                diffs.append("non-traditional-background")
 
-<candidate_data>
-{data_str}
-</candidate_data>
+        if len(ctx.get("work_strs", [])) >= 2:
+            combined = " ".join(ctx["work_strs"]).lower()
+            if any(k in combined for k in ["founding", "promoted", "lead"]):
+                diffs.append("rapid-career-growth")
+            diffs.append("multi-role-experience")
 
-<input_schema_notes>
-Candidate data may include any subset of: Personal (name, location, About Me), Address, Additional Info, Resume (education, work history, projects, certifications, skills), LinkedIn, GitHub, Psychometric profile (six traits scored across Integrity / Innovation / Adaptability / Emotional Intelligence / Execution / Collaboration, with a top-3 ranking and a one-line definition of the dominant trait), Job Preferences, and Upskillize coursework with scores and assessor grades.
+        if ctx.get("best_case_score", 0) >= 80:
+            diffs.append("high-case-study-performer")
+        if ctx.get("best_test_score", 0) >= 85:
+            diffs.append("high-assessment-performer")
+        if ctx.get("consistency", 0) >= 75:
+            diffs.append("high-consistency")
+        if ctx.get("improvement_pct", 0) >= 20:
+            diffs.append("strong-improvement-arc")
+        if ctx.get("personality_type") and ctx.get("career_goals"):
+            diffs.append("personality-goal-alignment")
+        hobbies = ctx.get("hobbies", "").lower()
+        if hobbies and len(hobbies) > 3:
+            diffs.append("has-personal-dimension")
+        about = ctx.get("about_me", "")
+        if about and len(about) > 50:
+            diffs.append("has-self-narrative")
+        return diffs
 
-Sections may be sparse, partial, or missing. Work only with what is actually present. Do not reference what is not there.
-</input_schema_notes>
+    # ═══════════════════════════════════════════════════════════
+    #  AI GENERATION — DYNAMIC PROMPT
+    # ═══════════════════════════════════════════════════════════
 
-<the_one_rule>
-Every claim in every bullet must be traceable to a specific fact in the candidate data — a number, a named project, a named company, a named course, a score, a grade, a stack, a job title, a quoted line, a psychometric trait. If you cannot point to the exact source fact behind a claim, cut the claim. No abstractions, no adjectives without evidence, no recruiter clichés like "passionate", "dedicated", "results-driven", "positioned for", "synergistic".
+    async def _ai_summary(self, name: str, first_name: str, ctx: Dict) -> str:
+        prompt = self._build_dynamic_prompt(name, ctx)
 
-Frame personality and trait language in positive terms — what the candidate brings, not what they don't need. "Independent" not "low-supervision". "Trustworthy" not "won't cut corners". "Self-directed" not "needs little oversight".
-</the_one_rule>
-
-<evidence_hierarchy>
-When ranking which facts to surface and in what order, use this hierarchy. Higher tiers always outrank lower tiers when both are supported by the data.
-
-Tier 1 — Workplace evidence, current and repeated
-  Shipping work at a named employer with real users. Production code, deployed features, live systems, paying customers.
-
-Tier 2 — Workplace evidence, prior
-  Previous employment at a named company in any function. Proves employability, real-world discipline, ability to hold a job.
-
-Tier 3 — Sustained domain commitment
-  Multiple courses, certifications, or projects in a coherent target domain (BFSI, product, data, audit, engineering). Pattern of intent, not a single data point.
-
-Tier 4 — Distinctive, defensible crossover
-  A genuinely rare combination that gives durable career advantage. Test: would a recruiter find this combination uncommon in their candidate pool? CSE → tech, B.Com → analyst, MBA → product are common pipelines, not crossovers. Cut the claim if you cannot defend the rarity.
-
-Tier 5 — Single named achievement
-  One specific score, one named recognition, one ranked outcome with a number attached.
-
-Tier 6 — Psychometric profile shape
-  Use the top three ranked traits together, with the dominant trait's Upskillize-provided definition woven in. Translate the shape of the profile (which traits are high, which are lower) into role-fit language. Never use a single trait label in isolation.
-
-Tier 7 — Stack, certifications, and skills inventory
-  What they can do. Useful as supporting evidence, weak as a lead bullet.
-
-Tier 8 — Voice and self-description
-  A meaningful line from About Me, only if it adds something the other tiers do not.
-
-Workplace evidence beats classroom evidence. Repeated evidence beats single-instance evidence. Third-party-verified beats self-reported.
-</evidence_hierarchy>
-
-<recruiter_psychology>
-Recruiters scan top-down and decide fast. The first two bullets answer "should I shortlist this person?" If those bullets are weak, the rest are never read.
-
-Lead with the strongest available tier from the candidate's data. Never lead with a lower tier when a higher tier is supported. A single coursework score is never the lead — no matter how high the number. Production work, prior employment, or sustained domain commitment leads.
-
-The bullets after the lead build credibility. The bullets at the end add texture — psychometric, voice, supporting skills. Every bullet must earn its slot or be cut.
-
-Make the recruiter want to read the resume. Every word should serve that goal.
-</recruiter_psychology>
-
-<bullet_count_and_length>
-Output exactly 5 to 6 bullets. Not fewer, not more. Choose 5 if the data is sparse or if a sixth bullet would dilute the set; choose 6 if the data is rich enough that a sixth bullet adds a genuinely different angle.
-
-Each bullet is a single sentence — small or medium length. Aim for sentences that read cleanly in one breath. A bullet that runs to two lines on screen is too long; tighten it. A bullet of three or four words is too short to carry evidence; expand it or cut it.
-
-Every word must earn its place. Every sentence must carry at least one specific, traceable fact. No filler clauses, no decorative adjectives, no throat-clearing.
-</bullet_count_and_length>
-
-<reasoning_steps>
-Do this internally. Do not print it.
-
-1. Read every section of the candidate data. List every specific, traceable fact you find — names, numbers, employers, courses, scores, traits, projects, stacks, lines.
-
-2. Tag each fact with its evidence tier from the hierarchy above.
-
-3. Group facts that belong together. A psychometric profile is one fact group. A multi-course domain pattern is one fact group. A current internship is one fact group.
-
-4. Rank fact groups by hiring-decision weight using the evidence hierarchy. Workplace beats classroom. Repeated beats single. Third-party beats self-reported.
-
-5. Allocate 5 to 6 bullets in descending tier order. Each bullet covers a different fact group. No two bullets restate the same point.
-
-6. For psychometric data, if the profile shape is rich (clear top 3 with meaningful score gaps), allocate one bullet that captures both the profile and its workplace meaning together.
-
-7. Final check before output: would a recruiter who reads only the first two bullets want to open the resume? If no, reorder.
-</reasoning_steps>
-
-<bullet_craft>
-Start each bullet with a noun phrase, an action verb, or a specific noun. Never start with "She is", "He has", "{first_name} is", or any pronoun-led opener. Lead with substance.
-
-Use real specifics. Real names, real percentages, real course names, real employers, real stacks. If the data does not contain a specific, choose a different angle. Never invent.
-
-Normalize known-entity typos silently. "Uuskillize" / "Upskilize" / "Upskillze" → "Upskillize". Program names: PGDFDB, ADFBA, CBAF, CFBM, EAPrep, CAPM, ACAPM, "Data to Decisions". Company names should match their canonical spelling.
-</bullet_craft>
-
-<good_examples>
-A complete summary set of 6 bullets, ordered correctly:
-
-- Shipping production code at Upskillize as an active intern — React, Django, Python, and TypeScript across the live LMS used by enrolled students.
-- Prior operations role at Startek supporting Blinkit's quick-commerce workflow brought corporate discipline and client-facing exposure before the pivot to tech.
-- Building BFSI domain depth alongside engineering through Banking Foundation and Payments & Cards coursework, signalling sustained intent into financial services.
-- Top-three psychometric traits — Integrity, Innovation, Adaptability — point to a principled, inventive, self-directed operator suited to compliance, audit, and fintech research roles.
-- Top score so far is 85% on the Silicon Valley Bank case study — applied risk analysis on a real banking failure, graded by rubric assessor.
-- Full-stack capability backed by a Full Stack Python Developer certification spanning HTML5, CSS3, JavaScript, and Django — ready to ship on day one.
-</good_examples>
-
-<bad_examples>
-✗ Opening with a single coursework score, even if the number is high.
-   → A score is one data point. Production work or prior employment outranks it.
-
-✗ "Passionate about technology and positioned for analytical roles."
-   → No source fact. Pure abstraction. Cut.
-
-✗ "Rare crossover: CSE graduate building technical skills while completing banking coursework."
-   → CSE → BFSI is a common pipeline, not a crossover. Inflated claim. Cut or rewrite as plain domain commitment.
-
-✗ "Integrity psychometric type signals a low-supervision teammate."
-   → Negative framing ("low-supervision" describes what she doesn't need). Use positive framing — "independent", "trustworthy", "self-directed".
-
-✗ Listing the same point twice — one bullet about the full-stack internship and another about the Full-Stack certification covering identical skills.
-   → Two bullets, one angle. Cut the weaker one or differentiate them clearly.
-
-✗ "Holds a Bachelor's degree in Computer Science Engineering, providing foundational depth in systems architecture and analytical problem-solving."
-   → Credential without crossover or output. Vacuous filler. Cut.
-
-✗ Producing 7 bullets to feel comprehensive, or 4 bullets when the data supports 6.
-   → The count is fixed at 5 to 6 by design. Choose based on data richness, not output ambition.
-</bad_examples>
-
-<output_format>
-Output 5 to 6 bullets only. Each line begins with "• " (bullet character + space). Ordered strongest to weakest by hiring-decision weight.
-
-No preamble, no headings, no markdown fences, no closing remark. Just the bullets.
-
-Now produce the output.
-</output_format>"""
-
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            resp = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
                     "x-api-key": self.api_key,
@@ -375,195 +315,443 @@ Now produce the output.
                 },
                 json={
                     "model": "claude-sonnet-4-6",
-                    "max_tokens": 900,
+                    "max_tokens": 600,
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
-            response.raise_for_status()
-            data = response.json()
-            text = data["content"][0]["text"].strip()
+            resp.raise_for_status()
+            text = resp.json()["content"][0]["text"].strip()
 
-            # Normalize: ensure each line starts with "• "
-            lines = text.split("\n")
-            clean_lines = []
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                if line.startswith("#"):
-                    continue
-                if line.startswith("- "):
-                    line = "• " + line[2:]
-                elif line.startswith("* "):
-                    line = "• " + line[2:]
-                elif not line.startswith("•"):
-                    line = "• " + line
-                clean_lines.append(line)
+        return self._clean_bullets(text, max_bullets=5)
 
-            return "\n".join(clean_lines)
+    def _build_dynamic_prompt(self, name: str, ctx: Dict) -> str:
+        """Construct the prompt dynamically based on available data.
+        Empty sections are excluded entirely — no wasted tokens."""
 
-    # ─── Template fallback (no API available) ────────────────
+        archetype = ctx["_archetype"]
+        lead = ctx["_lead_angle"]
+        diff_str = ", ".join(ctx["_differentiators"]) or "none detected"
+        data_str = self._build_data_block(name, ctx)
 
-    def _template_bullet_summary(self, name: str, first_name: str, ctx: Dict) -> str:
-        """Generate bullet summary when API is unavailable.
-        Each bullet only added if real data backs it — no fabrication."""
+        # ── Lead instruction (based on strongest data signal) ──
+        lead_instructions = {
+            "current_role": f"Lead bullet: state current role and employer. Just the fact — no adjectives. Example: 'Currently working as {{title}} at {{company}}.'",
+            "work_experience": f"Lead bullet: state most recent or strongest work experience. Just role and company. Example: 'Worked as {{title}} at {{company}} ({{duration}}).'",
+            "scores": f"Lead bullet: state the single best score with the assignment/case-study name. Example: 'Scored 85% on the SVB Collapse case study through Upskillize coursework.'",
+            "courses": f"Lead bullet: state completed courses and platform. Example: 'Completed Banking Foundation and Payments & Cards courses on Upskillize.'",
+            "education": f"Lead bullet: state degree and institution. Example: 'B.Tech in CSE from NIT Patna (2024) graduate.'",
+            "goals": f"Lead bullet: state career direction. Example: 'Targeting Credit Analyst roles in banking.'",
+        }
+
+        # ── Archetype-specific examples ──
+        examples = self._get_examples(archetype)
+
+        # ── Build prompt sections conditionally ──
+        sections = []
+
+        sections.append(f"""Write the Summary section for a candidate profile on Upskillize. Read all the data below. Write 3 to 5 bullet points — honest, specific, grounded in facts.
+
+{lead_instructions.get(lead, lead_instructions['education'])}""")
+
+        # Rules (always included, compact)
+        sections.append("""RULES:
+- 3 to 5 bullets. Pick 3 if data is thin. 5 only if 5 different things are worth saying.
+- Each bullet: one sentence, max 25 words. No two-line bullets.
+- Every claim traces to a fact in the data. Nothing invented. Nothing inflated.
+- Never mention: ProfileIQ, TestGen, AiRev, NudgeAI, InterviewIQ, CareerIQ.
+- Course scores are course scores. Say "scored X%" not "delivered measurable output of X%".
+- Completing 1-2 courses is completing 1-2 courses. Not "sustained commitment" or "deep specialisation".
+- Skills on a profile = "trained in" or "skills include". Only say "working with" if currently employed using them.
+- Do not restate what the Education, Experience, Skills, or Certifications sections already show. Synthesise — tell the story these facts create together, don't list the facts again.
+- If someone is an intern, say intern. If fresher, don't pretend they're experienced. The summary must survive the interview — nothing should feel exaggerated when the recruiter meets the candidate.""")
+
+        # Banned phrases
+        banned_sample = ", ".join(f'"{p}"' for p in BANNED_PHRASES[:12])
+        sections.append(f"""BANNED PHRASES (never use any of these or similar):
+{banned_sample}, and all similar marketing/filler language.""")
+
+        # Examples (archetype-specific)
+        sections.append(f"""EXAMPLES of honest summaries for similar candidates:
+
+{examples}""")
+
+        # Differentiators (only if detected)
+        if ctx["_differentiators"]:
+            sections.append(f"WHAT MAKES THIS CANDIDATE DIFFERENT from others with similar credentials:\n{diff_str}")
+
+        # Data
+        sections.append(f"CANDIDATE DATA:\n{data_str}")
+
+        # Variety instruction (use seed to vary phrasing)
+        seed_mod = ctx["_seed"] % 3
+        variety_hints = [
+            "Start each bullet with a different word. No two bullets should open the same way.",
+            "Vary sentence structure: mix short declarative bullets with slightly longer ones that connect two facts.",
+            "At least one bullet should connect two facts from different parts of the data into a single insight.",
+        ]
+        sections.append(f"VARIETY: {variety_hints[seed_mod]}")
+
+        sections.append("""OUTPUT:
+• (bullet 1)
+• (bullet 2)
+• (bullet 3)
+(3 to 5 total. Nothing else — no preamble, no headings, no closing.)""")
+
+        return "\n\n".join(sections)
+
+    def _get_examples(self, archetype: str) -> str:
+        """Return 2 example summaries matched to the student's archetype.
+        These are GOOD examples — honest, specific, no inflation."""
+
+        if archetype == "working_professional":
+            return """Example A (working professional with strong data):
+• Currently working as Software Developer at TCS, writing Java microservices for a banking client.
+• Completed Banking Foundation and Payments & Cards courses on Upskillize (2 of 4 enrolled).
+• Scored 82% on the Yes Bank governance failure case study — applied risk assessment frameworks.
+• Integrity-type psychometric profile: principled, self-directed, independent in team settings.
+• Targeting senior developer roles in BFSI within 2-3 years.
+
+Example B (working professional, fewer scores):
+• Operations Analyst at HDFC Bank, 14 months in retail branch operations.
+• Finished Banking Foundation course on Upskillize; currently enrolled in Payments & Cards.
+• Best assessment score: 71%. No case studies submitted yet.
+• Career direction: moving from operations into credit analysis."""
+
+        elif archetype == "experienced_fresher":
+            return """Example A (fresher with internship):
+• Interned at Wipro for 3 months building REST APIs in Python and Django.
+• B.Tech in CSE from JNTU (2024) graduate, trained in Python, React, and SQL.
+• Completed Banking Foundation on Upskillize; scored 68% on the NPCI case study.
+• Adaptability-type psychometric profile — flexible, collaborative in team settings.
+
+Example B (fresher with multiple short roles):
+• Worked as Web Development Intern at Aagaz Training Center (3 months), then Operations Support at Startek (5 months).
+• B.Tech in CSE from VIT (2024), trained in JavaScript, React, and Node.js.
+• Course scores: 74% best assessment, 65% on UPI Fraud Detection case study.
+• Career direction: Software Developer in a bank."""
+
+        elif archetype == "new_student":
+            return """Example A (very sparse — just enrolled):
+• B.Com from Mumbai University (2024) graduate.
+• Currently enrolled in Banking Foundation on Upskillize.
+• Targeting: Banking career.
+
+Example B (slightly more data but still early):
+• BBA from Christ University (2024), trained in Excel and basic accounting.
+• Enrolled in Banking Foundation and Payments & Cards on Upskillize. No scores yet.
+• Career direction: Branch banking or operations roles."""
+
+        else:  # active_learner
+            return """Example A (active learner, no job, has scores):
+• B.Tech in ECE from GITAM (2024), trained in Python, C++, and MATLAB.
+• Completed 2 courses on Upskillize: Banking Foundation, Payments & Cards.
+• Scored 76% on SVB case study; best assessment score 80%.
+• Assessment scores improved by 18% over the course of training.
+• Targeting: FinTech analyst or payments operations roles.
+
+Example B (active learner with personality data):
+• B.Com in Accounting from Osmania University (2024).
+• Finished Banking Foundation course on Upskillize (1 of 3 enrolled).
+• Course scores: 65% best assessment. No case studies above 60%.
+• Execution-type psychometric profile — builder, action-oriented, focused.
+• Also interested in cricket and stock market analysis."""
+
+    def _build_data_block(self, name: str, ctx: Dict) -> str:
+        lines = [f"Name: {name}"]
+        if ctx["edu_str"]:
+            lines.append(f"Education: {ctx['edu_str']}")
+        if ctx["work_strs"]:
+            lines.append(f"Work: {' | '.join(ctx['work_strs'])}")
+        if ctx["current_designation"] or ctx["current_employer"]:
+            cur = f"Current role: {ctx['current_designation']}" if ctx["current_designation"] else "Current: "
+            if ctx["current_employer"]:
+                cur += f" at {ctx['current_employer']}"
+            if ctx["work_years"]:
+                cur += f" ({ctx['work_years']}y)"
+            lines.append(cur)
+        if ctx["top_skills"]:
+            lines.append(f"Skills: {', '.join(ctx['top_skills'])}")
+        if ctx["top_courses"]:
+            lines.append(f"Courses: {', '.join(ctx['top_courses'])}")
+        if ctx["best_case"]:
+            lines.append(f"Best case study: {ctx['best_case']}")
+        if ctx["cert_names"]:
+            lines.append(f"Certifications: {', '.join(ctx['cert_names'])}")
+        if ctx["overall_score"] > 0:
+            lines.append(f"Overall score: {ctx['overall_score']}%")
+        if ctx["best_test_score"] > 0:
+            lines.append(f"Best assessment: {ctx['best_test_score']}%")
+        if ctx["total_assessments"] > 0:
+            lines.append(f"Assessments completed: {ctx['total_assessments']}")
+        if ctx["completed_courses"] > 0:
+            lines.append(f"Courses done: {ctx['completed_courses']}/{ctx['total_courses']}")
+        if ctx["training_hours"] > 0:
+            lines.append(f"Training hours: {ctx['training_hours']}")
+        if ctx["consistency"] > 0:
+            lines.append(f"Consistency: {ctx['consistency']}%")
+        if ctx["improvement_pct"] > 0:
+            lines.append(f"Score improvement: {ctx['improvement_pct']}%")
+        if ctx["personality_type"] and ctx["personality_type"] != "Getting Started":
+            lines.append(f"Personality: {ctx['personality_type']}")
+        if ctx["personality_traits"]:
+            lines.append(f"Traits: {ctx['personality_traits']}")
+        if ctx["work_style"]:
+            lines.append(f"Work style: {ctx['work_style']}")
+        if ctx["linkedin_headline"]:
+            lines.append(f"LinkedIn: {ctx['linkedin_headline']}")
+        if ctx["career_goals"]:
+            lines.append(f"Goal: {ctx['career_goals']}")
+        if ctx["preferred_role"]:
+            lines.append(f"Target role: {ctx['preferred_role']}")
+        if ctx["hobbies"]:
+            lines.append(f"Hobbies: {ctx['hobbies']}")
+        if ctx["about_me"]:
+            lines.append(f"About me: {ctx['about_me'][:200]}")
+        if ctx["domain"]:
+            lines.append(f"Domain: {ctx['domain']}")
+        return "\n".join(lines)
+
+    # ═══════════════════════════════════════════════════════════
+    #  TEMPLATE FALLBACK
+    # ═══════════════════════════════════════════════════════════
+
+    def _template_summary(self, name: str, first_name: str, ctx: Dict) -> str:
+        seed = ctx["_seed"]
+        lead = ctx["_lead_angle"]
         bullets = []
 
-        positioning = self._make_positioning_bullet(first_name, ctx)
-        if positioning:
-            bullets.append(positioning)
+        # Bullet 1: Lead (based on strongest signal)
+        b1 = self._lead_bullet(ctx, seed, lead)
+        if b1:
+            bullets.append(b1)
 
-        edu_bullet = self._make_education_bullet(ctx)
-        if edu_bullet:
-            bullets.append(edu_bullet)
+        # Bullet 2: Courses / training (if available and not already in lead)
+        if lead != "courses":
+            b2 = self._courses_bullet(ctx, seed)
+            if b2:
+                bullets.append(b2)
 
-        work_bullet = self._make_work_bullet(ctx)
-        if work_bullet:
-            bullets.append(work_bullet)
+        # Bullet 3: Scores (if available and not already in lead)
+        if lead != "scores":
+            b3 = self._scores_bullet(ctx, seed)
+            if b3:
+                bullets.append(b3)
 
-        skills_bullet = self._make_skills_bullet(ctx)
-        if skills_bullet:
-            bullets.append(skills_bullet)
+        # Bullet 4: Personality OR hobbies (whichever has data)
+        b4 = self._personality_bullet(ctx, seed)
+        if b4:
+            bullets.append(b4)
 
-        ach_bullet = self._make_achievements_bullet(ctx)
-        if ach_bullet:
-            bullets.append(ach_bullet)
+        # Bullet 5: Trajectory / goal (if available)
+        b5 = self._trajectory_bullet(ctx, seed)
+        if b5:
+            bullets.append(b5)
 
-        pers_bullet = self._make_personality_bullet(ctx)
-        if pers_bullet:
-            bullets.append(pers_bullet)
+        return "\n".join(bullets[:5])
 
-        career_bullet = self._make_career_bullet(ctx)
-        if career_bullet:
-            bullets.append(career_bullet)
+    def _pick(self, variants: List[str], seed: int) -> str:
+        return variants[seed % len(variants)]
 
-        return "\n".join(bullets[:6])
+    def _lead_bullet(self, ctx: Dict, seed: int, lead: str) -> str:
+        if lead == "current_role":
+            cd, ce = ctx["current_designation"], ctx["current_employer"]
+            return self._pick([
+                f"• Currently working as {cd} at {ce}.",
+                f"• {cd} at {ce}.",
+                f"• Active {cd} at {ce}.",
+            ], seed)
 
-    def _make_positioning_bullet(self, first_name: str, ctx: Dict) -> str:
-        domain = ctx["domain"]
-        if ctx["current_designation"] and ctx["current_employer"]:
-            yrs = f" with {ctx['work_years']} years experience" if ctx["work_years"] else ""
-            return f"• {first_name} works as {ctx['current_designation']} at {ctx['current_employer']}{yrs}, focused on {domain}."
-        elif ctx["edu_str"] and ctx["top_skills"]:
-            return f"• {ctx['edu_str']} graduate with hands-on skills in {', '.join(ctx['top_skills'][:3])}, targeting entry-level {domain} roles."
-        elif ctx["edu_str"]:
-            return f"• {ctx['edu_str']} graduate, building toward a career in {domain}."
-        elif ctx["linkedin_headline"]:
-            return f"• {ctx['linkedin_headline']}"
-        else:
-            return f"• Emerging {domain} professional with credential-backed training."
+        if lead == "work_experience":
+            w = ctx["work_strs"][0]
+            return self._pick([
+                f"• Most recent role: {w}.",
+                f"• Worked as {w}.",
+                f"• Professional experience: {w}.",
+            ], seed + 1)
 
-    def _make_education_bullet(self, ctx: Dict) -> str:
-        if not ctx["edu_str"]:
+        if lead == "scores":
+            if ctx["best_case_score"] >= 60:
+                return self._pick([
+                    f"• Scored {ctx['best_case_score']:.0f}% on the {ctx['best_case_title']} case study on Upskillize.",
+                    f"• Best case study score: {ctx['best_case_score']:.0f}% on {ctx['best_case_title']}.",
+                ], seed + 2)
+            if ctx["best_test_score"] >= 60:
+                return f"• Best assessment score: {ctx['best_test_score']}% on Upskillize coursework."
+
+        if lead == "courses":
+            return self._courses_bullet(ctx, seed)
+
+        if lead == "goals":
+            goal = ctx["preferred_role"] or ctx["career_goals"]
+            return f"• Targeting: {goal[:100]}."
+
+        # education (default)
+        if ctx["edu_str"]:
+            if ctx["top_skills"]:
+                sk = ", ".join(ctx["top_skills"][:3])
+                return self._pick([
+                    f"• {ctx['edu_str']} graduate, trained in {sk}.",
+                    f"• {ctx['edu_str']} graduate with training in {sk}.",
+                    f"• {ctx['edu_str']} — skills include {sk}.",
+                ], seed + 3)
+            return f"• {ctx['edu_str']} graduate."
+
+        return f"• Early-career candidate in {ctx['domain']}."
+
+    def _courses_bullet(self, ctx: Dict, seed: int) -> str:
+        courses = ctx["top_courses"]
+        completed = ctx["completed_courses"]
+        total = ctx["total_courses"]
+        if not courses:
             return ""
-        return f"• Holds a {ctx['edu_str']} — quantitative foundation for a {ctx['domain']} career."
+        if completed > 0:
+            cl = ", ".join(courses[:2])
+            return self._pick([
+                f"• Completed {cl} {'courses' if completed > 1 else 'course'} on Upskillize ({completed} of {total} enrolled).",
+                f"• {completed} course{'s' if completed != 1 else ''} completed on Upskillize: {cl}.",
+                f"• Finished {cl} through Upskillize coursework.",
+            ], seed + 4)
+        return f"• Currently enrolled in {', '.join(courses[:2])} on Upskillize."
 
-    def _make_work_bullet(self, ctx: Dict) -> str:
-        if not ctx["work_strs"]:
-            return ""
-        if len(ctx["work_strs"]) == 1:
-            return f"• Hands-on industry exposure as {ctx['work_strs'][0]}."
-        else:
-            return f"• Cross-functional experience across {' and '.join(ctx['work_strs'][:2])}."
-
-    def _make_skills_bullet(self, ctx: Dict) -> str:
-        if not ctx["top_skills"]:
-            return ""
-        skills = ctx["top_skills"][:5]
-        if ctx["best_test_score"] > 0:
-            return f"• Working command of {', '.join(skills)}; peak assessment score {ctx['best_test_score']}%."
-        return f"• Working command of {', '.join(skills)} from coursework and applied projects."
-
-    def _make_achievements_bullet(self, ctx: Dict) -> str:
+    def _scores_bullet(self, ctx: Dict, seed: int) -> str:
         parts = []
-        if ctx["best_case"]:
-            parts.append(f"top score on the {ctx['best_case']} case study")
-        if ctx["completed_courses"] > 0:
-            parts.append(f"{ctx['completed_courses']} certified programme{'s' if ctx['completed_courses'] != 1 else ''}")
-        if ctx["cert_names"]:
-            parts.append(f"holds {ctx['cert_names'][0]}")
-        if ctx["overall_score"] >= 70:
-            parts.append(f"{ctx['overall_score']}% aggregate performance")
+        if ctx["best_case_score"] >= 60:
+            parts.append(f"{ctx['best_case_score']:.0f}% on the {ctx['best_case_title']} case study")
+        if ctx["best_test_score"] >= 60:
+            parts.append(f"{ctx['best_test_score']}% best assessment score")
         if not parts:
+            if ctx["cert_names"]:
+                return f"• Holds {ctx['cert_names'][0]} certification."
             return ""
-        joined = "; ".join(parts[:3])
-        return f"• Track record: {joined}."
+        joined = "; ".join(parts[:2])
+        return self._pick([
+            f"• Course scores: {joined}.",
+            f"• Scores to date: {joined}.",
+            f"• Best scores: {joined}.",
+        ], seed + 5)
 
-    def _make_personality_bullet(self, ctx: Dict) -> str:
-        if not ctx["personality_type"] or ctx["personality_type"] in ("Getting Started", ""):
-            return ""
-        result = f"• {ctx['personality_type']}-type psychometric"
-        traits = ctx["personality_traits"]
-        ws = ctx["work_style"]
-        if traits:
-            result += f" — {traits.lower()}"
-        if ws:
-            result += f", {ws.lower()} in team settings"
-        result += "."
-        return result
+    def _personality_bullet(self, ctx: Dict, seed: int) -> str:
+        ptype = ctx["personality_type"]
+        if ptype and ptype not in ("Getting Started", ""):
+            traits = ctx["personality_traits"]
+            ws = ctx["work_style"]
+            base = f"• {ptype}-type psychometric profile"
+            if traits and ws:
+                article = "an" if ws.lower()[0] in "aeiou" else "a"
+                return self._pick([
+                    f"{base} — {traits.lower()}, {ws.lower()} in team settings.",
+                    f"{base}: {traits.lower()} with {article} {ws.lower()} approach.",
+                    f"{base} indicating {traits.lower()} and {ws.lower()} work preferences.",
+                ], seed + 6)
+            if traits:
+                return self._pick([
+                    f"{base} — {traits.lower()}.",
+                    f"{base}: {traits.lower()}.",
+                ], seed + 6)
+            return f"{base}."
 
-    def _make_career_bullet(self, ctx: Dict) -> str:
-        if ctx["preferred_role"]:
-            return f"• Targeting {ctx['preferred_role']} roles in BFSI organizations."
-        elif ctx["career_goals"]:
-            cg = ctx["career_goals"][:120]
-            return f"• Career goal: {cg}"
+        if ctx["hobbies"]:
+            return self._pick([
+                f"• Interests: {ctx['hobbies'].lower()}.",
+                f"• Also interested in {ctx['hobbies'].lower()}.",
+            ], seed + 7)
         return ""
 
-    # ─── Domain detection ─────────────────────────────────────
+    def _trajectory_bullet(self, ctx: Dict, seed: int) -> str:
+        goal = ctx["preferred_role"] or ctx["career_goals"]
+        if goal:
+            g = goal[:100]
+            return self._pick([
+                f"• Targeting: {g}.",
+                f"• Career direction: {g}.",
+                f"• Goal: {g.lower()}.",
+            ], seed + 8)
+        if ctx["improvement_pct"] >= 15:
+            return f"• Assessment scores improved by {ctx['improvement_pct']}% over the course of training."
+        if ctx["consistency"] >= 70:
+            return f"• {ctx['consistency']}% consistency score across coursework and submissions."
+        return ""
 
-    def _derive_domain(self, course_names: list, education=None, work_experience=None, personal=None) -> str:
-        if education is None: education = []
-        if work_experience is None: work_experience = []
-        if personal is None: personal = {}
+    # ═══════════════════════════════════════════════════════════
+    #  UTILITIES
+    # ═══════════════════════════════════════════════════════════
 
-        all_text_parts = list(course_names)
+    @staticmethod
+    def _clean_bullets(text: str, max_bullets: int = 5) -> str:
+        lines = text.split("\n")
+        clean = []
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("- "):
+                line = "• " + line[2:]
+            elif line.startswith("* "):
+                line = "• " + line[2:]
+            elif not line.startswith("•"):
+                line = "• " + line
+            # Strip agent names
+            for agent in ("ProfileIQ", "TestGen", "AiRev", "NudgeAI", "InterviewIQ", "CareerIQ"):
+                line = line.replace(agent, "AI agent")
+            # Strip banned phrases (safety net)
+            line_lower = line.lower()
+            for phrase in BANNED_PHRASES:
+                if phrase in line_lower:
+                    # Replace the phrase with empty, clean up double spaces
+                    import re
+                    line = re.sub(re.escape(phrase), "", line, flags=re.IGNORECASE).strip()
+                    line = re.sub(r"  +", " ", line)
+                    # Fix dangling punctuation
+                    line = line.replace(" ,", ",").replace(" .", ".").replace(",,", ",")
+            clean.append(line)
+        return "\n".join(clean[:max_bullets])
+
+    @staticmethod
+    def _derive_domain(course_names: list, education=None, work_experience=None, personal=None) -> str:
+        if education is None:
+            education = []
+        if work_experience is None:
+            work_experience = []
+        if personal is None:
+            personal = {}
+
+        parts = list(course_names)
         for edu in education:
-            all_text_parts.append(edu.get("degree", ""))
-            all_text_parts.append(edu.get("field_of_study", ""))
-            all_text_parts.append(edu.get("institution", ""))
-        for work in work_experience:
-            all_text_parts.append(work.get("title", ""))
-            all_text_parts.append(work.get("company", ""))
-            all_text_parts.append(work.get("description", ""))
-        all_text_parts.append(personal.get("career_goals", "") or "")
-        all_text_parts.append(personal.get("preferred_role", "") or "")
-        all_text_parts.append(personal.get("current_designation", "") or "")
-        all_text_parts.append(personal.get("linkedin_headline", "") or "")
-        all_text_parts.append(personal.get("key_skills", "") or "")
+            parts.extend([edu.get("degree", ""), edu.get("field_of_study", ""), edu.get("institution", "")])
+        for w in work_experience:
+            parts.extend([w.get("title", ""), w.get("company", ""), w.get("description", "")])
+        parts.extend([
+            personal.get("career_goals", "") or "",
+            personal.get("preferred_role", "") or "",
+            personal.get("current_designation", "") or "",
+            personal.get("linkedin_headline", "") or "",
+            personal.get("key_skills", "") or "",
+        ])
 
-        text = " ".join(all_text_parts).lower()
+        text = " ".join(parts).lower()
         if not text.strip():
             return "Financial Services"
 
-        if "business analy" in text or "business intelligence" in text:
-            return "Business Analysis & Analytics"
-        elif "ux" in text or "user experience" in text or "user interface" in text or "ui design" in text:
-            return "UX/UI Design & Digital Product"
-        elif "data analy" in text or "data scien" in text or "power bi" in text or "tableau" in text:
-            return "Data Analytics & Business Intelligence"
-        elif "web develop" in text or "full stack" in text or "frontend" in text or "backend" in text:
-            return "Software Development & Engineering"
-        elif "digital market" in text or "marketing" in text or "seo" in text:
-            return "Digital Marketing & Strategy"
-        elif "fintech" in text or "digital bank" in text:
-            return "FinTech & Digital Banking"
-        elif "operations executive" in text or "branch operations" in text or "core banking" in text:
-            return "Banking Operations & Financial Services"
-        elif "e-commerce" in text or "ecommerce" in text:
-            return "E-Commerce & Digital Business"
-        elif "payment" in text or "card" in text or "upi" in text:
-            return "Payment Systems & Digital Transactions"
-        elif "banking" in text or "b.com" in text or "bcom" in text or "commerce" in text:
-            return "Banking & Financial Services"
-        elif "insurance" in text:
-            return "Insurance & Risk"
-        elif "risk" in text or "compliance" in text:
-            return "Risk & Compliance"
-        elif "finance" in text:
-            return "Finance & Financial Services"
-        elif "python" in text or "java" in text or "programming" in text:
-            return "Software Development"
-        elif "design" in text:
-            return "Design & Creative Technology"
+        domain_map = [
+            (["business analy", "business intelligence"], "Business Analysis & Analytics"),
+            (["ux", "user experience", "user interface", "ui design"], "UX/UI Design & Digital Product"),
+            (["data analy", "data scien", "power bi", "tableau"], "Data Analytics & Business Intelligence"),
+            (["web develop", "full stack", "frontend", "backend"], "Software Development & Engineering"),
+            (["digital market", "marketing", "seo"], "Digital Marketing & Strategy"),
+            (["fintech", "digital bank"], "FinTech & Digital Banking"),
+            (["operations executive", "branch operations", "core banking"], "Banking Operations & Financial Services"),
+            (["e-commerce", "ecommerce"], "E-Commerce & Digital Business"),
+            (["payment", "card", "upi"], "Payment Systems & Digital Transactions"),
+            (["banking", "b.com", "bcom", "commerce"], "Banking & Financial Services"),
+            (["insurance"], "Insurance & Risk"),
+            (["risk", "compliance"], "Risk & Compliance"),
+            (["finance"], "Finance & Financial Services"),
+            (["python", "java", "programming"], "Software Development"),
+            (["design"], "Design & Creative Technology"),
+        ]
+
+        for keywords, domain in domain_map:
+            if any(kw in text for kw in keywords):
+                return domain
+
         return "Financial Services"
