@@ -481,7 +481,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
     <div>
       <div class="hero-eyebrow">
         {% if hero_eyebrow_tags and hero_eyebrow_tags|length > 0 %}
-          {{ hero_eyebrow_tags | join(' &middot; ') | safe }}
+          {{ hero_eyebrow_tags | join(' · ') }}
         {% elif is_fresher %}
           Fresher &middot; Upskillize Candidate
         {% else %}
@@ -489,7 +489,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         {% endif %}
       </div>
       <h1 class="hero-name">{{ student_name }}</h1>
-      {% if headline %}<p class="hero-headline">{{ headline | safe }}</p>{% endif %}
+      {% if headline %}<p class="hero-headline">{{ headline }}</p>{% endif %}
       <div class="hero-meta">
         {% if student_location %}<span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>{{ student_location }}</span>{% endif %}
         {% if student_email %}<a href="mailto:{{ student_email }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>{{ student_email }}</a>{% endif %}
@@ -568,11 +568,11 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
     {% set raw = professional_summary|trim %}
     <ul class="summary-bullets">
       {% if '•' in raw %}
-        {% for part in raw.split('•') %}{% set clean = part|trim %}{% if clean and clean|length > 5 %}<li><span class="bullet-mark"></span><span>{{ clean | safe }}</span></li>{% endif %}{% endfor %}
+        {% for part in raw.split('•') %}{% set clean = part|trim %}{% if clean and clean|length > 5 %}<li><span class="bullet-mark"></span><span>{{ clean }}</span></li>{% endif %}{% endfor %}
       {% elif '\n' in raw and (raw.split('\n')|length) >= 3 %}
-        {% for line in raw.split('\n') %}{% set clean = line|trim %}{% if clean[:2] in ('- ','* ') %}{% set clean = clean[2:]|trim %}{% elif clean[:1] in ('-','*') %}{% set clean = clean[1:]|trim %}{% endif %}{% if clean and clean|length > 5 %}<li><span class="bullet-mark"></span><span>{{ clean | safe }}</span></li>{% endif %}{% endfor %}
+        {% for line in raw.split('\n') %}{% set clean = line|trim %}{% if clean[:2] in ('- ','* ') %}{% set clean = clean[2:]|trim %}{% elif clean[:1] in ('-','*') %}{% set clean = clean[1:]|trim %}{% endif %}{% if clean and clean|length > 5 %}<li><span class="bullet-mark"></span><span>{{ clean }}</span></li>{% endif %}{% endfor %}
       {% else %}
-        <li><span class="bullet-mark"></span><span>{{ raw | safe }}</span></li>
+        <li><span class="bullet-mark"></span><span>{{ raw }}</span></li>
       {% endif %}
     </ul>
   {% else %}
@@ -1178,7 +1178,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% if generated_date %}<span>Generated {{ generated_date }}</span>{% endif %}
       {% if updated_date %}<span>Updated {{ updated_date }}</span>{% endif %}
       {% if total_views is not none %}<span>{{ total_views }} views</span>{% endif %}
-      {% if profile_url %}<a href="{{ profile_url }}" target="_blank" rel="noopener" style="color:rgba(255,255,255,0.55);">Open ↗</a>{% endif %}
+      {# v12.6 — removed "Open ↗" link: it pointed at the DELETED /profile/public/{slug} endpoint and leaked the slug in shared HTML #}
     </div>
   </div>
 </footer>

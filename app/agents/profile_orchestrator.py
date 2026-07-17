@@ -166,13 +166,22 @@ class ProfileOrchestrator:
         github_data = ext["github_data"]
         linkedin_data = ext["linkedin_data"]
 
+        # ── Step 2b: sanitize student-typed fields BEFORE anything reaches
+        # the AI or the rendered profile (v7.1 — full generation previously
+        # skipped the abuse filter; only partial regen cleaned these).
+        for f in ("hobbies", "bio", "about_me", "career_goals"):
+            personal[f] = self.ai_enhancer.clean_field(personal.get(f), f)
+
         # ── Step 3: Merge all data sources ──
         merged_data = self.data_merger.merge(student_data, resume_data, github_data, linkedin_data)
-        summary = await self.ai_enhancer.generate_summary(student_data, merged_data)
 
-        # ── Step 4: Generate AI summary + rule-based skills (parallel) ──
+        # ── Step 4: validated summary + rule-based skills (parallel) ──
+        # v7.1 FIX: the enhancer summary (grounding gate, layered fallback,
+        # hash cache) was previously computed and then immediately
+        # OVERWRITTEN by a second raw summary_agent call — double LLM cost
+        # per profile and the whole validation layer was thrown away.
         summary, skills = await asyncio.gather(
-            self.summary_agent.generate(merged_data),
+            self.ai_enhancer.generate_summary(student_data, merged_data),
             self.skills_agent.generate(merged_data),
             return_exceptions=True,
         )
@@ -209,8 +218,13 @@ class ProfileOrchestrator:
         achievements = self.achievement_engine.generate_all(merged_data, role_matches)
 
         # ── Step 9: AI Polish — enhance projects, experience, headline ──
+        # v7.1 FIX: polish_all uses a SYNCHRONOUS httpx client (up to 45s
+        # per call). Called inline it froze the event loop — every other
+        # request on the Space stalled during each polish. to_thread keeps
+        # the loop free.
         try:
-            polished = self.ai_polisher.polish_all(student_data, merged_data)
+            polished = await asyncio.to_thread(
+                self.ai_polisher.polish_all, student_data, merged_data)
             if polished.get("polished_projects"):
                 projects_list = merged_data.get("projects", [])[:5]
                 for i, pp in enumerate(polished["polished_projects"]):

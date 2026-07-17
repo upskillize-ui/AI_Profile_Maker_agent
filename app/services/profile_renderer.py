@@ -211,9 +211,11 @@ def _compute_perf_snapshot(student_data: Dict, profile_data: Dict, computed: Dic
     test_scores     = _dedupe_best_rows(student_data.get("test_scores", []) or [], "quiz_id", "title")
     case_studies    = _dedupe_best_rows(student_data.get("case_studies", []) or [], "case_study_id", "title")
     capstones       = _dedupe_best_rows(student_data.get("capstone_projects", []) or [], "capstone_id", "title")
+    # topic-first: TestGen mints a new test_id per attempt, so grouping by
+    # test_id never collapses retakes (the "32 mock tests / axis 24" bug).
     mock_tests      = _dedupe_best_rows(
         (student_data.get("mock_tests", []) or student_data.get("quiz_scores", []) or []),
-        "test_id", "topic", "title")
+        "topic", "title")
     mock_interviews = _dedupe_best_rows(student_data.get("mock_interviews", []) or [], "session_id", "title")
     industry        = _dedupe_best_rows(
         (student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or []),
@@ -586,7 +588,7 @@ class ProfileRenderer:
             "case_studies":    _dedupe_best_rows(student_data.get("case_studies", []) or [], "case_study_id", "title"),
             "assignments":     _dedupe_best_rows(student_data.get("assignments", []) or [], "assignment_id", "title"),
             "assessments":     combined_assessments,   # already deduped
-            "mock_tests":      _dedupe_best_rows(student_data.get("mock_tests", []) or [], "test_id", "topic", "title"),
+            "mock_tests":      _dedupe_best_rows(student_data.get("mock_tests", []) or [], "topic", "title"),
             "mock_interviews": _dedupe_best_rows(student_data.get("mock_interviews", []) or [], "session_id", "title"),
             "industry":        _dedupe_best_rows(
                 (student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or []),
@@ -692,7 +694,9 @@ class ProfileRenderer:
             "data_sources":     profile_data.get("data_sources", []) or [],
             "slug":             slug,
             "visibility":       visibility,
-            "profile_url":      f"{agent_base}/api/v1/profile/public/{slug}",
+            # v12.6: /profile/public/{slug} was deleted in the security
+            # rebuild — never emit that URL into shared HTML.
+            "profile_url":      "",
 
             # Backward-compat top-level keys (v10/v11 templates referenced these
             # directly without the `computed.` prefix). v12 template does not

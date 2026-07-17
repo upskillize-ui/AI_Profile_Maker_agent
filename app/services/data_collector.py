@@ -226,24 +226,26 @@ class DataCollector:
           id, student_id, course_id, completion_status, payment_status,
           progress_percentage, completed_at, created_at, updated_at
         NO `status` column, NO `enrolled_at` column.
+
+        v6.4 CONVENTION (verified against production data, 17 Jul 2026):
+        enrollments.student_id stores students.id, NOT users.id.
+        Confirmed via: SELECT student_id, course_id FROM enrollments
+        WHERE student_id IN (87, 52) → all rows under 52 (students.id)
+        for Ranjana (users.id=87, students.id=52), courses 38/46/47.
+
+        So: resolve users.id → students.id ONCE, query with students.id
+        ONLY. No try-both fallback — querying users.id against a
+        students.id column can numerically collide with ANOTHER student's
+        enrollments, which is worse than returning nothing.
         """
         try:
-            rows = self.db.execute(text("""
-                SELECT
-                    e.id                    AS enrollment_id,
-                    e.course_id,
-                    e.completion_status,
-                    e.progress_percentage,
-                    e.completed_at,
-                    e.created_at            AS enrolled_at,
-                    c.course_name,
-                    c.description           AS description,
-                    c.category
-                FROM enrollments e
-                LEFT JOIN courses c ON c.id = e.course_id
-                WHERE e.student_id = :uid
-                ORDER BY e.created_at DESC
-            """), {"uid": user_id}).mappings().all()
+            sid = self._resolve_students_id(user_id)
+            if sid is None:
+                logger.warning(
+                    f"_get_courses: no students-table row for user_id={user_id}; "
+                    f"cannot read enrollments (convention: students.id)")
+                return []
+            rows = self._query_courses(sid)
             return [
                 {
                     "enrollment_id": r["enrollment_id"],
@@ -265,6 +267,36 @@ class DataCollector:
         except Exception as e:
             logger.warning(f"_get_courses failed for user_id={user_id}: {e}")
             return []
+
+    def _query_courses(self, enrollment_student_id: int):
+        """Raw enrollments query for one candidate id (users.id OR students.id)."""
+        return self.db.execute(text("""
+            SELECT
+                e.id                    AS enrollment_id,
+                e.course_id,
+                e.completion_status,
+                e.progress_percentage,
+                e.completed_at,
+                e.created_at            AS enrolled_at,
+                c.course_name,
+                c.description           AS description,
+                c.category
+            FROM enrollments e
+            LEFT JOIN courses c ON c.id = e.course_id
+            WHERE e.student_id = :uid
+            ORDER BY e.created_at DESC
+        """), {"uid": enrollment_student_id}).mappings().all()
+
+    def _resolve_students_id(self, user_id: int) -> Optional[int]:
+        """users.id → students.id via the students table (students.user_id)."""
+        try:
+            row = self.db.execute(text("""
+                SELECT id FROM students WHERE user_id = :uid LIMIT 1
+            """), {"uid": user_id}).first()
+            return int(row[0]) if row else None
+        except Exception as e:
+            logger.warning(f"_resolve_students_id failed for user_id={user_id}: {e}")
+            return None
 
     # =====================================================================
     # ACTIVITY FLOW 1 — CASE STUDIES
@@ -928,7 +960,10 @@ class DataCollector:
         case_studies = self._dedupe_best(sections.get("case_studies") or [], "case_study_id", "title")
         capstones = self._dedupe_best(sections.get("capstones") or [], "capstone_id", "title")
         industry = self._dedupe_best(sections.get("industry_sessions") or [], "session_id", "title")
-        mock_tests = self._dedupe_best(sections.get("mock_tests") or [], "test_id", "topic", "title")
+        # NOTE: TestGen mints a NEW test_id per attempt, so test_id is
+        # useless as a grouping key (32 attempts looked like 32 tests).
+        # Group by topic — retaking "Banking Basics" = one item, best score.
+        mock_tests = self._dedupe_best(sections.get("mock_tests") or [], "topic", "title")
         mock_interviews = self._dedupe_best(sections.get("mock_interviews") or [], "session_id", "title")
         assessments = self._dedupe_best(sections.get("assessments") or [], "quiz_id", "title")
 
@@ -984,7 +1019,8 @@ class DataCollector:
             except (TypeError, ValueError):
                 return None
 
-        best_tests = self._dedupe_best(mock_tests, "test_id", "topic", "title")
+        # topic-first grouping — TestGen's test_id is unique per attempt
+        best_tests = self._dedupe_best(mock_tests, "topic", "title")
         test_scores = [_f(t.get("score")) for t in best_tests]
         test_scores = [s for s in test_scores if s is not None]
 

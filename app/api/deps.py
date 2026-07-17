@@ -3,6 +3,7 @@ Dependencies — DB sessions and JWT authentication.
 Connected to the same JWT system as your Node.js LMS backend.
 """
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException, Header
 from app.config import get_settings
@@ -103,7 +104,19 @@ def get_current_corporate(
              user_id = payload.get("id") or payload.get("sub")
          except jwt.PyJWTError:
              raise HTTPException(401, "Invalid token.")
-         user = db.query(User).filter_by(id=user_id).first()
-         if not user or user.role != "corporate":
+         # v5.1 FIX: there is no SQLAlchemy `User` model in this service —
+         # the old line `db.query(User)` raised NameError → 500 on every
+         # corporate request. Verify the role straight from the users table.
+         row = db.execute(
+             text("SELECT id, role FROM users WHERE id = :uid LIMIT 1"),
+             {"uid": user_id},
+         ).mappings().first()
+         if not row or (row.get("role") or "").lower() != "corporate":
              raise HTTPException(403, "Corporate access only.")
-         return user
+
+         class CorporateUser:
+             def __init__(self, r):
+                 self.id = r["id"]
+                 self.role = r["role"]
+
+         return CorporateUser(row)
