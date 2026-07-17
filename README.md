@@ -1,8 +1,4 @@
 ---
-title: Profile-iq
-emoji: 🚀
-colorFrom: blue
-colorTo: purple
-sdk: docker
-pinned: false
+title: Profile IQ
+short_description: The AI Profile Agent of the Upskillize EcoPro LMS
 ---
