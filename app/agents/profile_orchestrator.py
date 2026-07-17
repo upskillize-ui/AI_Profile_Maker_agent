@@ -747,10 +747,31 @@ class ProfileOrchestrator:
                 "courses_completed": c.get("completed_courses", 0), "total_enrolled": c.get("total_courses", 0), "milestones": milestones[:15]}
 
     def _personality(self, d: Dict) -> dict:
-        p = d.get("personality", {})
-        return {"personality_type": p.get("personality_type", ""), "traits": p.get("traits_json", ""),
-                "work_style": p.get("work_style", ""), "communication": p.get("communication_profile", ""),
-                "leadership": p.get("leadership_indicators", "")}
+        """v7.2 FIX: the collector outputs personality as
+        {personality_type, traits: [list], strengths: [list], summary} —
+        this method previously read traits_json / work_style /
+        communication_profile (an older schema that no longer exists), so
+        the Beyond Work card always rendered locked ("Complete the
+        psychometric test") even for students who completed it."""
+        p = d.get("personality", {}) or {}
+
+        def _join(v):
+            if isinstance(v, (list, tuple)):
+                return ", ".join(str(x) for x in v if x)
+            return str(v) if v else ""
+
+        traits = _join(p.get("traits_json") or p.get("traits"))
+        strengths = _join(p.get("strengths"))
+        return {
+            "personality_type": p.get("personality_type") or "",
+            "traits":       traits or p.get("summary") or "",
+            "traits_json":  traits,
+            "strengths":    strengths,
+            "work_style":   p.get("work_style") or strengths or "",
+            "communication": p.get("communication_profile") or "",
+            "leadership":    p.get("leadership_indicators") or "",
+            "summary":       p.get("summary") or "",
+        }
 
     def _emergency_summary(self, d: Dict) -> str:
         name = (d.get("personal", {}).get("full_name") or "Student").strip()

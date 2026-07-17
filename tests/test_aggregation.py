@@ -389,6 +389,21 @@ class TestGroundednessGate:
         grounded, invented = _check_groundedness(summary, self.SOURCE)
         assert grounded, f"honest summary rejected; invented={invented}"
 
+    def test_connective_english_never_trips_gate(self):
+        """Regression for prod 17 Jul (2nd round): words like 'across',
+        'spanning', 'suggests', 'both' were flagged as inventions and every
+        tier failed. The v1.2 targeted gate must ignore connective prose."""
+        from app.agents.ai_enhancer import _check_groundedness
+        summary = (
+            "• Progress across both enrolled courses suggests a focus spanning "
+            "banking concepts and digital channels, moving toward analyst work.\n"
+            "• Performance reflects early-stage learning rather than deep "
+            "specialization, though results within case work are strongest.\n"
+            "• Targeting Business Analyst roles in banking."
+        )
+        grounded, invented = _check_groundedness(summary, self.SOURCE)
+        assert grounded, f"connective prose rejected; invented={invented}"
+
     def test_wholesale_invention_still_fails(self):
         from app.agents.ai_enhancer import _check_groundedness
         summary = (
@@ -400,12 +415,69 @@ class TestGroundednessGate:
         )
         grounded, invented = _check_groundedness(summary, self.SOURCE)
         assert not grounded, "fabricated summary passed the gate"
+        assert any(i.startswith("tech:") for i in invented), invented
+
+    def test_invented_score_fails_small_counts_pass(self):
+        from app.agents.ai_enhancer import _check_groundedness
+        # "2 of 4" is arithmetic (allowed); "scored 92%" is a fake metric
+        ok = "• Completed 2 of 4 enrolled courses on Upskillize."
+        grounded, _ = _check_groundedness(ok, self.SOURCE)
+        assert grounded
+        fake = "• Scored 92% on the Fraud & AML Pattern Detection capstone."
+        grounded, invented = _check_groundedness(fake, self.SOURCE)
+        assert not grounded and any(i.startswith("number:") for i in invented)
+
+    def test_invented_employer_fails(self):
+        from app.agents.ai_enhancer import _check_groundedness
+        summary = "• Currently working as an analyst at Goldman Sachs in Mumbai."
+        grounded, invented = _check_groundedness(summary, self.SOURCE)
+        assert not grounded and any(i.startswith("name:") for i in invented)
 
     def test_interview_vocab_is_harvested(self):
         from app.agents.ai_enhancer import _extract_source_vocabulary
         vocab = _extract_source_vocabulary(self.SOURCE)
         assert "hdfc" in vocab          # mock_interviews company now indexed
         assert "advanced" in vocab      # mock test band now indexed
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Beyond Work section — personality / hobbies / languages key mapping
+# Regression for prod 17 Jul: card locked + "Add hobbies" despite data.
+# ═══════════════════════════════════════════════════════════════════
+
+class TestBeyondWork:
+
+    def test_personality_traits_map_from_collector_shape(self):
+        from app.agents.profile_orchestrator import ProfileOrchestrator
+        merged = {"personality": {
+            "personality_type": "Integrity",
+            "traits": ["principled", "self-directed", "independent"],
+            "strengths": ["accuracy", "consistency"],
+            "summary": "Works best with clear rules.",
+            "status": "available",
+        }}
+        out = ProfileOrchestrator._personality(None, merged)
+        assert out["personality_type"] == "Integrity"
+        assert "principled" in out["traits"]          # card unlocks
+        assert out["work_style"]                       # strengths fallback
+
+    def test_hobbies_and_languages_render_from_personal_fields(self):
+        sd = _base_student()
+        sd["personal"]["hobbies"] = "Cricket, Stock Market Analysis; Reading"
+        sd["personal"]["languages_known"] = "English, Hindi, Kannada"
+        html = _render(sd)
+        assert "Cricket" in html and "Stock Market Analysis" in html
+        assert "Add hobbies on your LMS profile" not in html
+        assert "English · Hindi · Kannada" in html
+
+    def test_minimal_fallback_no_double_period(self):
+        from app.agents.ai_enhancer import AIEnhancer
+        enh = AIEnhancer(summary_agent=None)
+        out = enh._minimal_fallback({
+            "personal": {"career_goals": "To be a Senior Software Engineer in 3 to 5 years."},
+            "courses": [{"course_name": "Payments & Cards"}],
+        })
+        assert ".." not in out
 
 
 # ═══════════════════════════════════════════════════════════════════

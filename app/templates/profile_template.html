@@ -1,1218 +1,582 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ student_name or 'Upskillize' }} — Upskillize AI Profile</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ student_name }} — Upskillize AI Profile</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --navy-deep:#0B1628;--navy:#1a2744;--navy2:#111D35;
-  --gold:#C8992A;--gold-bright:#F5B800;
-  --teal:#00C4A0;--orange:#E8521A;--rose:#E85A8C;--violet:#7B5BD9;
-  --cream:#FBF9F4;--paper:#FFFFFF;
-  --ink:#1a2744;--ink-soft:#5A6478;
-  --hairline:rgba(26,39,68,0.08);
+  --bg:#0B1426;--bg2:#162236;--bg3:#1E3050;--border:#243B5F;
+  --text:#E2E8F0;--muted:#94A3B8;--subtle:#64748B;
+  --accent:#3B82F6;--gold:#D4A017;--green:#10B981;--red:#EF4444;--purple:#8B5CF6;--teal:#14B8A6;--orange:#F59E0B;
+  --accent-soft:rgba(59,130,246,.12);--gold-soft:rgba(212,160,23,.12);--green-soft:rgba(16,185,129,.12);--red-soft:rgba(239,68,68,.12);--purple-soft:rgba(139,92,246,.12);--teal-soft:rgba(20,184,166,.12);
+  --font-display:'Fraunces',serif;--font-body:'Plus Jakarta Sans',sans-serif;
+  --radius:12px;
 }
-*{margin:0;padding:0;box-sizing:border-box;}
-html{scroll-behavior:smooth;scroll-padding-top:130px;}
-body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:var(--ink);background:var(--cream);line-height:1.6;-webkit-font-smoothing:antialiased;}
-a{color:inherit;text-decoration:none;}
-button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
-
-/* MASTHEAD */
-.masthead{background:var(--navy-deep);color:rgba(255,255,255,0.7);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;padding:10px 32px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(200,153,42,0.2);}
-.masthead-left{display:flex;align-items:center;gap:18px;}
-.masthead-brand{color:var(--gold);font-weight:600;letter-spacing:0.2em;}
-.masthead-divider{width:1px;height:12px;background:rgba(255,255,255,0.2);}
-.ai-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(200,153,42,0.15);color:var(--gold);padding:3px 9px;border-radius:100px;font-weight:600;letter-spacing:0.14em;}
-.ai-badge::before{content:'';width:5px;height:5px;background:var(--gold);border-radius:50%;box-shadow:0 0 6px var(--gold);}
-
-/* HERO */
-.hero{background:var(--navy-deep);color:#fff;padding:36px 32px 28px;position:relative;overflow:hidden;}
-.hero::before{content:'';position:absolute;top:-200px;right:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(200,153,42,0.08),transparent 60%);}
-.hero-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:auto 1fr auto;gap:30px;align-items:center;position:relative;}
-.hero-photo{width:130px;height:130px;border-radius:50%;border:3px solid var(--gold);box-shadow:0 0 0 8px rgba(200,153,42,0.12);overflow:hidden;background:linear-gradient(135deg,#2a3a5c,#1a2744);display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:50px;color:var(--gold);font-weight:700;}
-.hero-photo img{width:100%;height:100%;object-fit:cover;object-position:50% 20%;display:block;}
-.hero-eyebrow{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--gold);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
-.hero-eyebrow::before{content:'';width:24px;height:1px;background:var(--gold);}
-.hero-name{font-family:'Playfair Display',serif;font-weight:800;font-size:clamp(36px,5vw,52px);line-height:1.0;color:#fff;margin-bottom:12px;letter-spacing:-0.02em;}
-.hero-headline{font-size:14px;color:rgba(255,255,255,0.78);margin-bottom:20px;font-weight:500;line-height:1.55;max-width:680px;}
-.hero-headline strong{color:var(--gold-bright);font-weight:600;}
-.hero-meta{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:12px;color:rgba(255,255,255,0.78);}
-.hero-meta a,.hero-meta span{display:inline-flex;align-items:center;gap:6px;transition:color 200ms ease;}
-.hero-meta a:hover{color:var(--gold-bright);}
-.hero-meta svg{color:var(--gold);}
-
-/* PERFORMANCE SNAPSHOT */
-.dna-card{width:340px;background:linear-gradient(165deg,#0E1A2E 0%,#152340 50%,#0E1A2E 100%);border-radius:16px;border:1px solid rgba(200,153,42,0.2);padding:18px 14px 12px;position:relative;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.35);}
-.dna-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 0% 0%,rgba(200,153,42,0.08),transparent 50%),radial-gradient(circle at 100% 100%,rgba(0,196,160,0.06),transparent 50%);pointer-events:none;}
-.dna-head{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px;position:relative;}
-.dna-head svg.sparkle{color:var(--gold);}
-.dna-title{font-family:'DM Mono',monospace;font-size:13px;letter-spacing:0.2em;color:var(--gold);font-weight:600;text-transform:none;}
-.dna-svg-wrap{position:relative;margin:0 -6px;}
-.dna-svg{width:100%;height:auto;display:block;}
-.dna-ring{fill:none;stroke:rgba(255,255,255,0.07);stroke-width:0.9;}
-.dna-ring.outer{stroke:rgba(255,255,255,0.13);}
-.dna-axis{stroke:rgba(255,255,255,0.07);stroke-width:0.9;}
-.dna-data{fill:rgba(0,196,160,0.22);stroke:var(--teal);stroke-width:2;stroke-linejoin:round;}
-.dna-dot{fill:var(--gold-bright);}
-.dna-label-num{fill:var(--gold-bright);font-family:'DM Mono',monospace;font-size:15px;font-weight:600;}
-.dna-label-name{fill:rgba(255,255,255,0.65);font-family:'DM Mono',monospace;font-size:8.5px;letter-spacing:0.14em;}
-.dna-vertex{cursor:pointer;}
-.dna-vertex-bg{fill:transparent;rx:6;ry:6;transition:fill 200ms ease;}
-.dna-vertex:hover .dna-vertex-bg{fill:rgba(200,153,42,0.10);}
-.dna-vertex:hover .dna-label-num{fill:#FFE066;}
-.dna-vertex:hover .dna-dot{fill:#FFE066;}
-.dna-foot{display:flex;align-items:center;justify-content:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-top:6px;padding-top:10px;border-top:1px solid rgba(200,153,42,0.14);position:relative;}
-.dna-foot-val{color:var(--gold-bright);font-weight:700;font-size:15px;letter-spacing:0;}
-
-/* TAB NAV */
-.tab-nav{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:1px solid var(--hairline);box-shadow:0 1px 0 var(--hairline);}
-.tab-inner{max-width:1200px;margin:0 auto;display:flex;gap:16px;overflow-x:auto;padding:0 24px;scrollbar-width:none;}
-.tab-inner::-webkit-scrollbar{display:none;}
-.tab-item{padding:18px 14px;font-size:13px;font-weight:500;color:var(--ink-soft);white-space:nowrap;border-bottom:2px solid transparent;cursor:pointer;transition:all 200ms ease;}
-.tab-item:hover{color:var(--navy);}
-.tab-item.active{color:var(--gold);border-bottom-color:var(--gold);font-weight:600;}
-
-/* COMMAND BAR — integrated with tab-nav (no separator line) */
-.command-bar-wrap{background:var(--paper);border-bottom:1px solid var(--hairline);}
-.command-bar{max-width:1200px;margin:0 auto;display:flex;gap:8px;overflow-x:auto;padding:14px 32px 16px;scrollbar-width:none;}
-.command-bar::-webkit-scrollbar{display:none;}
-.cmd-chip{display:inline-flex;align-items:center;gap:8px;padding:5px 16px 5px 5px;border-radius:100px;background:var(--paper);border:1px solid var(--hairline);color:var(--ink);font-size:12px;font-weight:500;cursor:pointer;transition:all 200ms ease;white-space:nowrap;flex-shrink:0;}
-.cmd-chip:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(11,22,40,0.08);border-color:var(--gold);}
-.cmd-chip-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(200,153,42,0.12);color:var(--gold);border:1px solid rgba(200,153,42,0.32);font-family:'DM Mono',monospace;font-weight:700;font-size:12px;flex-shrink:0;line-height:1;}
-.cmd-chip-num.wide{width:auto;height:24px;border-radius:100px;padding:0 10px;font-size:10px;letter-spacing:0.04em;}
-
-/* MAIN */
-main{max-width:1200px;margin:0 auto;padding:0 32px;}
-section{padding:56px 0;border-bottom:1px solid var(--hairline);scroll-margin-top:130px;}
-section:last-of-type{border-bottom:none;}
-.section-head{display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:24px;}
-.section-num{font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);letter-spacing:0.16em;font-weight:500;margin-bottom:6px;display:block;}
-.section-title{font-family:'Playfair Display',serif;font-size:32px;font-weight:700;color:var(--navy);letter-spacing:-0.02em;line-height:1.1;}
-.section-sub{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-soft);align-self:end;}
-.section-rule{height:1px;background:var(--ink);margin-bottom:24px;opacity:0.15;}
-
-/* SUMMARY */
-.summary-bullets{list-style:none;display:flex;flex-direction:column;gap:14px;max-width:920px;}
-.summary-bullets li{display:grid;grid-template-columns:18px 1fr;gap:14px;font-size:15px;line-height:1.65;}
-.bullet-mark{width:8px;height:8px;background:var(--gold);border-radius:50%;margin-top:9px;justify-self:center;box-shadow:0 0 0 4px rgba(200,153,42,0.12);}
-.summary-bullets strong{color:var(--orange);font-weight:600;}
-.summary-bullets em{color:var(--gold);font-style:normal;font-weight:600;}
-
-/* INTERNAL TABS */
-.itab-bar{display:flex;gap:4px;border-bottom:1px solid var(--hairline);margin-bottom:28px;overflow-x:auto;scrollbar-width:none;}
-.itab-bar::-webkit-scrollbar{display:none;}
-.itab-btn{padding:12px 16px;font-size:13px;font-weight:500;color:var(--ink-soft);border-bottom:2px solid transparent;white-space:nowrap;transition:all 200ms ease;display:inline-flex;align-items:center;gap:8px;}
-.itab-btn:hover{color:var(--navy);}
-.itab-btn.active{color:var(--gold);border-bottom-color:var(--gold);font-weight:600;}
-.itab-count{font-family:'DM Mono',monospace;font-size:10px;background:rgba(26,39,68,0.06);color:var(--ink-soft);padding:2px 7px;border-radius:100px;}
-.itab-btn.active .itab-count{background:rgba(200,153,42,0.15);color:var(--gold);}
-.itab-panel{display:none;}
-.itab-panel.active{display:block;animation:fadeIn 280ms ease;}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
-
-/* TIMELINE */
-.timeline{position:relative;padding-left:36px;}
-.timeline::before{content:'';position:absolute;left:11px;top:8px;bottom:8px;width:2px;background:linear-gradient(180deg,var(--teal),rgba(0,196,160,0.2));}
-.tl-item{position:relative;padding-bottom:28px;}
-.tl-item:last-child{padding-bottom:0;}
-.tl-dot{position:absolute;left:-30px;top:6px;width:14px;height:14px;background:var(--paper);border:3px solid var(--gold);border-radius:50%;box-shadow:0 0 0 4px rgba(200,153,42,0.15);}
-.tl-dates{font-family:'DM Mono',monospace;font-size:11px;color:var(--teal);margin-bottom:6px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;}
-.tl-title{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;color:var(--navy);margin-bottom:4px;}
-.tl-company{font-size:13px;color:var(--orange);font-weight:500;margin-bottom:8px;}
-.tl-desc{font-size:13px;color:var(--ink-soft);line-height:1.65;max-width:760px;}
-
-/* PROJECTS */
-.proj-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
-.proj-card{background:var(--paper);border:1px solid var(--hairline);border-radius:12px;padding:22px 24px;border-left:3px solid var(--gold);}
-.proj-card.featured{border-left-color:var(--teal);}
-.proj-card.featured-2{border-left-color:var(--orange);}
-.proj-tag{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:8px;display:inline-block;}
-.proj-card.featured .proj-tag{color:#008f74;}
-.proj-card.featured-2 .proj-tag{color:var(--orange);}
-.proj-title{font-family:'Playfair Display',serif;font-size:18px;font-weight:600;color:var(--navy);margin-bottom:8px;line-height:1.3;letter-spacing:-0.01em;}
-.proj-desc{font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px;}
-.proj-tech{display:flex;flex-wrap:wrap;gap:4px;}
-.proj-tech-chip{font-family:'DM Mono',monospace;font-size:10px;padding:3px 8px;border-radius:5px;background:rgba(26,39,68,0.06);color:var(--navy);font-weight:500;}
-
-/* EDUCATION */
-.edu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
-.edu-card{display:grid;grid-template-columns:1fr auto;gap:24px;background:var(--paper);border:1px solid var(--hairline);border-radius:12px;padding:20px 24px;align-items:center;border-left:3px solid var(--gold);}
-.edu-card.featured{border-left-color:var(--teal);background:linear-gradient(90deg,rgba(0,196,160,0.05),var(--paper) 30%);}
-.edu-degree{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;color:var(--navy);}
-.edu-school{font-size:12px;color:var(--ink-soft);margin-top:2px;}
-.edu-detail{font-size:11px;color:var(--ink-soft);margin-top:4px;font-family:'DM Mono',monospace;letter-spacing:0.04em;}
-.edu-pct{font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:var(--gold);text-align:right;white-space:nowrap;}
-.edu-card.featured .edu-pct{color:var(--teal);}
-.edu-year{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-soft);text-align:right;}
-
-/* SKILLS */
-.skills-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
-.skill-col{background:var(--paper);border:1px solid var(--hairline);border-radius:12px;padding:22px;}
-.skill-col-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:14px;font-weight:600;display:flex;align-items:center;gap:8px;}
-.skill-col.tech .skill-col-label{color:#008f74;}
-.skill-col.soft .skill-col-label{color:#B83968;}
-.skill-col.tool .skill-col-label{color:#5B41A8;}
-.skill-chip{display:inline-block;padding:6px 12px;border-radius:100px;font-size:12px;font-weight:500;border:1px solid;margin:3px 3px 3px 0;}
-.skill-chip.tech{background:rgba(0,196,160,0.08);color:#008f74;border-color:rgba(0,196,160,0.25);}
-.skill-chip.soft{background:rgba(232,90,140,0.08);color:#B83968;border-color:rgba(232,90,140,0.25);}
-.skill-chip.tool{background:rgba(123,91,217,0.08);color:#5B41A8;border-color:rgba(123,91,217,0.25);}
-
-/* DARK NAVY PERF CARDS */
-.perf-card{background:linear-gradient(165deg,#0E1A2E,#1A2744);border-radius:14px;padding:6px;border:1px solid rgba(200,153,42,0.15);}
-.perf-item{display:grid;grid-template-columns:42px 1fr auto;gap:14px;align-items:center;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.05);transition:background 200ms ease;border-left:3px solid transparent;border-radius:8px;}
-.perf-item:hover{background:rgba(200,153,42,0.04);}
-.perf-item:last-child{border-bottom:none;}
-.perf-item.r1{border-left-color:var(--teal);}
-.perf-item.r2{border-left-color:var(--gold);}
-.perf-item.r3{border-left-color:var(--orange);}
-.perf-item.r4{border-left-color:var(--violet);}
-.perf-item.r5{border-left-color:var(--rose);}
-.perf-item.r6{border-left-color:#5BBFD9;}
-.perf-item.r7{border-left-color:#9BCB6F;}
-.perf-item.r8{border-left-color:#D9A85B;}
-.perf-rank{font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--gold-bright);}
-.perf-name{font-family:'Playfair Display',serif;font-size:16px;font-weight:600;color:#EDF0F5;margin-bottom:4px;line-height:1.3;}
-.perf-context{font-family:'DM Mono',monospace;font-size:10px;color:rgba(255,255,255,0.5);letter-spacing:0.08em;text-transform:uppercase;}
-.perf-context span{color:var(--teal);}
-.perf-score{font-family:'DM Mono',monospace;font-size:24px;font-weight:600;color:var(--gold-bright);text-align:right;line-height:1;}
-.perf-score.live{font-size:11px;color:var(--teal);letter-spacing:0.18em;}
-.perf-score-pct{font-size:14px;color:rgba(255,255,255,0.45);margin-left:1px;font-weight:500;}
-.perf-score-meta{font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.1em;text-align:right;margin-top:2px;}
-.perf-status{display:inline-block;padding:3px 10px;border-radius:100px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;margin-top:6px;line-height:1.4;}
-.perf-status.completed{background:rgba(0,196,160,0.18);color:var(--teal);border:1px solid rgba(0,196,160,0.3);}
-.perf-status.active{background:rgba(245,184,0,0.15);color:var(--gold-bright);border:1px solid rgba(245,184,0,0.35);}
-.perf-status.enrolled{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.55);border:1px solid rgba(255,255,255,0.12);}
-.perf-badge-mini{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:8px;background:rgba(245,184,0,0.12);color:var(--gold-bright);border:1px solid rgba(245,184,0,0.25);font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;vertical-align:middle;}
-.perf-more{text-align:center;padding:14px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--gold);border-top:1px solid rgba(255,255,255,0.05);}
-
-/* DUAL SCORE (Faculty + AI agent) — shown on cards where both exist */
-.perf-score-dual{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
-.perf-score-pill{display:flex;align-items:baseline;gap:6px;font-family:'DM Mono',monospace;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);padding:4px 10px;border-radius:100px;}
-.perf-score-pill .ps-label{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.5);font-weight:600;}
-.perf-score-pill .ps-val{font-size:15px;font-weight:600;color:#EDF0F5;line-height:1;}
-.perf-score-pill .ps-pct{font-size:10px;color:rgba(255,255,255,0.45);}
-.perf-score-pill.faculty{border-color:rgba(123,91,217,0.32);background:rgba(123,91,217,0.08);}
-.perf-score-pill.faculty .ps-label{color:#A586E8;}
-.perf-score-pill.ai{border-color:rgba(0,196,160,0.32);background:rgba(0,196,160,0.08);}
-.perf-score-pill.ai .ps-label{color:var(--teal);}
-
-/* COHORT */
-.cohort-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
-.cohort-headline{background:linear-gradient(165deg,#0E1A2E,#1A2744);color:#fff;padding:28px 32px;border-radius:14px;border:1px solid rgba(200,153,42,0.18);position:relative;overflow:hidden;}
-.cohort-headline::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(200,153,42,0.15),transparent 70%);}
-.cohort-tag{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--gold-bright);margin-bottom:8px;position:relative;}
-.cohort-rank-big{font-family:'Playfair Display',serif;font-size:56px;font-weight:800;color:var(--gold-bright);line-height:1;position:relative;}
-.cohort-rank-of{font-size:22px;color:rgba(255,255,255,0.5);font-weight:500;margin-left:4px;}
-.cohort-rank-meta{font-size:13px;color:rgba(255,255,255,0.65);margin-top:8px;position:relative;}
-.cohort-stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
-.cohort-stat{background:var(--paper);border:1px solid var(--hairline);border-radius:10px;padding:16px 18px;border-top:3px solid var(--gold);}
-.cohort-stat:nth-child(2){border-top-color:var(--teal);}.cohort-stat:nth-child(3){border-top-color:var(--orange);}.cohort-stat:nth-child(4){border-top-color:var(--violet);}
-.cohort-stat-num{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;color:var(--navy);line-height:1;}
-.cohort-stat-num-suffix{font-size:13px;color:var(--ink-soft);margin-left:2px;}
-.cohort-stat-label{font-size:11px;color:var(--ink-soft);margin-top:6px;font-weight:500;}
-.cohort-cmp{background:var(--paper);border:1px solid var(--hairline);border-radius:12px;padding:24px 28px;}
-.cohort-cmp-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px;}
-.cohort-cmp-row{display:grid;grid-template-columns:120px 1fr auto;gap:14px;align-items:center;margin-bottom:14px;}
-.cohort-cmp-row:last-child{margin-bottom:0;}
-.cohort-cmp-name{font-size:12px;color:var(--navy);font-weight:500;}
-.cohort-cmp-bars{position:relative;height:8px;background:rgba(26,39,68,0.06);border-radius:100px;overflow:hidden;}
-.cohort-cmp-bar-cohort{position:absolute;left:0;top:0;height:100%;background:rgba(90,100,120,0.4);border-radius:100px;}
-.cohort-cmp-bar-self{position:absolute;left:0;top:0;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-bright));border-radius:100px;}
-.cohort-cmp-vals{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-soft);display:flex;gap:10px;}
-.cohort-cmp-vals strong{color:var(--gold);font-weight:600;}
-
-/* INTERVIEW READINESS */
-.intv-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
-.intv-card{background:var(--paper);border:1px solid var(--hairline);border-radius:12px;padding:20px;border-top:3px solid var(--gold);}
-.intv-card.c1{border-top-color:var(--teal);}.intv-card.c2{border-top-color:var(--orange);}.intv-card.c3{border-top-color:var(--rose);}
-.intv-num{font-family:'DM Mono',monospace;font-size:34px;font-weight:500;color:var(--navy);line-height:1;}
-.intv-suffix{font-size:16px;color:var(--ink-soft);margin-left:2px;}
-.intv-label{font-size:12px;font-weight:600;color:var(--navy);margin-top:8px;}
-.intv-caption{font-size:11px;color:var(--ink-soft);margin-top:4px;line-height:1.5;}
-.mock-row{background:var(--paper);border:1px solid var(--hairline);border-radius:12px;padding:24px 28px;}
-.mock-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:18px;}
-.mock-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;}
-.mock-name{font-size:12px;color:var(--ink-soft);display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
-.mock-pct{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--navy);}
-.mock-bar{height:6px;background:rgba(26,39,68,0.06);border-radius:100px;overflow:hidden;}
-.mock-fill{height:100%;border-radius:100px;width:0;animation:fillProgress 1.4s cubic-bezier(0.34,1.56,0.64,1) 0.6s forwards;}
-.mock-fill.f1{background:linear-gradient(90deg,var(--gold),var(--gold-bright));}
-.mock-fill.f2{background:linear-gradient(90deg,var(--teal),#00DBB3);}
-.mock-fill.f3{background:linear-gradient(90deg,var(--orange),#FF7A47);}
-.mock-fill.f4{background:linear-gradient(90deg,var(--rose),#FF80AB);}
-
-/* TOP MATCHES */
-.match-grid{display:flex;flex-direction:column;gap:12px;}
-.match-card{display:grid;grid-template-columns:1fr auto;gap:24px;background:var(--paper);border:1px solid var(--hairline);border-radius:12px;padding:22px 26px;align-items:center;border-left:3px solid var(--gold);position:relative;}
-.match-card.best{border-left-color:var(--teal);background:linear-gradient(90deg,rgba(0,196,160,0.05),var(--paper) 30%);}
-.match-card:nth-child(2){border-left-color:var(--gold);}
-.match-card:nth-child(3){border-left-color:var(--orange);}
-.match-card:nth-child(4){border-left-color:var(--violet);}
-.match-rank-badge{position:absolute;top:14px;right:18px;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;color:var(--ink-soft);letter-spacing:0.12em;text-transform:uppercase;}
-.match-card.best .match-rank-badge{color:var(--teal);}
-.match-body{display:flex;flex-direction:column;gap:6px;}
-.match-role{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;color:var(--navy);line-height:1.25;letter-spacing:-0.01em;}
-.match-tags{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-soft);letter-spacing:0.04em;margin-bottom:2px;}
-.match-rationale{font-size:13px;color:var(--ink-soft);line-height:1.55;max-width:540px;}
-.match-score-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
-.match-score{font-family:'DM Mono',monospace;font-size:38px;font-weight:500;color:var(--gold);line-height:1;}
-.match-card.best .match-score{color:var(--teal);}
-.match-score-pct{font-size:15px;color:var(--ink-soft);margin-left:2px;font-weight:500;}
-.match-bar{width:110px;height:5px;background:rgba(26,39,68,0.06);border-radius:100px;overflow:hidden;}
-.match-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-bright));border-radius:100px;}
-.match-card.best .match-fill{background:linear-gradient(90deg,var(--teal),#00DBB3);}
-
-/* OPEN TO */
-.open-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
-.open-card{background:var(--paper);border:1px solid var(--hairline);border-radius:12px;padding:20px 22px;border-top:3px solid var(--teal);}
-.open-card:nth-child(2){border-top-color:var(--gold);}
-.open-card:nth-child(3){border-top-color:var(--orange);}
-.open-card:nth-child(4){border-top-color:var(--violet);}
-.open-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px;font-weight:600;}
-.open-value{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;color:var(--navy);line-height:1.35;margin-bottom:6px;}
-.open-detail{font-size:12px;color:var(--ink-soft);line-height:1.5;}
-
-/* ACHIEVEMENTS */
-.achievement-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
-.ach-card{background:var(--navy);color:#fff;border-radius:14px;padding:22px 24px;position:relative;overflow:hidden;}
-.ach-card::before{content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;background:radial-gradient(circle,rgba(200,153,42,0.18),transparent 70%);}
-.ach-tag{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--gold-bright);margin-bottom:8px;position:relative;font-weight:600;}
-.ach-score{font-family:'Playfair Display',serif;font-size:42px;font-weight:700;color:var(--gold);line-height:1;position:relative;}
-.ach-score-pct{font-size:16px;color:rgba(255,255,255,0.5);margin-left:3px;}
-.ach-title{font-family:'Playfair Display',serif;font-size:16px;font-weight:600;margin:10px 0 4px;line-height:1.3;position:relative;}
-.ach-meta{font-size:11px;color:rgba(255,255,255,0.65);position:relative;}
-
-/* CERTIFICATIONS */
-.cert-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
-.cert-card{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;background:var(--paper);border:1px solid var(--hairline);border-radius:10px;padding:16px 20px;border-left:3px solid var(--gold);}
-.cert-name{font-family:'Playfair Display',serif;font-size:14px;font-weight:600;color:var(--navy);line-height:1.3;}
-.cert-issuer{font-size:11px;color:var(--ink-soft);margin-top:3px;}
-.cert-year{font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);font-weight:500;}
-.verified-badge{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#C8992A,#F5B800);color:var(--navy-deep);font-family:'DM Mono',monospace;font-size:8px;font-weight:700;padding:2px 7px;border-radius:100px;letter-spacing:0.1em;text-transform:uppercase;margin-left:6px;vertical-align:middle;}
-
-/* BEYOND WORK */
-.beyond-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:32px;align-items:start;}
-.psych-card{background:var(--paper);border-radius:14px;padding:24px;border:1px solid var(--hairline);position:relative;overflow:hidden;}
-.psych-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--violet),var(--rose));}
-.psych-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
-.psych-icon{width:42px;height:42px;border-radius:50%;background:rgba(123,91,217,0.12);display:flex;align-items:center;justify-content:center;color:var(--violet);}
-.psych-type{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--violet);}
-.psych-def{font-size:12px;color:var(--ink-soft);font-style:italic;margin-top:3px;line-height:1.5;}
-.trait-list{display:flex;flex-direction:column;gap:10px;}
-.trait-meta{display:flex;justify-content:space-between;margin-bottom:4px;}
-.trait-name{font-size:12px;font-weight:500;color:var(--navy);}
-.trait-pts{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-soft);}
-.trait-bar{height:6px;background:rgba(26,39,68,0.06);border-radius:100px;overflow:hidden;}
-.trait-fill{height:100%;border-radius:100px;width:0;animation:fillProgress 1.4s cubic-bezier(0.34,1.56,0.64,1) 0.6s forwards;}
-.tf1{background:linear-gradient(90deg,var(--violet),#9B7DE6);}
-.tf2{background:linear-gradient(90deg,var(--teal),#00DBB3);}
-.tf3{background:linear-gradient(90deg,var(--orange),#FF7A47);}
-.tf4{background:linear-gradient(90deg,var(--gold),var(--gold-bright));}
-.tf5{background:linear-gradient(90deg,var(--rose),#FF80AB);}
-.tf6{background:linear-gradient(90deg,var(--ink-soft),#7C8699);}
-@keyframes fillProgress{to{width:var(--target-width);}}
-.hobby-card{background:var(--paper);border-radius:14px;padding:24px;border:1px solid var(--hairline);}
-.hobby-header{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
-.hobby-icon{width:42px;height:42px;border-radius:50%;background:rgba(232,82,26,0.12);display:flex;align-items:center;justify-content:center;color:var(--orange);}
-.hobby-title{font-family:'Playfair Display',serif;font-size:18px;font-weight:600;color:var(--navy);}
-.hobby-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;}
-.hobby-tag{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:100px;background:rgba(232,82,26,0.08);color:var(--orange);font-size:12px;font-weight:500;border:1px solid rgba(232,82,26,0.2);}
-.hobby-aside{font-size:12px;color:var(--ink-soft);line-height:1.65;padding-top:14px;border-top:1px solid var(--hairline);}
-.hobby-aside strong{color:var(--navy);font-weight:600;}
-
-/* EMPTY STATE */
-.empty-tile{background:var(--paper);border:1px dashed rgba(26,39,68,0.18);border-radius:12px;padding:24px 28px;color:var(--ink-soft);font-size:13px;line-height:1.6;}
-.empty-tile b{display:block;color:var(--navy);font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:4px;}
-
-/* POWERED BY */
-.powered-by{background:var(--navy-deep);color:#fff;padding:40px 32px;}
-.powered-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center;}
-.powered-tag{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--gold);margin-bottom:6px;}
-.powered-headline{font-family:'Playfair Display',serif;font-size:22px;font-weight:600;line-height:1.3;}
-.powered-headline .accent{color:var(--gold);}
-.powered-cta{display:flex;gap:12px;}
-.powered-btn{padding:11px 20px;border-radius:100px;font-size:13px;font-weight:600;border:1px solid;transition:all 200ms ease;}
-.powered-btn.primary{background:var(--gold);color:var(--navy-deep);border-color:var(--gold);}
-.powered-btn.primary:hover{background:var(--gold-bright);}
-.powered-btn.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,0.25);}
-.powered-btn.ghost:hover{background:rgba(255,255,255,0.06);}
-
-/* ── Punctuality panel card (v12.6) ── */
-.punct-card{padding:32px 24px;background:#FAF7F0;border:1px solid #EDE7D8;border-radius:12px;max-width:640px;margin:0 auto;}
-.punct-score-row{display:flex;align-items:baseline;gap:18px;padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid #EDE7D8;}
-.punct-score-num{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-weight:500;font-size:56px;color:#0B1628;line-height:1;}
-.punct-score-suffix{font-family:'DM Mono',ui-monospace,monospace;font-style:normal;font-size:20px;color:#94A3B8;font-weight:400;margin-left:4px;}
-.punct-score-band{font-family:'DM Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#0F6E56;font-weight:500;padding:6px 12px;background:#E1F5EE;border-radius:999px;}
-.punct-heading{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:16px;color:#0B1628;margin-bottom:12px;font-weight:500;}
-.punct-bullets{list-style:none;padding:0;margin:0;}
-.punct-bullets li{position:relative;padding:8px 0 8px 20px;font-size:14px;color:#475569;line-height:1.6;}
-.punct-bullets li::before{content:"";position:absolute;left:4px;top:15px;width:6px;height:6px;border-radius:50%;background:#C8992A;}
-/* Coming-soon variant */
-.punct-coming-soon{text-align:center;padding:8px;}
-.punct-cs-eyebrow{font-family:'DM Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#C8992A;margin-bottom:8px;font-weight:500;}
-.punct-cs-heading{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:28px;color:#0B1628;margin-bottom:12px;font-weight:500;}
-.punct-cs-lead{font-size:14px;color:#475569;line-height:1.65;max-width:480px;margin:0 auto 20px;}
-.punct-coming-soon .punct-bullets{max-width:440px;margin:0 auto;text-align:left;}
-footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px;text-align:center;font-size:11px;border-top:1px solid rgba(255,255,255,0.06);font-family:'DM Mono',monospace;letter-spacing:0.1em;}
-
-@media (max-width:1180px){
-  /* Iframe / smaller laptops: keep 3-column, shrink the cluster + photo */
-  .hero{padding:30px 24px 24px;}
-  .hero-inner{gap:22px;}
-  .hero-photo{width:104px;height:104px;font-size:42px;}
-  .hero-name{font-size:clamp(28px,4.2vw,42px);}
-  .hero-headline{font-size:13px;max-width:520px;}
-  .hero-meta{gap:8px 16px;font-size:11.5px;}
-  .dna-card{width:280px;padding:14px 10px 10px;}
-  .dna-svg-wrap{margin:0 -4px;}
-  .dna-title{font-size:12px;}
-  .dna-label-num{font-size:14px;}
-  .dna-label-name{font-size:8px;}
+[data-theme="light"]{
+  --bg:#F8FAFC;--bg2:#FFFFFF;--bg3:#F1F5F9;--border:#E2E8F0;
+  --text:#1E293B;--muted:#64748B;--subtle:#94A3B8;
+  --accent-soft:rgba(59,130,246,.08);--gold-soft:rgba(212,160,23,.08);--green-soft:rgba(16,185,129,.08);--red-soft:rgba(239,68,68,.08);--purple-soft:rgba(139,92,246,.08);--teal-soft:rgba(20,184,166,.08);
 }
-@media (max-width:920px){
-  /* Tight viewports: shrink further but still 3-column */
-  .hero{padding:24px 18px 20px;}
-  .hero-inner{gap:16px;}
-  .hero-photo{width:84px;height:84px;font-size:34px;}
-  .hero-name{font-size:clamp(22px,4vw,32px);margin-bottom:8px;}
-  .hero-headline{font-size:12.5px;margin-bottom:14px;}
-  .hero-meta{gap:6px 12px;font-size:11px;}
-  .hero-eyebrow{font-size:10px;margin-bottom:8px;}
-  .dna-card{width:240px;padding:12px 8px 8px;}
-  .dna-foot{font-size:10px;padding-top:8px;}
-  .dna-foot-val{font-size:13px;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:900px;margin:0 auto;padding:24px 20px 60px}
+a{color:var(--accent);text-decoration:none}
+
+/* ── Theme Toggle ── */
+.theme-btn{position:fixed;top:16px;right:16px;z-index:99;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg2);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:.2s}
+.theme-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── Section ── */
+.section{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:16px;position:relative;overflow:hidden}
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.section-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.section-title{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--text)}
+.section-badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;margin-left:auto}
+
+/* ── Placeholder ── */
+.placeholder{text-align:center;padding:20px 16px;border:1px dashed var(--border);border-radius:8px;background:var(--bg3)}
+.placeholder-icon{font-size:24px;margin-bottom:8px;opacity:.5}
+.placeholder-text{font-size:13px;color:var(--muted);margin-bottom:4px}
+.placeholder-action{font-size:12px;color:var(--subtle);font-style:italic}
+
+/* ── Hero ── */
+.hero{background:linear-gradient(135deg,#0B1628 0%,#1A3258 50%,#0D1B33 100%);border-radius:16px;padding:32px;margin-bottom:16px;position:relative;overflow:hidden}
+[data-theme="light"] .hero{background:linear-gradient(135deg,#1E3A5F 0%,#2C5282 50%,#1A365D 100%)}
+.hero::before{content:'';position:absolute;top:-50%;right:-20%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,.08) 0%,transparent 70%)}
+.hero-grid{display:flex;align-items:center;gap:20px;position:relative;z-index:1}
+.hero-avatar{width:72px;height:72px;border-radius:16px;background:rgba(59,130,246,.2);border:2px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6);font-size:28px;font-weight:700;font-family:var(--font-display);flex-shrink:0;overflow:hidden}
+.hero-avatar img{width:100%;height:100%;object-fit:cover}
+.hero-info{flex:1;min-width:0}
+.hero-name{font-family:var(--font-display);font-size:26px;font-weight:800;color:#fff;margin-bottom:2px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hero-badge{font-size:10px;padding:3px 10px;border-radius:99px;font-weight:600}
+.badge-fresher{background:rgba(16,185,129,.15);color:#34D399;border:1px solid rgba(16,185,129,.2)}
+.badge-pro{background:rgba(212,160,23,.15);color:var(--gold);border:1px solid rgba(212,160,23,.2)}
+.hero-headline{font-size:14px;color:rgba(147,197,253,.8);margin-bottom:6px;font-weight:500}
+.hero-meta{font-size:12px;color:rgba(148,163,184,.7);display:flex;flex-wrap:wrap;gap:12px}
+.hero-links{display:flex;gap:6px;margin-top:8px}
+.hero-links a{font-size:11px;padding:4px 12px;border:1px solid rgba(255,255,255,.15);border-radius:99px;color:rgba(255,255,255,.6);transition:.2s}
+.hero-links a:hover{border-color:rgba(255,255,255,.4);color:#fff}
+.hero-ats{text-align:center;flex-shrink:0}
+.hero-ats .num{font-family:var(--font-display);font-size:36px;font-weight:800;color:var(--gold)}
+.hero-ats .lbl{font-size:9px;color:rgba(148,163,184,.6);text-transform:uppercase;letter-spacing:1px}
+
+/* ── Grid ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.grid2{grid-template-columns:1fr}}
+
+/* ── Tags ── */
+.tag{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;margin:2px}
+.tag-tech{background:var(--accent-soft);color:var(--accent)}
+.tag-tool{background:var(--purple-soft);color:var(--purple)}
+.tag-soft{background:var(--green-soft);color:var(--green)}
+.tag-gold{background:var(--gold-soft);color:var(--gold)}
+
+/* ── Cards inside sections ── */
+.item-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:8px}
+.item-card:last-child{margin-bottom:0}
+.item-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px}
+.item-sub{font-size:12px;color:var(--muted)}
+.item-desc{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6}
+
+/* ── Progress bar ── */
+.progress-track{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:6px}
+.progress-fill{height:100%;border-radius:2px;transition:width .4s}
+
+/* ── Score badge ── */
+.score{font-family:var(--font-display);font-size:22px;font-weight:700;flex-shrink:0}
+.score-sm{font-size:16px}
+
+/* ── Timeline ── */
+.timeline-item{padding-left:20px;border-left:2px solid var(--border);margin-bottom:16px;position:relative}
+.timeline-item::before{content:'';position:absolute;left:-5px;top:4px;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.timeline-item:last-child{margin-bottom:0}
+
+/* ── Metric row ── */
+.metric-row{display:flex;gap:10px;margin-bottom:12px}
+.metric-box{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.metric-val{font-family:var(--font-display);font-size:24px;font-weight:700;color:var(--text)}
+.metric-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+
+/* ── Role match ── */
+.role-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:10px}
+.role-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.role-name{font-size:14px;font-weight:700;color:var(--text)}
+
+/* ── Bullet list ── */
+.bullet{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start}
+.bullet::before{content:'•';color:var(--accent);font-size:18px;line-height:1.4;flex-shrink:0}
+
+/* ── Footer ── */
+.footer{text-align:center;padding:24px 0;border-top:1px solid var(--border);margin-top:24px}
+.footer-title{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px}
+.footer-sub{font-size:12px;color:var(--muted);margin-bottom:10px}
+.source-tags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+.source-tag{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:600}
+
+@media print{
+  body{background:#fff;color:#000}
+  .theme-btn,.hero-links,.placeholder{display:none}
+  .section{box-shadow:none;border:1px solid #ddd}
 }
-@media (max-width:720px){
-  /* True tablet/mobile — only here do we stack */
-  .hero-inner{grid-template-columns:1fr;text-align:center;}
-  .hero-eyebrow{justify-content:center;}
-  .hero-meta{justify-content:center;}
-  .dna-card{margin:0 auto;width:100%;max-width:340px;}
-  .skills-grid{grid-template-columns:1fr;}
-  .proj-grid,.intv-row,.mock-grid,.achievement-grid,.cert-grid,.edu-grid,.cohort-grid{grid-template-columns:1fr;}
-  .open-grid{grid-template-columns:repeat(2,1fr);}
-  .cohort-stat-grid{grid-template-columns:repeat(2,1fr);}
-  .beyond-grid{grid-template-columns:1fr;}
-  .match-card{grid-template-columns:1fr;}
-  .match-score-wrap{align-items:flex-start;}
-  .powered-inner{grid-template-columns:1fr;text-align:center;}
-  .powered-cta{justify-content:center;}
-  .section-title{font-size:26px;}
-}
-@media (max-width:480px){.open-grid{grid-template-columns:1fr;}.intv-row{grid-template-columns:repeat(2,1fr);}}
-@media print{.tab-nav,.command-bar-wrap,.powered-by{display:none;}section{break-inside:avoid;}}
 </style>
 </head>
 <body>
+<button class="theme-btn" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('profile-theme',document.documentElement.dataset.theme)}catch(e){}" title="Toggle theme">
+  <span id="theme-icon">☀</span>
+</button>
+<script>try{const t=localStorage.getItem('profile-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 
-{# ─── Dual-score macro: renders faculty + AI agent scores side-by-side
-     Falls back gracefully when only one score is present. ─── #}
-{# v12.5 fmt_date — '2026-05-08T17:53:42' → '8 May 2026' #}
-{% macro fmt_date(s) -%}
-  {%- if not s -%}{%- else -%}
-    {%- set d = (s|string).split('T')[0] -%}
-    {%- if d|length >= 10 -%}
-      {%- set months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] -%}
-      {{ d[8:10]|int }} {{ months[(d[5:7]|int) - 1] }} {{ d[0:4] }}
-    {%- else -%}{{ d }}{%- endif -%}
-  {%- endif -%}
-{%- endmacro %}
+<div class="wrap">
 
-{% macro dual_score(faculty, ai, max_score, agent_label='AI') -%}
-  {# v12.4.1 fix — coerce Undefined→None so |float doesn't raise UndefinedError #}
-  {% set faculty = faculty|default(none, true) if faculty is defined else none %}
-  {% set ai = ai|default(none, true) if ai is defined else none %}
-  {% set max_score = max_score|default(none, true) if max_score is defined else none %}
-  {% set has_faculty = faculty is not none and (faculty|float(0) > 0 or faculty|float(-1) == 0) %}
-  {% set has_ai = ai is not none and ai|float(0) > 0 %}
-  {% if has_faculty and has_ai %}
-    <div class="perf-score-dual">
-      <div class="perf-score-pill faculty"><span class="ps-label">Faculty</span><span class="ps-val">{{ faculty|int }}</span>{% if max_score %}<span class="ps-pct">/ {{ max_score|int }}</span>{% endif %}</div>
-      <div class="perf-score-pill ai"><span class="ps-label">{{ agent_label }}</span><span class="ps-val">{{ ai|int }}</span>{% if max_score %}<span class="ps-pct">/ {{ max_score|int }}</span>{% endif %}</div>
+{# ════════════════════════════════════════════════════════════ #}
+{# 1. HERO SECTION                                            #}
+{# ════════════════════════════════════════════════════════════ #}
+<div class="hero">
+  <div class="hero-grid">
+    <div class="hero-avatar">
+      {% if student_photo_url %}<img src="{{ student_photo_url }}" alt="{{ student_name }}" onerror="this.style.display='none';this.parentNode.textContent='{{ student_name[0]|upper }}'">
+      {% else %}{{ student_name[0]|upper }}{% endif %}
     </div>
-  {% elif has_ai %}
-    <div class="perf-score-dual">
-      <div class="perf-score-pill ai"><span class="ps-label">{{ agent_label }}</span><span class="ps-val">{{ ai|int }}</span>{% if max_score %}<span class="ps-pct">/ {{ max_score|int }}</span>{% endif %}</div>
-    </div>
-  {% elif has_faculty %}
-    <div class="perf-score">{{ faculty|int }}<span class="perf-score-pct">{% if max_score %}/{{ max_score|int }}{% else %}%{% endif %}</span></div>
-  {% else %}
-    <div class="perf-score">0<span class="perf-score-pct">%</span></div>
-  {% endif %}
-{%- endmacro %}
-
-{# ─── Jinja convenience flags ─── #}
-{% set JUNK = ['','test','asdf','qwerty','tbd','n/a','na','-','--','none','null','undefined','0','.','sample','example','lorem'] %}
-{% set has_summary = professional_summary and (professional_summary|trim)|length > 20 %}
-{% set has_personality = personality_data and personality_data.personality_type %}
-{% set has_work = work_experience and work_experience|length > 0 %}
-{% set has_projects = projects_data and projects_data|length > 0 %}
-{% set has_skills = skills_data and ((skills_data.get('technical_skills',[])|length > 0) or (skills_data.get('soft_skills',[])|length > 0) or (skills_data.get('tools',[])|length > 0)) %}
-{% set has_hobbies = hobbies_data and hobbies_data|length > 0 %}
-{% set has_edu = education_data and education_data|length > 0 %}
-{% set has_certs = certifications_data and certifications_data|length > 0 %}
-{% set has_matches = role_matches and role_matches|length > 0 %}
-
-<!-- MASTHEAD -->
-<div class="masthead">
-  <div class="masthead-left">
-    <span class="masthead-brand">Upskillize Solutions</span>
-    <span class="masthead-divider"></span>
-    <span class="ai-badge">AI Profile</span>
-  </div>
- <div style="color:rgba(255,255,255,0.5);"></div>
-</div>
-
-<!-- HERO -->
-<header class="hero">
-  <div class="hero-inner">
-    <div class="hero-photo">
-      {% if student_photo_url %}
-        <img src="{{ student_photo_url }}" alt="{{ student_name }}" onerror="this.parentElement.innerHTML='{{ (student_name or 'U')[0]|upper }}';">
-      {% else %}
-        {{ (student_name or 'U')[0]|upper }}
-      {% endif %}
-    </div>
-    <div>
-      <div class="hero-eyebrow">
-        {% if hero_eyebrow_tags and hero_eyebrow_tags|length > 0 %}
-          {{ hero_eyebrow_tags | join(' · ') }}
-        {% elif is_fresher %}
-          Fresher &middot; Upskillize Candidate
-        {% else %}
-          Professional &middot; Upskillize Candidate
-        {% endif %}
+    <div class="hero-info">
+      <div class="hero-name">
+        {{ student_name }}
+        {% if is_fresher %}<span class="hero-badge badge-fresher">● Fresher</span>
+        {% else %}<span class="hero-badge badge-pro">● Working Professional</span>{% endif %}
       </div>
-      <h1 class="hero-name">{{ student_name }}</h1>
-      {% if headline %}<p class="hero-headline">{{ headline }}</p>{% endif %}
+      <div class="hero-headline">{{ headline }}</div>
       <div class="hero-meta">
-        {% if student_location %}<span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>{{ student_location }}</span>{% endif %}
-        {% if student_email %}<a href="mailto:{{ student_email }}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>{{ student_email }}</a>{% endif %}
-        {% if student_phone %}<span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>{{ student_phone }}</span>{% endif %}
-        {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.36V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.55V9h3.57v11.45z"/></svg>LinkedIn</a>{% endif %}
-        {% if github_url %}<a href="{{ github_url }}" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.1 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.2.9 2.4v3.5c0 .3.1.7.8.6A12 12 0 0 0 12 .3"/></svg>GitHub</a>{% endif %}
-        {% if portfolio_url %}<a href="{{ portfolio_url }}" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Portfolio</a>{% endif %}
+        {% if student_email %}<span>{{ student_email }}</span>{% endif %}
+        {% if student_phone %}<span>{{ student_phone }}</span>{% endif %}
+        {% if student_location %}<span>{{ student_location }}</span>{% endif %}
+      </div>
+      <div class="hero-links">
+        {% if linkedin_url %}<a href="{{ linkedin_url }}" target="_blank">LinkedIn</a>{% endif %}
+        {% if github_url %}<a href="{{ github_url }}" target="_blank">GitHub</a>{% endif %}
+        {% if portfolio_url %}<a href="{{ portfolio_url }}" target="_blank">Portfolio</a>{% endif %}
       </div>
     </div>
-
-    <div class="dna-card">
-      <div class="dna-head">
-        <svg class="sparkle" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/></svg>
-        <h3 class="dna-title">Performance Snapshot</h3>
-      </div>
-      <div class="dna-svg-wrap">
-        <svg class="dna-svg" viewBox="0 0 360 290" xmlns="http://www.w3.org/2000/svg">
-          {# v12.6 — rings generated for the real axis count (8), no longer hardcoded heptagons #}
-          {% for ring in perf_snapshot.rings %}<polygon class="dna-ring{% if loop.last %} outer{% endif %}" points="{{ ring }}"/>{% endfor %}
-          {% for a in perf_snapshot.axes %}<line class="dna-axis" x1="{{ perf_snapshot.cx }}" y1="{{ perf_snapshot.cy }}" x2="{{ a.ex }}" y2="{{ a.ey }}"/>{% endfor %}
-          <polygon class="dna-data" points="{{ perf_snapshot.polygon_points }}"/>
-          {% set axis_tab_map = {'assignment':'assignments','assessment':'assessments','mock_test':'mock-test','industry':'industry','interview':'mock-int','capstone':'capstones','case_study':'casestudies','punctuality':'punctuality'} %}
-          {% for a in perf_snapshot.axes %}
-          <g class="dna-vertex" onclick="goToPerf('{{ axis_tab_map[a.key] }}')">
-            <rect class="dna-vertex-bg" x="{{ a.lx - 36 }}" y="{{ a.ly - 20 }}" width="72" height="40" rx="6"/>
-            <circle class="dna-dot" cx="{{ a.vx }}" cy="{{ a.vy }}" r="3.5"/>
-            <text x="{{ a.lx }}" y="{{ a.ly - 2 }}" text-anchor="middle" class="dna-label-num">{{ a.score }}</text>
-            <text x="{{ a.lx }}" y="{{ a.ly + 12 }}" text-anchor="middle" class="dna-label-name">{{ a.label }}</text>
-          </g>
-          {% endfor %}
-        </svg>
-      </div>
-      <div class="dna-foot">Average Score <span class="dna-foot-val">{{ perf_snapshot.average }}</span></div>
+    {% if ats_data and ats_data.ats_score is defined and ats_data.ats_score > 15 %}
+    <div class="hero-ats">
+      <div class="num">{{ ats_data.ats_score }}</div>
+      <div class="lbl">ATS Score</div>
     </div>
-  </div>
-</header>
-
-<!-- TAB NAV -->
-<nav class="tab-nav">
-  <div class="tab-inner">
-    <a href="#summary" class="tab-item active" data-target="summary">Summary</a>
-    <a href="#work" class="tab-item" data-target="work">Work &amp; Learning</a>
-    <a href="#performance" class="tab-item" data-target="performance">Top Performance</a>
-    <a href="#readiness" class="tab-item" data-target="readiness">Readiness &amp; Fit</a>
-    <a href="#achievements" class="tab-item" data-target="achievements">Achievements</a>
-    <a href="#beyond" class="tab-item" data-target="beyond">Beyond Work</a>
-  </div>
-</nav>
-
-<!-- COMMAND BAR (deep-links to perf tabs) -->
-<div class="command-bar-wrap">
-  <div class="command-bar">
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('courses');return false;"><span class="cmd-chip-num">{{ activity_counts.enrolled_courses or 0 }}</span>Enrolled Courses</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('capstones');return false;"><span class="cmd-chip-num">{{ activity_counts.capstones or 0 }}</span>Capstones</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('casestudies');return false;"><span class="cmd-chip-num">{{ activity_counts.case_studies or 0 }}</span>Case Studies</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('assignments');return false;"><span class="cmd-chip-num">{{ activity_counts.assignments or 0 }}</span>Assignments</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('assessments');return false;"><span class="cmd-chip-num">{{ activity_counts.assessments or 0 }}</span>Assessments</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('mock-int');return false;"><span class="cmd-chip-num">{{ activity_counts.mock_interviews or 0 }}</span>Mock Interviews</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('mock-test');return false;"><span class="cmd-chip-num">{{ activity_counts.mock_tests or 0 }}</span>Mock Tests</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('industry');return false;"><span class="cmd-chip-num">{{ activity_counts.industry or 0 }}</span>Industry Sessions</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('hack');return false;"><span class="cmd-chip-num">{{ activity_counts.hackathons or 0 }}</span>Hackathons</a>
-    {% if cohort_label %}<a href="#performance" class="cmd-chip" onclick="goToPerf('cohort');return false;"><span class="cmd-chip-num wide">{{ cohort_label }}</span>Cohort</a>{% endif %}
-  </div>
-</div>
-
-<main>
-
-<!-- ═══ 01 SUMMARY ═══ -->
-<section id="summary">
-  <div class="section-head">
-    <div><span class="section-num">01 / Intelligence Brief</span><h2 class="section-title">Professional Summary</h2></div>
-    <span class="section-sub">AI-Generated</span>
-  </div>
-  <div class="section-rule"></div>
-  {% if has_summary %}
-    {% set raw = professional_summary|trim %}
-    <ul class="summary-bullets">
-      {% if '•' in raw %}
-        {% for part in raw.split('•') %}{% set clean = part|trim %}{% if clean and clean|length > 5 %}<li><span class="bullet-mark"></span><span>{{ clean }}</span></li>{% endif %}{% endfor %}
-      {% elif '\n' in raw and (raw.split('\n')|length) >= 3 %}
-        {% for line in raw.split('\n') %}{% set clean = line|trim %}{% if clean[:2] in ('- ','* ') %}{% set clean = clean[2:]|trim %}{% elif clean[:1] in ('-','*') %}{% set clean = clean[1:]|trim %}{% endif %}{% if clean and clean|length > 5 %}<li><span class="bullet-mark"></span><span>{{ clean }}</span></li>{% endif %}{% endfor %}
-      {% else %}
-        <li><span class="bullet-mark"></span><span>{{ raw }}</span></li>
-      {% endif %}
-    </ul>
-  {% else %}
-    <div class="empty-tile"><b>Professional summary pending</b>Generate or regenerate your profile to populate this section.</div>
-  {% endif %}
-</section>
-
-<!-- ═══ 02 WORK & LEARNING ═══ -->
-<section id="work">
-  <div class="section-head">
-    <div><span class="section-num">02 / Background</span><h2 class="section-title">Work &amp; Learning</h2></div>
-    <span class="section-sub">Experience · Projects · Education · Skills</span>
-  </div>
-  <div class="section-rule"></div>
-  <div class="itab-bar">
-    <button class="itab-btn active" data-tab-group="work" data-tab-id="experience" onclick="switchTab('work','experience')">Experience<span class="itab-count">{{ work_experience|length if work_experience else 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="work" data-tab-id="projects" onclick="switchTab('work','projects')">Projects<span class="itab-count">{{ projects_data|length if projects_data else 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="work" data-tab-id="education" onclick="switchTab('work','education')">Education<span class="itab-count">{{ education_data|length if education_data else 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="work" data-tab-id="skills" onclick="switchTab('work','skills')">Skills</button>
-  </div>
-
-  <div class="itab-panel active" data-tab-group="work" data-tab-id="experience">
-    {% if has_work %}
-      <div class="timeline">
-        {% for exp in work_experience[:6] %}
-        <div class="tl-item">
-          <div class="tl-dot"></div>
-          {% if exp.duration %}<div class="tl-dates">{{ exp.duration }}</div>{% endif %}
-          <div class="tl-title">{{ exp.title or 'Role' }}</div>
-          {% if exp.company %}<div class="tl-company">{{ exp.company }}</div>{% endif %}
-          {% if exp.description %}<div class="tl-desc">{{ (exp.description|trim)[:320] }}</div>{% endif %}
-        </div>
-        {% endfor %}
-      </div>
-    {% else %}<div class="empty-tile"><b>No work experience yet</b>Add roles, internships, or freelance work on your LMS profile.</div>{% endif %}
-  </div>
-
-  <div class="itab-panel" data-tab-group="work" data-tab-id="projects">
-    {% if has_projects %}
-      <div class="proj-grid">
-        {% for proj in projects_data[:6] %}
-        <div class="proj-card {{ 'featured' if loop.index == 1 else ('featured-2' if loop.index == 2 else '') }}">
-          <span class="proj-tag">Project</span>
-          <h3 class="proj-title">{{ proj.title or proj.name or 'Project' }}</h3>
-          {% if proj.description %}<p class="proj-desc">{{ (proj.description|trim)[:240] }}</p>{% endif %}
-          {% if proj.technologies_used %}<div class="proj-tech">{% set techs = proj.technologies_used %}{% if techs is string %}{% for t in techs.split(',') %}{% if t|trim|length > 1 %}<span class="proj-tech-chip">{{ t|trim }}</span>{% endif %}{% endfor %}{% elif techs is iterable %}{% for t in techs %}<span class="proj-tech-chip">{{ t }}</span>{% endfor %}{% endif %}</div>{% endif %}
-        </div>
-        {% endfor %}
-      </div>
-    {% else %}<div class="empty-tile"><b>No projects yet</b>Connect GitHub or add projects on the LMS.</div>{% endif %}
-  </div>
-
-  <div class="itab-panel" data-tab-group="work" data-tab-id="education">
-    {% if has_edu %}
-      <div class="edu-grid">
-        {% for edu in education_data[:6] %}
-        <div class="edu-card {{ 'featured' if loop.index == 1 else '' }}">
-          <div>
-            <div class="edu-degree">{{ edu.degree or 'Degree' }}{% if edu.field_of_study %} — {{ edu.field_of_study }}{% endif %}</div>
-            {% if edu.institution %}<div class="edu-school">{{ edu.institution }}</div>{% endif %}
-            {% if edu.specialization %}<div class="edu-detail">{{ edu.specialization }}</div>{% endif %}
-          </div>
-          <div>
-            {% if edu.percentage %}<div class="edu-pct">{{ edu.percentage }}{% if edu.percentage is number %}%{% endif %}</div>{% elif edu.cgpa %}<div class="edu-pct">{{ edu.cgpa }}<span style="font-size:11px;color:var(--ink-soft);"> CGPA</span></div>{% endif %}
-            {% if edu.year %}<div class="edu-year">{{ edu.year }}</div>{% endif %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    {% else %}<div class="empty-tile"><b>No education added</b>Add your academic background on the LMS profile.</div>{% endif %}
-  </div>
-
-  <div class="itab-panel" data-tab-group="work" data-tab-id="skills">
-    {% if has_skills %}
-      <div class="skills-grid">
-        <div class="skill-col tech"><div class="skill-col-label">Technical</div><div>{% set tns = namespace(seen=[]) %}{% for sk in skills_data.get('technical_skills',[]) %}{% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}{% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in tns.seen %}{% set _ = tns.seen.append(nm|lower) %}<span class="skill-chip tech">{{ nm }}</span>{% endif %}{% endfor %}</div></div>
-        <div class="skill-col soft"><div class="skill-col-label">Soft Skills</div><div>{% set sns = namespace(seen=[]) %}{% for sk in skills_data.get('soft_skills',[]) %}{% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}{% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in sns.seen %}{% set _ = sns.seen.append(nm|lower) %}<span class="skill-chip soft">{{ nm }}</span>{% endif %}{% endfor %}</div></div>
-        <div class="skill-col tool"><div class="skill-col-label">Tools</div><div>{% set lns = namespace(seen=[]) %}{% for sk in skills_data.get('tools',[]) %}{% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}{% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in lns.seen %}{% set _ = lns.seen.append(nm|lower) %}<span class="skill-chip tool">{{ nm }}</span>{% endif %}{% endfor %}</div></div>
-      </div>
-    {% else %}<div class="empty-tile"><b>No skills tagged</b>Add skills on the LMS profile.</div>{% endif %}
-  </div>
-</section>
-
-<!-- ═══ 03 TOP PERFORMANCE (11 internal tabs) ═══ -->
-<section id="performance">
-  <div class="section-head">
-    <div><span class="section-num">03 / Verified Performance</span><h2 class="section-title">Top Performance</h2></div>
-    <span class="section-sub">Score · Course · Date</span>
-  </div>
-  <div class="section-rule"></div>
-  {# v12.6 — locked 11-tab order: Courses → Assignments → Case Studies → Assessments →
-     Mock Tests → Industry Sessions → Mock Interviews → Capstones → Punctuality →
-     Hackathon → Cohort #}
-  <div class="itab-bar">
-    <button class="itab-btn active" data-tab-group="perf" data-tab-id="courses" onclick="switchTab('perf','courses')">Enrolled Courses<span class="itab-count">{{ activity_counts.enrolled_courses or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="assignments" onclick="switchTab('perf','assignments')">Assignments<span class="itab-count">{{ activity_counts.assignments or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="casestudies" onclick="switchTab('perf','casestudies')">Case Studies<span class="itab-count">{{ activity_counts.case_studies or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="assessments" onclick="switchTab('perf','assessments')">Assessments<span class="itab-count">{{ activity_counts.assessments or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="mock-test" onclick="switchTab('perf','mock-test')">Mock Tests<span class="itab-count">{{ activity_counts.mock_tests or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="industry" onclick="switchTab('perf','industry')">Industry Sessions<span class="itab-count">{{ activity_counts.industry or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="mock-int" onclick="switchTab('perf','mock-int')">Mock Interviews<span class="itab-count">{{ activity_counts.mock_interviews or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="capstones" onclick="switchTab('perf','capstones')">Capstones<span class="itab-count">{{ activity_counts.capstones or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="punctuality" onclick="switchTab('perf','punctuality')">Punctuality</button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="hack" onclick="switchTab('perf','hack')">Hackathons<span class="itab-count">{{ activity_counts.hackathons or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="cohort" onclick="switchTab('perf','cohort')">Cohort</button>
-  </div>
-
-  {# ── Enrolled Courses ── #}
-  <div class="itab-panel active" data-tab-group="perf" data-tab-id="courses">
-    {% if courses_data and courses_data|length > 0 %}
-    <div class="perf-card">
-      {# v12.6 — ALL enrolled courses, no cap (locked rule) #}
-      {% for c in courses_data %}
-      {% set cs = (c.completion_status or 'enrolled')|lower %}
-      {% set pct = c.progress_percentage or 0 %}
-      {# v12.5: derive a status from progress if completion_status is missing/ambiguous #}
-      {% set status_text = 'Completed' if (cs == 'completed' or pct >= 100) else ('In Progress' if pct > 0 else 'Enrolled') %}
-      {% set status_class = 'completed' if status_text == 'Completed' else ('active' if status_text == 'In Progress' else 'enrolled') %}
-      {% set rclass = 'r1' if status_text == 'Completed' else ('r2' if status_text == 'In Progress' else 'r6') %}
-      <div class="perf-item {{ rclass }}">
-        <div class="perf-rank">#{{ loop.index }}</div>
-        <div>
-          <div class="perf-name">{{ c.course_name or 'Course' }}</div>
-          <div class="perf-context">
-            {% if c.category %}<span>{{ c.category }}</span>{% else %}<span>Upskillize</span>{% endif %}
-            {% if c.difficulty_level %} · {{ c.difficulty_level|capitalize }}{% endif %}
-            {% if c.total_modules and c.total_modules > 0 %} · {{ c.total_modules }} Module{% if c.total_modules != 1 %}s{% endif %}{% endif %}
-            {% if c.quiz_count and c.quiz_count > 0 %} · {{ c.quiz_count }} Quiz Attempt{% if c.quiz_count != 1 %}s{% endif %}{% if c.quiz_avg_pct > 0 %} · {{ c.quiz_avg_pct }}% Avg{% endif %}{% endif %}
-            {% if c.enrolled_at %} · Enrolled {{ fmt_date(c.enrolled_at) }}{% endif %}
-            {% if status_text == 'Completed' and c.completed_at %} · Completed {{ fmt_date(c.completed_at) }}{% endif %}
-          </div>
-        </div>
-        <div>
-          <div class="perf-score">{{ pct|int }}<span class="perf-score-pct">%</span></div>
-          <div class="perf-status {{ status_class }}">{% if status_text == 'Completed' %}✓ {% endif %}{{ status_text }}</div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No courses enrolled</b>Enroll in an Upskillize track to see your progress here.</div>{% endif %}
-  </div>
-
-  {# ── Capstones ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="capstones">
-    {% if capstone_projects and capstone_projects|length > 0 %}
-    <div class="perf-card">
-      {% for cp in capstone_projects[:5] %}
-      <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
-        <div class="perf-rank">#{{ loop.index }}</div>
-        <div>
-          <div class="perf-name">{{ cp.title or cp.project_name or 'Capstone' }}{% if cp.attempt_count and cp.attempt_count > 1 %} <span class="perf-badge-mini">{{ cp.attempt_count }} attempts · best score</span>{% endif %}</div>
-          <div class="perf-context">
-            {% if cp.course_name %}<span>{{ cp.course_name }}</span>{% endif %}
-            {% if cp.duration %} · {{ cp.duration }}{% endif %}
-            {% if cp.submitted_at %} · {{ fmt_date(cp.submitted_at) }}{% endif %}
-            {% if cp.ai_grade_label or cp.ai_grade %} · Rubric: {{ cp.ai_grade_label or cp.ai_grade }}{% endif %}
-          </div>
-        </div>
-        {{ dual_score(cp.faculty_score or cp.grade, cp.ai_score or cp.rubric_pct, cp.max_score, 'Rubric AI') }}
-      </div>
-      {% endfor %}
-      {% if capstone_projects|length > 5 %}<div class="perf-more">+ {{ capstone_projects|length - 5 }} More Capstones in Portfolio</div>{% endif %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No capstones yet</b>Capstones unlock at the end of each Upskillize track.</div>{% endif %}
-  </div>
-
-  {# ── Case Studies (v12.6 — deduped best-first in renderer, top 5) ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="casestudies">
-    {% if case_studies_raw and case_studies_raw|length > 0 %}
-    <div class="perf-card">
-      {% for c in case_studies_raw[:5] %}
-      <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
-        <div class="perf-rank">#{{ loop.index }}</div>
-        <div>
-          <div class="perf-name">{{ c.title or 'Case Study' }}{% if c.attempt_count and c.attempt_count > 1 %} <span class="perf-badge-mini">{{ c.attempt_count }} attempts · best score</span>{% endif %}</div>
-          <div class="perf-context">
-            {% if c.course_name %}<span>{{ c.course_name }}</span>{% endif %}
-            {% if c.module_name %} · {{ c.module_name }}{% endif %}
-            {% if c.submitted_at %} · Submitted {{ fmt_date(c.submitted_at) }}{% endif %}
-            {% if c.ai_grade_label or c.ai_grade %} · AiRev: {{ c.ai_grade_label or c.ai_grade }}{% endif %}
-            {% if c.status and c.status != 'reviewed' %} · {{ c.status|capitalize }}{% endif %}
-          </div>
-        </div>
-        {{ dual_score(c.faculty_score or c.score, c.ai_score, c.max_score, 'AiRev') }}
-      </div>
-      {% endfor %}
-      {% if case_studies_raw|length > 5 %}<div class="perf-more">+ {{ case_studies_raw|length - 5 }} more case studies in portfolio</div>{% endif %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No case studies yet</b>AiRev-reviewed case studies appear here once submitted.</div>{% endif %}
-  </div>
-
-  {# ── Assignments (v12.6 — deduped best-first in renderer, top 5) ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="assignments">
-    {% if assignments_raw and assignments_raw|length > 0 %}
-    <div class="perf-card">
-      {% for a in assignments_raw[:5] %}
-      <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
-        <div class="perf-rank">#{{ loop.index }}</div>
-        <div>
-          <div class="perf-name">{{ a.title or 'Assignment' }}{% if a.attempt_count and a.attempt_count > 1 %} <span class="perf-badge-mini">{{ a.attempt_count }} attempts · best score</span>{% endif %}</div>
-          <div class="perf-context">
-            {% if a.course_name %}<span>{{ a.course_name }}</span>{% endif %}
-            {% if a.module_name %} · {{ a.module_name }}{% endif %}
-            {% if a.submitted_at %} · Submitted {{ fmt_date(a.submitted_at) }}{% endif %}
-            {% if a.ai_grade_label or a.rubric_grade %} · Rubric: {{ a.ai_grade_label or a.rubric_grade }}{% endif %}
-          </div>
-        </div>
-        {{ dual_score(a.faculty_score, a.ai_score or a.rubric_pct, a.max_score, 'Rubric AI') }}
-      </div>
-      {% endfor %}
-      {% if assignments_raw|length > 5 %}<div class="perf-more">+ {{ assignments_raw|length - 5 }} more assignments in portfolio</div>{% endif %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No graded assignments yet</b>Submit assignments on the LMS to populate this ranking.</div>{% endif %}
-  </div>
-
-  {# ── Assessments (formal exams + module quizzes, sorted best-first) ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="assessments">
-    {% if test_scores_raw and test_scores_raw|length > 0 %}
-    <div class="perf-card">
-      {% for t in test_scores_raw[:5] %}
-      {% set tp = t.percentage or 0 %}
-      <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
-        <div class="perf-rank">#{{ loop.index }}</div>
-        <div>
-          <div class="perf-name">{{ t.title }}{% if t.attempt_count and t.attempt_count > 1 %} <span class="perf-badge-mini">{{ t.attempt_count }} attempts · best score</span>{% endif %}</div>
-          <div class="perf-context">
-            {% if t.course_name %}<span>{{ t.course_name }}</span>{% endif %}
-            {% if t.topic %} · {{ t.topic|capitalize }}{% endif %}
-            {% if t.kind == 'quiz' %} · Module Quiz{% else %} · Exam{% endif %}
-            {% if t.submitted_at %} · {{ fmt_date(t.submitted_at) }}{% endif %}
-          </div>
-        </div>
-        <div>
-          <div class="perf-score">{{ tp|int }}<span class="perf-score-pct">%</span></div>
-          <div class="perf-score-meta">{% if t.grade %}Grade {{ t.grade }}{% else %}{{ t.score|int }} / {{ t.max_score|int }}{% endif %}</div>
-        </div>
-      </div>
-      {% endfor %}
-      {% if test_scores_raw|length > 5 %}<div class="perf-more">+ {{ test_scores_raw|length - 5 }} more assessments in portfolio</div>{% endif %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No assessments yet</b>Take module assessments or quizzes on the LMS — both formal exams and module checkpoints appear here.</div>{% endif %}
-  </div>
-
-  {# ── Mock Interviews ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="mock-int">
-    {% if mock_interviews_raw and mock_interviews_raw|length > 0 %}
-    <div class="perf-card">
-      {% for m in mock_interviews_raw[:5] %}
-      <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
-        <div class="perf-rank">#{{ loop.index }}</div>
-        <div>
-          <div class="perf-name">{{ m.title or m.topic or 'Mock Interview' }}{% if m.attempt_count and m.attempt_count > 1 %} <span class="perf-badge-mini">{{ m.attempt_count }} attempts · best score</span>{% endif %}</div>
-          <div class="perf-context">
-            {% if m.duration_minutes %}<span>{{ m.duration_minutes }} min</span>{% elif m.duration_min %}<span>{{ m.duration_min }} min</span>{% elif m.duration %}<span>{{ m.duration }}</span>{% endif %}
-            {% if m.role %} · {{ m.role }}{% endif %}
-            {% if m.round %} · {{ m.round }}{% endif %}
-            {% if m.interviewer %} · {{ m.interviewer }}{% endif %}
-            {% if m.submitted_at %} · {{ fmt_date(m.submitted_at) }}{% elif m.completed_at %} · {{ fmt_date(m.completed_at) }}{% elif m.scheduled_at %} · {{ fmt_date(m.scheduled_at) }}{% endif %}
-          </div>
-        </div>
-        {{ dual_score(m.faculty_score or m.faculty_score_alt or m.score or m.overall_score, m.ai_score, 100, 'InterviewIQ') }}
-      </div>
-      {% endfor %}
-      {% if mock_interviews_raw|length > 5 %}<div class="perf-more">+ {{ mock_interviews_raw|length - 5 }} more mock interviews in portfolio</div>{% endif %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No mock interviews yet</b>Mock interviews with industry mentors via InterviewIQ appear here once completed.</div>{% endif %}
-  </div>
-
-  {# ── Mock Tests (TestGen / BrainDrill) ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="mock-test">
-    {% if mock_tests_raw and mock_tests_raw|length > 0 %}
-    <div class="perf-card">
-      {% for t in mock_tests_raw[:5] %}
-      {% set tp = t.percentage if t.percentage is not none else ((t.score/t.total_marks*100) if t.total_marks and t.total_marks > 0 else (t.score or 0)) %}
-      <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
-        <div class="perf-rank">#{{ loop.index }}</div>
-        <div>
-          <div class="perf-name">{{ t.title or t.test_name or t.exam_name or 'TestGen Practice' }}{% if t.attempt_count and t.attempt_count > 1 %} <span class="perf-badge-mini">{{ t.attempt_count }} attempts · best score</span>{% endif %}</div>
-          <div class="perf-context">
-            {% if t.course_name %}<span>{{ t.course_name }}</span>{% endif %}
-            {% if t.test_type %} · {{ t.test_type|capitalize }}{% else %} · TestGen{% endif %}
-            {% if t.time_taken_minutes %} · {{ t.time_taken_minutes }} min{% endif %}
-            {% if t.attempted_at %} · {{ fmt_date(t.attempted_at) }}{% elif t.submitted_at %} · {{ fmt_date(t.submitted_at) }}{% endif %}
-          </div>
-        </div>
-        <div>
-          <div class="perf-score">{{ tp|int }}<span class="perf-score-pct">%</span></div>
-          <div class="perf-score-meta">{% if t.grade %}Grade {{ t.grade }}{% else %}{{ (t.score or 0)|int }} / {{ (t.total_marks or 100)|int }}{% endif %}</div>
-        </div>
-      </div>
-      {% endfor %}
-      {% if mock_tests_raw|length > 5 %}<div class="perf-more">+ {{ mock_tests_raw|length - 5 }} more mock tests in portfolio</div>{% endif %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No mock tests yet</b>TestGen-powered timed practice tests appear here once attempted.</div>{% endif %}
-  </div>
-
-  {# ── Industry Sessions ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="industry">
-    {% if industry_sessions_raw and industry_sessions_raw|length > 0 %}
-    <div class="perf-card">
-      {% for s in industry_sessions_raw[:5] %}
-      <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
-        <div class="perf-rank">#{{ loop.index }}</div>
-        <div>
-          <div class="perf-name">{{ s.title or 'Industry Session' }}{% if s.attempt_count and s.attempt_count > 1 %} <span class="perf-badge-mini">{{ s.attempt_count }} attempts · best score</span>{% endif %}</div>
-          <div class="perf-context">{% if s.speaker %}<span>{{ s.speaker }}</span>{% endif %}{% if s.company %} · {{ s.company }}{% endif %}{% if s.duration %} · {{ s.duration }}{% endif %}{% if s.held_at %} · {{ fmt_date(s.held_at) }}{% endif %}</div>
-        </div>
-        {# v12.6 — show the real submission score when present; LIVE badge only when unscored #}
-        {% if s.score is not none %}
-        <div>
-          <div class="perf-score">{{ s.score|int }}<span class="perf-score-pct">%</span></div>
-          <div class="perf-score-meta">{% if s.band %}{{ s.band }}{% elif s.grade %}Grade {{ s.grade }}{% else %}Scored{% endif %}</div>
-        </div>
-        {% else %}
-        <div><div class="perf-score live">LIVE</div><div class="perf-score-meta">Attended</div></div>
-        {% endif %}
-      </div>
-      {% endfor %}
-      {% if industry_sessions_raw|length > 5 %}<div class="perf-more">+ {{ industry_sessions_raw|length - 5 }} more industry sessions in portfolio</div>{% endif %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No industry sessions logged</b>Live mentor masterclasses attended via Upskillize appear here.</div>{% endif %}
-  </div>
-
-  {# ── Punctuality (v12.6 — 9th tab; score card or coming-soon) ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="punctuality">
-    {% set _pct = perf_snapshot.axes | selectattr('key', 'equalto', 'punctuality') | first %}
-    {% set _pct_score = _pct.score if _pct else None %}
-    {% set _pct_band = perf_snapshot.punctuality_band or '' %}
-    <div class="punct-card">
-      {% if _pct_score and _pct_score > 0 %}
-      {# ─── Data available: score + band, then bullets ─── #}
-      <div class="punct-score-row">
-        <div class="punct-score-num">{{ _pct_score | int }}<span class="punct-score-suffix">/100</span></div>
-        {% if _pct_band %}<div class="punct-score-band">{{ _pct_band }}</div>{% endif %}
-      </div>
-      <div class="punct-heading">Your Punctuality Score reflects:</div>
-      <ul class="punct-bullets">
-        <li>Reliability in attending live sessions</li>
-        <li>Consistency in submitting work by deadlines</li>
-        <li>Timeliness in responding to session commitments</li>
-        <li>Recent behavior weighted more than older activity</li>
-      </ul>
-      {% else %}
-      {# ─── No data: same bullets with Coming Soon framing ─── #}
-      <div class="punct-coming-soon">
-        <div class="punct-cs-eyebrow">Coming Soon</div>
-        <div class="punct-cs-heading">Punctuality Score</div>
-        <p class="punct-cs-lead">Once your first month of activity is captured, your score will reflect:</p>
-        <ul class="punct-bullets">
-          <li>Reliability in attending live sessions</li>
-          <li>Consistency in submitting work by deadlines</li>
-          <li>Timeliness in responding to session commitments</li>
-          <li>Recent behavior weighted more than older activity</li>
-        </ul>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-  {# ── Hackathons ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="hack">
-    {% if hackathons_raw and hackathons_raw|length > 0 %}
-    <div class="perf-card">
-      {% for h in hackathons_raw[:5] %}
-      {% set rank = h.rank or h.placement %}
-      <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
-        <div class="perf-rank">#{{ loop.index }}</div>
-        <div>
-          <div class="perf-name">{{ h.title or h.name or 'Hackathon' }}</div>
-          <div class="perf-context">{% if h.organiser %}<span>{{ h.organiser }}</span>{% endif %}{% if h.team_size %} · Team of {{ h.team_size }}{% endif %}{% if h.duration %} · {{ h.duration }}{% endif %}{% if h.held_at %} · {{ h.held_at }}{% endif %}</div>
-        </div>
-        <div>
-          {% if rank %}<div class="perf-score">#{{ rank }}</div><div class="perf-score-meta">{% if h.total %}/ {{ h.total }} teams{% else %}Ranked{% endif %}</div>
-          {% else %}<div class="perf-score live">{{ (h.badge or 'Top')|upper }}</div><div class="perf-score-meta">{{ h.award or 'Attended' }}</div>{% endif %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No hackathons logged</b>Hackathon participation and awards appear here once added.</div>{% endif %}
-  </div>
-
-  {# ── Cohort ── #}
-  <div class="itab-panel" data-tab-group="perf" data-tab-id="cohort">
-    <div class="cohort-grid">
-      <div class="cohort-headline">
-        <div class="cohort-tag">Cohort Standing</div>
-        <div class="cohort-rank-big">{{ cohort_label or '—' }}{% if cohort_rank and cohort_size %}<span class="cohort-rank-of">/ {{ cohort_size }}</span>{% endif %}</div>
-        <div class="cohort-rank-meta">{% if cohort_rank and cohort_size %}Rank {{ cohort_rank }} of {{ cohort_size }} learners in cohort{% else %}Cohort percentile based on overall score across the <strong style="color:var(--gold-bright);">Upskillize</strong> active cohort{% endif %}</div>
-      </div>
-      <div class="cohort-stat-grid">
-        <div class="cohort-stat"><div class="cohort-stat-num">{{ perf_snapshot.average }}<span class="cohort-stat-num-suffix">/100</span></div><div class="cohort-stat-label">Avg Performance Across 8 Dimensions</div></div>
-        <div class="cohort-stat"><div class="cohort-stat-num">{{ computed.completed_courses or 0 }}<span class="cohort-stat-num-suffix">/ {{ activity_counts.enrolled_courses or 0 }}</span></div><div class="cohort-stat-label">Courses Completed</div></div>
-        <div class="cohort-stat"><div class="cohort-stat-num">{{ activity_counts.assessments or 0 }}</div><div class="cohort-stat-label">Assessments Taken</div></div>
-        <div class="cohort-stat"><div class="cohort-stat-num">{{ certifications_data|length if certifications_data else 0 }}</div><div class="cohort-stat-label">Industry-Validated Certificates</div></div>
-      </div>
-    </div>
-    <div class="cohort-cmp">
-      <div class="cohort-cmp-label">Performance vs Cohort Average — By Dimension</div>
-      {% for row in cohort_comparison %}
-      <div class="cohort-cmp-row">
-        <span class="cohort-cmp-name">{{ row.name }}</span>
-        <div class="cohort-cmp-bars">
-          <div class="cohort-cmp-bar-cohort" style="width:{{ row.cohort }}%;"></div>
-          <div class="cohort-cmp-bar-self" style="width:{{ row.you }}%;"></div>
-        </div>
-        <div class="cohort-cmp-vals">Cohort {{ row.cohort }} · <strong>You {{ row.you }}</strong></div>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-</section>
-
-<!-- ═══ 04 READINESS & FIT (3 internal tabs) ═══ -->
-<section id="readiness">
-  <div class="section-head">
-    <div><span class="section-num">04 / Hire Signal</span><h2 class="section-title">Readiness &amp; Fit</h2></div>
-    <span class="section-sub">Interview · Top Matches · Preferences</span>
-  </div>
-  <div class="section-rule"></div>
-  <div class="itab-bar">
-    <button class="itab-btn active" data-tab-group="ready" data-tab-id="interview" onclick="switchTab('ready','interview')">Interview Readiness</button>
-    <button class="itab-btn" data-tab-group="ready" data-tab-id="matches" onclick="switchTab('ready','matches')">Top Matches<span class="itab-count">{{ role_matches|length if role_matches else 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="ready" data-tab-id="opento" onclick="switchTab('ready','opento')">Open To</button>
-  </div>
-
-  {# ── Interview Readiness ── #}
-  <div class="itab-panel active" data-tab-group="ready" data-tab-id="interview">
-    <div class="intv-row">
-      <div class="intv-card"><div><span class="intv-num">{{ interview_kpis.mock_int_avg }}</span><span class="intv-suffix">%</span></div><div class="intv-label">Mock Interview Avg</div><p class="intv-caption">{% if interview_kpis.mocks_completed > 0 %}Across {{ interview_kpis.mocks_completed }} mocks{% else %}No mocks yet{% endif %}</p></div>
-      <div class="intv-card c1"><div><span class="intv-num">{{ interview_kpis.mock_test_avg }}</span><span class="intv-suffix">%</span></div><div class="intv-label">Mock Test Avg</div><p class="intv-caption">Across {{ activity_counts.mock_tests or 0 }} timed tests</p></div>
-      <div class="intv-card c2"><div><span class="intv-num">{{ interview_kpis.mocks_completed }}</span></div><div class="intv-label">Mocks Completed</div><p class="intv-caption">{% if interview_kpis.mocks_completed > 0 %}Practice cadence steady{% else %}Start your first mock{% endif %}</p></div>
-      <div class="intv-card c3"><div><span class="intv-num">{{ interview_kpis.consistency }}</span><span class="intv-suffix">%</span></div><div class="intv-label">Consistency</div><p class="intv-caption">{% if interview_kpis.mocks_completed > 0 %}A mock every 2–3 weeks{% else %}Practice not yet started{% endif %}</p></div>
-    </div>
-    {% if mock_domains and mock_domains|length > 0 %}
-    <div class="mock-row">
-      <div class="mock-label">Mock Performance by Domain</div>
-      <div class="mock-grid">
-        {% for d in mock_domains %}
-        <div>
-          <div class="mock-name"><span>{{ d.name }}</span><span class="mock-pct">{{ d.pct }}%</span></div>
-          <div class="mock-bar"><div class="mock-fill {{ d.cls }}" style="--target-width:{{ d.pct }}%;"></div></div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% else %}
-    <div class="empty-tile"><b>Domain breakdown unlocks after mocks</b>Complete a few mock interviews and tests to see per-domain readiness bars.</div>
     {% endif %}
   </div>
-
-  {# ── Top Matches ── #}
-  <div class="itab-panel" data-tab-group="ready" data-tab-id="matches">
-    {% if has_matches %}
-    <div class="match-grid">
-      {% for r in role_matches[:4] %}
-      <div class="match-card {{ 'best' if loop.index == 1 else '' }}">
-        <span class="match-rank-badge">{{ 'Best Match' if loop.index == 1 else '#' ~ loop.index }}</span>
-        <div class="match-body">
-          <div class="match-role">{{ r.role_title or r.title or 'Role' }}</div>
-          {% if r.skills_matched %}<div class="match-tags">{{ r.skills_matched if r.skills_matched is string else (r.skills_matched | join(' · ')) }}</div>{% endif %}
-          {% if r.rationale %}<p class="match-rationale">{{ (r.rationale|trim)[:320] }}</p>{% elif r.description %}<p class="match-rationale">{{ (r.description|trim)[:320] }}</p>{% endif %}
-        </div>
-        <div class="match-score-wrap">
-          <div class="match-score">{{ r.match_percentage or r.match_pct or r.score or 0 }}<span class="match-score-pct">%</span></div>
-          <div class="match-bar"><div class="match-fill" style="width:{{ r.match_percentage or r.match_pct or r.score or 0 }}%;"></div></div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<div class="empty-tile"><b>Role matches pending</b>Regenerate your profile after adding skills and preferences — CareerIQ will surface your top role fits here.</div>{% endif %}
-  </div>
-
-  {# ── Open To ── #}
-  <div class="itab-panel" data-tab-group="ready" data-tab-id="opento">
-    <div class="open-grid">
-      <div class="open-card"><div class="open-label">Role</div><div class="open-value">{{ job_preferences.preferred_role or '—' }}</div><div class="open-detail">{% if job_preferences.preferred_industry %}{{ job_preferences.preferred_industry }}{% else %}Set on LMS Job Preferences{% endif %}</div></div>
-      <div class="open-card"><div class="open-label">Locations</div><div class="open-value">{{ job_preferences.preferred_location or student_location or '—' }}</div><div class="open-detail">{% if job_preferences.work_mode %}{{ job_preferences.work_mode }}{% else %}Mode not set{% endif %}</div></div>
-      <div class="open-card"><div class="open-label">Work Mode</div><div class="open-value">{{ job_preferences.work_mode or 'Hybrid' }}</div><div class="open-detail">{{ job_preferences.employment_type or 'Full-time' }}</div></div>
-      <div class="open-card"><div class="open-label">CTC Expectation</div><div class="open-value">{% if job_preferences.expected_salary_min and job_preferences.expected_salary_max %}₹{{ job_preferences.expected_salary_min }}–{{ job_preferences.expected_salary_max }} LPA{% else %}—{% endif %}</div><div class="open-detail">{% if job_preferences.notice_period %}Notice: {{ job_preferences.notice_period }}{% else %}Immediate{% endif %}</div></div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══ 05 ACHIEVEMENTS + CERTIFICATIONS (2 internal tabs) ═══ -->
-<section id="achievements">
-  <div class="section-head">
-    <div><span class="section-num">05 / Validated</span><h2 class="section-title">Achievements</h2></div>
-    <span class="section-sub">Third-Party Validated</span>
-  </div>
-  <div class="section-rule"></div>
-  <div class="itab-bar">
-    <button class="itab-btn active" data-tab-group="ach" data-tab-id="wins" onclick="switchTab('ach','wins')">Achievements<span class="itab-count">{{ achievement_cards|length if achievement_cards else 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="ach" data-tab-id="certs" onclick="switchTab('ach','certs')">Certifications<span class="itab-count">{{ certifications_data|length if certifications_data else 0 }}</span></button>
-  </div>
-
-  <div class="itab-panel active" data-tab-group="ach" data-tab-id="wins">
-    {% if achievement_cards and achievement_cards|length > 0 %}
-    <div class="achievement-grid">
-      {% for ac in achievement_cards %}
-      <div class="ach-card">
-        <div class="ach-tag">{{ ac.tag }}</div>
-        <div><span class="ach-score">{{ ac.score }}{% if ac.score_pct %}<span class="ach-score-pct">{{ ac.score_pct }}</span>{% endif %}</span></div>
-        <h3 class="ach-title">{{ ac.title }}</h3>
-        {% if ac.meta %}<p class="ach-meta">{{ ac.meta }}</p>{% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No achievements yet</b>Top assignments, hackathon results, and course badges will surface here automatically as you progress.</div>{% endif %}
-  </div>
-
-  <div class="itab-panel" data-tab-group="ach" data-tab-id="certs">
-    {% if has_certs %}
-    <div class="cert-grid">
-      {% for cert in certifications_data[:10] %}
-      <div class="cert-card">
-        <div>
-          <div class="cert-name">{{ cert.certificate_name or cert.name or 'Certificate' }}{% if (cert.completion_pct and (cert.completion_pct|int) >= 100) or cert.upskillize_verified %}<span class="verified-badge">✓ Upskillize Verified</span>{% endif %}</div>
-          {% if cert.course_name %}<div class="cert-issuer">{{ cert.course_name }}{% if cert.score %} · Score {{ cert.score }}%{% endif %}</div>{% elif cert.issuer %}<div class="cert-issuer">{{ cert.issuer }}</div>{% endif %}
-        </div>
-        {% if cert.issued_at %}<div class="cert-year">{{ cert.issued_at }}</div>{% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<div class="empty-tile"><b>No certificates yet</b>Complete an Upskillize course to receive an Industry-Validated Certificate.</div>{% endif %}
-  </div>
-</section>
-
-<!-- ═══ 06 BEYOND WORK ═══ -->
-<section id="beyond">
-  <div class="section-head">
-    <div><span class="section-num">06 / Off the Resume</span><h2 class="section-title">Beyond Work</h2></div>
-    <span class="section-sub">Personality &amp; Interests</span>
-  </div>
-  <div class="section-rule"></div>
-  <div class="beyond-grid">
-    <div class="psych-card">
-      <div class="psych-header">
-        <div class="psych-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-        <div>
-          <div class="psych-type">{{ personality_data.personality_type if has_personality else 'Psychometric Pending' }}</div>
-          <div class="psych-def">{% if has_personality and personality_data.traits %}{{ personality_data.traits|trim }}{% else %}Complete the psychometric test on the LMS to unlock this card.{% endif %}</div>
-        </div>
-      </div>
-      {% if has_personality %}
-      <div class="trait-list">
-        {% set trait_keys = [('work_style','Work Style','tf1'),('communication','Communication','tf2'),('leadership','Team Role','tf3'),('integrity','Integrity','tf4'),('adaptability','Adaptability','tf5'),('innovation','Innovation','tf6')] %}
-        {% set rendered = namespace(count=0) %}
-        {% for key, label, cls in trait_keys %}
-          {% set val = personality_data.get(key) %}
-          {% if val %}
-            {% set pct = personality_data.get(key ~ '_pct') or 80 %}
-            <div>
-              <div class="trait-meta"><span class="trait-name">{{ label }}{% if val is string and val|length > 2 %} — {{ val|trim }}{% endif %}</span><span class="trait-pts">{{ pct }} / 100</span></div>
-              <div class="trait-bar"><div class="trait-fill {{ cls }}" style="--target-width:{{ pct }}%;"></div></div>
-            </div>
-            {% set rendered.count = rendered.count + 1 %}
-          {% endif %}
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
-    <div class="hobby-card">
-      <div class="hobby-header">
-        <div class="hobby-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
-        <div class="hobby-title">Interests &amp; Hobbies</div>
-      </div>
-      {% if has_hobbies %}
-      <div class="hobby-tags">
-        {% set hns = namespace(seen=[]) %}{% for h in hobbies_data %}{% set hh = (h|string|trim) %}{% if hh|length > 1 and hh|lower not in JUNK and hh|lower not in hns.seen %}{% set _ = hns.seen.append(hh|lower) %}<span class="hobby-tag">{{ hh }}</span>{% endif %}{% endfor %}
-      </div>
-      {% else %}<p style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;">Add hobbies on your LMS profile.</p>{% endif %}
-      <div class="hobby-aside">
-        {% if languages_data and languages_data|length > 0 %}<strong>Languages:</strong> {{ languages_data | join(' · ') }}<br>{% endif %}
-        {% if personal_career_goals and (personal_career_goals|trim)|length > 5 %}<strong>Career Goals:</strong> {{ personal_career_goals|trim }}{% endif %}
-      </div>
-    </div>
-  </div>
-</section>
-
-</main>
-
-<aside class="powered-by">
-  <div class="powered-inner">
-    <div>
-      <div class="powered-tag">Profile Generated by Upskillize Profile IQ</div>
-      <h3 class="powered-headline">Industry-ready talent in <span class="accent">
-        BFSI, FinTech &amp; Product</span></h3>
-    </div>
-    <div class="powered-cta">
-  <a href="https://lms.upskillize.com/login"
-     target="_blank" rel="noopener"
-     class="powered-btn primary">Explore LMS</a>
-  <a href="https://upskillize.com"
-     target="_blank" rel="noopener"
-     class="powered-btn ghost">About Upskillize</a>
 </div>
+
+{# ════════════════════════════════════════════════════════════ #}
+{# 2. PROFESSIONAL SUMMARY                                    #}
+{# ════════════════════════════════════════════════════════════ #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">✦</div>
+    <div class="section-title">Professional Summary</div>
   </div>
-</aside>
-<footer>
-  <div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;">
-    <div>© Upskillize Solutions · upskillize.com</div>
-    <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:10px;color:rgba(255,255,255,0.35);">
-      {% if generated_date %}<span>Generated {{ generated_date }}</span>{% endif %}
-      {% if updated_date %}<span>Updated {{ updated_date }}</span>{% endif %}
-      {% if total_views is not none %}<span>{{ total_views }} views</span>{% endif %}
-      {# v12.6 — removed "Open ↗" link: it pointed at the DELETED /profile/public/{slug} endpoint and leaked the slug in shared HTML #}
+  {% if professional_summary %}
+    {% set lines = professional_summary.split('\n') %}
+    {% for line in lines %}
+      {% set clean = line.strip().lstrip('•-▸● ') %}
+      {% if clean %}<div class="bullet">{{ clean }}</div>{% endif %}
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">✦</div>
+      <div class="placeholder-text">Complete your profile to generate an AI-powered summary</div>
+      <div class="placeholder-action">Add education, skills, and experience in your LMS profile</div>
     </div>
+  {% endif %}
+</div>
+
+{# ════════════════════════════════════════════════════════════ #}
+{# ── LMS VERIFIED DATA SECTION ──                            #}
+{# ════════════════════════════════════════════════════════════ #}
+
+{# 3. LMS COURSE PROGRESS #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--teal-soft);color:var(--teal)">📚</div>
+    <div class="section-title">Course Progress</div>
+    {% if total_courses > 0 %}<span class="section-badge" style="background:var(--teal-soft);color:var(--teal)">{{ total_courses }} enrolled</span>{% endif %}
   </div>
-</footer>
+  {% if courses_data and courses_data|length > 0 %}
+    {% for c in courses_data %}
+    <div class="item-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="item-title">{{ c.course_name or 'Course' }}</div>
+        <span class="score-sm" style="color:{% if (c.progress_percentage or 0) >= 100 %}var(--green){% elif (c.progress_percentage or 0) > 50 %}var(--accent){% else %}var(--gold){% endif %}">{{ c.progress_percentage or 0 }}%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:{{ c.progress_percentage or 0 }}%;background:{% if (c.progress_percentage or 0) >= 100 %}var(--green){% elif (c.progress_percentage or 0) > 50 %}var(--accent){% else %}var(--gold){% endif %}"></div></div>
+      <div class="item-sub" style="margin-top:6px">
+        {% if c.completion_status == 'completed' %}<span class="tag tag-gold">✓ Completed</span>{% else %}<span class="tag" style="background:var(--accent-soft);color:var(--accent)">In Progress</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">📚</div>
+      <div class="placeholder-text">No courses enrolled yet</div>
+      <div class="placeholder-action">Enroll in a course to start building your verified learning profile</div>
+    </div>
+  {% endif %}
+</div>
 
-<script>
-const tabs = document.querySelectorAll('.tab-item');
-const sections = document.querySelectorAll('main section');
-const setActiveTopTab = (id) => tabs.forEach(t => t.classList.toggle('active', t.dataset.target === id));
+{# 4. ASSESSMENT BEST SCORES #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">📊</div>
+    <div class="section-title">Assessment Scores</div>
+    {% if best_test_scores|length > 0 %}<span class="section-badge" style="background:var(--gold-soft);color:var(--gold)">Best of {{ total_assessments }} taken</span>{% endif %}
+  </div>
+  {% if best_test_scores and best_test_scores|length > 0 %}
+    {% for ts in best_test_scores[:4] %}
+    <div class="item-card" style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div class="item-title">{{ ts.subject or ts.topic or ts.course_name or 'Assessment' }}</div>
+        <div class="item-sub">{% if ts.course_name %}{{ ts.course_name }}{% endif %}{% if ts.grade %} · Grade: {{ ts.grade }}{% endif %}</div>
+      </div>
+      <div class="score" style="color:{% if (ts.percentage or 0) >= 80 %}var(--green){% elif (ts.percentage or 0) >= 60 %}var(--gold){% else %}var(--red){% endif %}">{{ ts.percentage or ts.score or 0 }}%</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">📊</div>
+      <div class="placeholder-text">No assessments taken yet</div>
+      <div class="placeholder-action">Take a quiz or test to showcase your knowledge</div>
+    </div>
+  {% endif %}
+</div>
 
-const obs = new IntersectionObserver((entries) => {
-  entries.forEach(e => { if (e.isIntersecting) setActiveTopTab(e.target.id); });
-}, { rootMargin: '-30% 0px -60% 0px', threshold: 0 });
-sections.forEach(s => obs.observe(s));
+<div class="grid2">
+{# 5. BEST CASE STUDIES #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">📋</div>
+    <div class="section-title">Case Studies</div>
+  </div>
+  {% if best_case_studies and best_case_studies|length > 0 %}
+    {% for cs in best_case_studies[:2] %}
+    <div class="item-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div class="item-title">{{ cs.title or 'Case Study' }}</div>
+        <div class="score-sm" style="color:var(--green)">{{ cs.score or 0 }}%</div>
+      </div>
+      <div class="item-sub">{{ cs.course_name or '' }}{% if cs.ai_grade %} · {{ cs.ai_grade }}{% endif %}</div>
+      {% if cs.ai_feedback %}<div class="item-desc" style="font-size:12px">{{ cs.ai_feedback[:150] }}{% if cs.ai_feedback|length > 150 %}...{% endif %}</div>{% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">📋</div>
+      <div class="placeholder-text">No case studies yet</div>
+      <div class="placeholder-action">Submit a case study to demonstrate analytical skills</div>
+    </div>
+  {% endif %}
+</div>
 
-tabs.forEach(t => t.addEventListener('click', (e) => {
-  e.preventDefault();
-  document.getElementById(t.dataset.target).scrollIntoView({ behavior: 'smooth', block: 'start' });
-  setActiveTopTab(t.dataset.target);
-}));
+{# 6. BEST ASSIGNMENTS #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">📝</div>
+    <div class="section-title">Assignments</div>
+  </div>
+  {% if best_assignments and best_assignments|length > 0 %}
+    {% for a in best_assignments[:2] %}
+    <div class="item-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div class="item-title">{{ a.title or 'Assignment' }}</div>
+        {% if a.score %}<div class="score-sm" style="color:var(--accent)">{{ a.score }}</div>{% endif %}
+      </div>
+      <div class="item-sub">{{ a.course_name or '' }}{% if a.status %} · {{ a.status }}{% endif %}</div>
+      {% if a.feedback %}<div class="item-desc" style="font-size:12px">{{ a.feedback[:120] }}{% if a.feedback|length > 120 %}...{% endif %}</div>{% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">📝</div>
+      <div class="placeholder-text">No assignments yet</div>
+      <div class="placeholder-action">Complete assignments to show your work</div>
+    </div>
+  {% endif %}
+</div>
+</div>
 
-function switchTab(group, id){
-  document.querySelectorAll(`[data-tab-group="${group}"]`).forEach(el => {
-    el.classList.toggle('active', el.dataset.tabId === id);
-  });
-}
+{# 7. CAPSTONE PROJECT #}
+{% if capstone_project %}
+<div class="section" style="border-left:3px solid var(--gold)">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">🎯</div>
+    <div class="section-title">Capstone Project</div>
+    <span class="section-badge" style="background:var(--gold-soft);color:var(--gold)">Featured</span>
+  </div>
+  <div class="item-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="item-title" style="font-size:16px">{{ capstone_project.title or 'Capstone Project' }}</div>
+      {% if capstone_project.score %}<div class="score" style="color:var(--gold)">{{ capstone_project.score }}{% if capstone_project.max_score %}/{{ capstone_project.max_score }}{% endif %}</div>{% endif %}
+    </div>
+    {% if capstone_project.description %}<div class="item-desc">{{ capstone_project.description }}</div>{% endif %}
+    {% if capstone_project.tech_stack %}<div style="margin-top:8px">{% for t in capstone_project.tech_stack.split(',') %}<span class="tag tag-tech">{{ t.strip() }}</span>{% endfor %}</div>{% endif %}
+  </div>
+</div>
+{% else %}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">🎯</div>
+    <div class="section-title">Capstone Project</div>
+  </div>
+  <div class="placeholder">
+    <div class="placeholder-icon">🎯</div>
+    <div class="placeholder-text">No capstone project yet</div>
+    <div class="placeholder-action">This will be featured prominently once submitted</div>
+  </div>
+</div>
+{% endif %}
 
-function goToPerf(tabId){
-  // Guard: only switch if the target panel exists — switching to an unknown
-  // id would deactivate every panel and blank the whole section.
-  if (tabId && document.querySelector(`[data-tab-group="perf"][data-tab-id="${tabId}"]`)) {
-    switchTab('perf', tabId);
-  }
-  document.getElementById('performance').scrollIntoView({behavior:'smooth', block:'start'});
-}
-</script>
+{# 8. CERTIFICATES #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--gold-soft);color:var(--gold)">🏆</div>
+    <div class="section-title">Certificates</div>
+  </div>
+  {% if certifications_data and certifications_data|length > 0 %}
+    {% for cert in certifications_data %}
+    <div class="item-card" style="display:flex;align-items:center;gap:12px">
+      <div style="width:36px;height:36px;border-radius:50%;border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">🏆</div>
+      <div>
+        <div class="item-title">{{ cert.course_name or cert.name or 'Certificate' }}</div>
+        <div class="item-sub">{{ cert.certificate_id or '' }}{% if cert.issue_date %} · {{ cert.issue_date }}{% endif %}</div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">🏆</div>
+      <div class="placeholder-text">No certificates earned yet</div>
+      <div class="placeholder-action">Complete a course to earn your first certificate</div>
+    </div>
+  {% endif %}
+</div>
+
+{# 9. PERSONALITY & TRAITS #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">🧠</div>
+    <div class="section-title">Personality & Work Style</div>
+  </div>
+  {% if personality_data and personality_data.personality_type %}
+    <div style="text-align:center;padding:12px 0">
+      <div style="font-size:28px;margin-bottom:6px">{{ personality_data.icon or '🧠' }}</div>
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text)">{{ personality_data.personality_type }}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px;max-width:400px;margin-left:auto;margin-right:auto">{{ personality_data.desc or '' }}</div>
+    </div>
+    {% if personality_data.traits %}
+    <div class="grid2" style="margin-top:12px">
+      {% if personality_data.work_style %}<div class="item-card"><div class="item-sub">Work Style</div><div class="item-title" style="font-size:13px">{{ personality_data.work_style }}</div></div>{% endif %}
+      {% if personality_data.communication %}<div class="item-card"><div class="item-sub">Communication</div><div class="item-title" style="font-size:13px">{{ personality_data.communication }}</div></div>{% endif %}
+      {% if personality_data.leadership %}<div class="item-card"><div class="item-sub">Leadership</div><div class="item-title" style="font-size:13px">{{ personality_data.leadership }}</div></div>{% endif %}
+    </div>
+    {% endif %}
+    <div style="font-size:11px;color:var(--subtle);text-align:center;margin-top:10px">From Psychometric Assessment</div>
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">🧠</div>
+      <div class="placeholder-text">Personality traits not available</div>
+      <div class="placeholder-action">Take the psychometric test to reveal your work personality</div>
+    </div>
+  {% endif %}
+</div>
+
+{# ════════════════════════════════════════════════════════════ #}
+{# ── EXTERNAL DATA — from Resume, LinkedIn, GitHub ──        #}
+{# ════════════════════════════════════════════════════════════ #}
+
+<div class="grid2">
+{# 10. EDUCATION #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">🎓</div>
+    <div class="section-title">Education</div>
+  </div>
+  {% if education_data and education_data|length > 0 %}
+    {% for edu in education_data %}
+    <div class="timeline-item">
+      <div class="item-title">{{ edu.degree or '' }} {{ edu.field_of_study or '' }}</div>
+      <div class="item-sub" style="color:var(--accent)">{{ edu.institution or '' }}</div>
+      <div class="item-sub">{{ edu.year or '' }}{% if edu.percentage %} · {{ edu.percentage }}%{% endif %}</div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">🎓</div>
+      <div class="placeholder-text">Education not added</div>
+      <div class="placeholder-action">Add in LMS profile or upload resume</div>
+    </div>
+  {% endif %}
+</div>
+
+{# 11. WORK EXPERIENCE #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--green-soft);color:var(--green)">💼</div>
+    <div class="section-title">Experience</div>
+  </div>
+  {% if work_experience and work_experience|length > 0 %}
+    {% for w in work_experience %}
+    <div class="timeline-item">
+      <div class="item-title">{{ w.title or w.role or 'Role' }}</div>
+      <div class="item-sub" style="color:var(--accent)">{{ w.company or '' }}</div>
+      <div class="item-sub">{{ w.duration or '' }}{% if w.start_date %} · {{ w.start_date }}{% endif %}</div>
+      {% if w.description %}<div class="item-desc">{{ w.description }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    {% if is_fresher %}
+    <div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">
+      <span class="tag" style="background:var(--green-soft);color:var(--green)">Fresher</span>
+      <div style="margin-top:8px">Ready to begin professional career</div>
+    </div>
+    {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">💼</div>
+      <div class="placeholder-text">No experience added</div>
+      <div class="placeholder-action">Upload resume or add on LinkedIn</div>
+    </div>
+    {% endif %}
+  {% endif %}
+</div>
+</div>
+
+{# 12. SKILLS #}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">⚡</div>
+    <div class="section-title">Skills & Competencies</div>
+  </div>
+  {% if skills_data %}
+    {% if skills_data.technical_skills %}
+    <div style="margin-bottom:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--subtle);font-weight:600;margin-bottom:6px">Technical</div>
+      {% for s in skills_data.technical_skills %}
+        <span class="tag tag-tech">{{ s.name if s.name is defined else s }}</span>
+      {% endfor %}
+    </div>{% endif %}
+    {% if skills_data.tools %}
+    <div style="margin-bottom:10px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--subtle);font-weight:600;margin-bottom:6px">Tools</div>
+      {% for s in skills_data.tools %}
+        <span class="tag tag-tool">{{ s.name if s.name is defined else s }}</span>
+      {% endfor %}
+    </div>{% endif %}
+    {% if skills_data.soft_skills %}
+    <div><div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--subtle);font-weight:600;margin-bottom:6px">Soft Skills</div>
+      {% for s in skills_data.soft_skills %}
+        <span class="tag tag-soft">{{ s.name if s.name is defined else s }}</span>
+      {% endfor %}
+    </div>{% endif %}
+  {% else %}
+    <div class="placeholder">
+      <div class="placeholder-icon">⚡</div>
+      <div class="placeholder-text">No skills detected</div>
+      <div class="placeholder-action">Add key skills in LMS profile or upload resume</div>
+    </div>
+  {% endif %}
+</div>
+
+{# 13. ELIGIBLE JOB ROLES #}
+{% if role_matches and role_matches|length > 0 %}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--teal-soft);color:var(--teal)">◎</div>
+    <div class="section-title">Eligible Job Roles</div>
+  </div>
+  {% for r in role_matches[:3] %}
+  <div class="role-card">
+    <div class="role-header">
+      <div class="role-name">{{ r.role_title }}</div>
+      <div class="score" style="color:var(--gold)">{{ r.match_percentage or r.score or 0 }}%</div>
+    </div>
+    <div class="progress-track"><div class="progress-fill" style="width:{{ r.match_percentage or r.score or 0 }}%;background:var(--accent)"></div></div>
+    {% if r.matched_keywords %}
+    <div style="margin-top:8px">
+      {% for kw in r.matched_keywords %}<span class="tag" style="background:var(--green-soft);color:var(--green);font-size:10px">✓ {{ kw }}</span>{% endfor %}
+      {% if r.missing_keywords %}{% for kw in r.missing_keywords[:3] %}<span class="tag" style="background:var(--gold-soft);color:var(--gold);font-size:10px">+ {{ kw }}</span>{% endfor %}{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 14. PROJECTS #}
+{% if projects_data and projects_data|length > 0 %}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--purple-soft);color:var(--purple)">🚀</div>
+    <div class="section-title">Projects</div>
+  </div>
+  {% for p in projects_data[:4] %}
+  <div class="item-card" style="border-left:2px solid var(--purple)">
+    <div class="item-title">{{ p.name or p.title or 'Project' }}</div>
+    {% if p.description %}<div class="item-desc">{{ p.description }}</div>{% endif %}
+    {% if p.technologies or p.languages %}
+    <div style="margin-top:6px">
+      {% for t in (p.technologies or p.languages or '').split(',') %}
+        {% if t.strip() %}<span class="tag tag-tech">{{ t.strip() }}</span>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# 15. JOB PREFERENCES #}
+{% if job_preferences and (job_preferences.preferred_role or job_preferences.work_mode or job_preferences.preferred_location) %}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--teal-soft);color:var(--teal)">🎯</div>
+    <div class="section-title">Job Preferences</div>
+  </div>
+  <div class="grid2">
+    {% if job_preferences.preferred_role %}<div class="item-card"><div class="item-sub">Target Role</div><div class="item-title" style="font-size:13px">{{ job_preferences.preferred_role }}</div></div>{% endif %}
+    {% if job_preferences.preferred_industry or job_preferences.industries %}<div class="item-card"><div class="item-sub">Industry</div><div class="item-title" style="font-size:13px">{{ job_preferences.preferred_industry or job_preferences.industries }}</div></div>{% endif %}
+    {% if job_preferences.work_mode %}<div class="item-card"><div class="item-sub">Work Mode</div><div class="item-title" style="font-size:13px">{{ job_preferences.work_mode }}</div></div>{% endif %}
+    {% if job_preferences.preferred_location %}<div class="item-card"><div class="item-sub">Location</div><div class="item-title" style="font-size:13px">{{ job_preferences.preferred_location }}</div></div>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# 16. SEMESTER RESULTS #}
+{% if semester_results and semester_results|length > 0 %}
+<div class="section">
+  <div class="section-head">
+    <div class="section-icon" style="background:var(--accent-soft);color:var(--accent)">📊</div>
+    <div class="section-title">Academic Results</div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    {% for sr in semester_results[:6] %}
+    <div class="item-card" style="flex:1;min-width:120px;text-align:center">
+      <div class="score-sm" style="color:var(--accent)">{{ sr.cgpa or sr.percentage or sr.gpa or '–' }}</div>
+      <div class="item-sub">{{ sr.semester or sr.term or sr.label or 'Result' }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ════════════════════════════════════════════════════════════ #}
+{# FOOTER                                                      #}
+{# ════════════════════════════════════════════════════════════ #}
+<div class="footer">
+  <div class="footer-title">Professional Profile</div>
+  <div class="footer-sub">AI-powered profile from verified credentials, assessments & psychometric data</div>
+  <div class="source-tags">
+    {% for src in data_sources %}
+    <span class="source-tag" style="background:var(--accent-soft);color:var(--accent)">{{ src }}</span>
+    {% endfor %}
+  </div>
+  {% if profile_url %}<div style="margin-top:10px;font-size:11px;color:var(--subtle)"><a href="{{ profile_url }}">{{ profile_url }}</a></div>{% endif %}
+  <div style="font-size:11px;color:var(--subtle);margin-top:6px">Powered by Upskillize · © 2026</div>
+</div>
+
+</div>
 </body>
 </html>

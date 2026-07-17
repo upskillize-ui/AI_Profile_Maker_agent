@@ -192,8 +192,162 @@ def _extract_content_words(text: str) -> set:
     return {w for w in words if len(w) > 2 and w not in _GROUND_STOPWORDS}
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# v1.2 TARGETED GROUNDEDNESS
+# ═══════════════════════════════════════════════════════════════════════
+#
+# The v1.0/v1.1 gate compared EVERY content word against source vocabulary.
+# In production (17 Jul 2026) that rejected every honest summary — the
+# "invented" words were connective English ('across', 'spanning', 'both',
+# 'suggests') that no stopword list can enumerate. Each rejection burned
+# up to 6 LLM calls and shipped the minimal fallback line.
+#
+# The rewritten gate checks only what hallucination actually looks like:
+#   1. TECH/SKILL terms in the output that are absent from source
+#      (fake "Kubernetes", "TensorFlow", "AWS" expertise)
+#   2. Mid-sentence PROPER NOUNS absent from source
+#      (fake employers, institutions, certifications)
+#   3. NUMBERS absent from source (fake "scored 92%", "500+ users";
+#      small counts ≤ 12 are allowed — "2 of 4 courses" is arithmetic,
+#      not invention)
+# Zero tolerance on those three. Ordinary prose can never trip it.
+
+_TECH_LEXICON = {
+    "python", "java", "javascript", "typescript", "golang", "rust", "kotlin",
+    "swift", "ruby", "php", "scala", "matlab", "cobol",
+    "react", "angular", "vue", "svelte", "nextjs", "django", "flask",
+    "fastapi", "spring", "express", "rails", "laravel",
+    "nodejs", "node", "dotnet",
+    "mysql", "postgresql", "postgres", "mongodb", "redis", "oracle",
+    "sqlite", "dynamodb", "cassandra", "elasticsearch",
+    "aws", "azure", "gcp", "kubernetes", "docker", "terraform", "ansible",
+    "jenkins", "graphql", "kafka", "spark", "hadoop", "airflow",
+    "tensorflow", "pytorch", "keras", "scikit-learn", "pandas", "numpy",
+    "tableau", "powerbi", "selenium", "figma", "photoshop",
+    "blockchain", "solidity", "ethereum", "devops", "microservices",
+    "scrum", "kanban",
+}
+
+_SAFE_PROPER_NOUNS = {
+    "upskillize", "i", "ai", "bfsi", "lms", "india", "indian", "english",
+    "hindi", "career", "profile", "summary",
+    "january", "february", "march", "april", "may", "june", "july",
+    "august", "september", "october", "november", "december",
+}
+
+
+def _collect_source_parts(source_data: Dict) -> List[str]:
+    """All raw text fragments from source data (shared by vocab + blob)."""
+    parts = []
+
+    personal = source_data.get("personal", {}) or {}
+    for k in ("full_name", "current_designation", "current_employer",
+              "education_level", "institution", "field_of_study",
+              "key_skills", "career_goals", "preferred_role", "hobbies",
+              "industries", "languages_known", "bio", "about_me",
+              "work_experience_years", "graduation_year"):
+        v = personal.get(k)
+        if v:
+            parts.append(str(v))
+
+    for c in source_data.get("courses", []) or []:
+        parts.extend([str(c.get("course_name", "")), str(c.get("description", "")),
+                      str(c.get("category", "")), str(c.get("progress_percentage", ""))])
+
+    for section in ("case_studies", "assignments", "capstones",
+                    "industry_sessions", "mock_tests", "mock_interviews",
+                    "assessments", "test_scores"):
+        for item in source_data.get(section, []) or []:
+            if not isinstance(item, dict):
+                continue
+            for f in ("title", "topic", "brief", "course_name", "band",
+                      "insight_text", "session_type", "role", "quiz_title",
+                      "level", "company", "focus", "speaker", "difficulty",
+                      "exam_name", "test_name", "grade", "status",
+                      "score", "percentage"):
+                v = item.get(f)
+                if v is not None and v != "":
+                    parts.append(str(v))
+
+    for cert in source_data.get("certifications", []) or []:
+        parts.extend([str(cert.get("name", "")), str(cert.get("certificate_name", "")),
+                      str(cert.get("issuer", ""))])
+
+    perso = source_data.get("personality", {}) or {}
+    parts.append(str(perso.get("personality_type", "")))
+    parts.append(str(perso.get("summary", "")))
+    parts.extend([str(t) for t in perso.get("traits", []) or []])
+
+    computed = source_data.get("computed", {}) or {}
+    for k in ("overall_score", "best_test_score", "avg_test_score",
+              "completed_courses", "total_courses"):
+        v = computed.get(k)
+        if v is not None:
+            parts.append(str(v))
+
+    for section_key in ("linkedin_data", "github_data", "resume_data"):
+        ext = source_data.get(section_key) or {}
+        if isinstance(ext, dict):
+            for v in ext.values():
+                if isinstance(v, str):
+                    parts.append(v)
+                elif isinstance(v, list):
+                    parts.extend(str(x) for x in v if x)
+
+    return parts
+
+
+def _invented_numbers(output: str, source_blob: str) -> List[str]:
+    """Numbers in output that don't trace to source. Small counts (≤ 12)
+    are allowed — '3 courses', '2 of 4' are arithmetic, not invention."""
+    allowed = set()
+    for n in re.findall(r"\d+(?:\.\d+)?", source_blob):
+        allowed.add(n)
+        try:
+            allowed.add(str(int(float(n))))
+            allowed.add(str(round(float(n))))
+        except ValueError:
+            pass
+    bad = []
+    for n in re.findall(r"\d+(?:\.\d+)?", output):
+        try:
+            val = float(n)
+        except ValueError:
+            continue
+        if val <= 12:
+            continue
+        if n in allowed or str(int(val)) in allowed or str(round(val)) in allowed:
+            continue
+        bad.append(n)
+    return bad
+
+
+def _invented_proper_nouns(output: str, source_vocab: set) -> List[str]:
+    """Mid-sentence capitalized tokens (names/orgs/products) not in source."""
+    bad = []
+    for sentence in re.split(r"(?<=[.!?])\s+|\n", output):
+        words = re.findall(r"[A-Za-z][A-Za-z0-9&.+'-]*", sentence)
+        # Skip leading bullet word(s): first alphabetic token of a sentence
+        for i, w in enumerate(words):
+            if i == 0:
+                continue
+            if not w[0].isupper() or len(w) < 3:
+                continue
+            wl = w.lower().strip(".&'-")
+            if wl in _SAFE_PROPER_NOUNS or wl in _GROUND_STOPWORDS:
+                continue
+            if wl not in source_vocab:
+                bad.append(w)
+    return bad
+
+
 def _extract_source_vocabulary(source_data: Dict) -> set:
     """Collect every meaningful noun/skill/term from the source data."""
+    return _extract_content_words(" ".join(_collect_source_parts(source_data)))
+
+
+def _extract_source_vocabulary_legacy(source_data: Dict) -> set:
+    """(unused since v1.2 — kept for reference during launch week)"""
     parts = []
 
     personal = source_data.get("personal", {}) or {}
@@ -253,20 +407,34 @@ def _check_groundedness(output: str, source_data: Dict) -> Tuple[bool, List[str]
     Return (is_grounded, invented_words). is_grounded=False when the output
     contains meaningful content words that don't appear in the source.
     """
-    output_words = _extract_content_words(output)
-    source_words = _extract_source_vocabulary(source_data)
-    invented = output_words - source_words
+    # v1.2 TARGETED gate — see block comment above _TECH_LEXICON.
+    # Checks the three shapes hallucination actually takes; never polices
+    # connective English (the v1.0/v1.1 failure mode).
+    source_vocab = _extract_source_vocabulary(source_data)
+    source_blob = " ".join(_collect_source_parts(source_data)).lower()
 
-    # v1.1: tolerance scales with summary length. The old flat cap of 3
-    # rejected virtually every normal 4-5 bullet summary (observed in
-    # production 17 Jul 2026: "All tiers failed for user_id=87"), which
-    # burned up to 6 LLM calls per profile and shipped the minimal
-    # fallback line instead. A quarter of content words may be connective
-    # vocabulary not literally present in source; wholesale invention
-    # (fake skills, fake employers) still blows well past 25%.
-    tolerance = max(4, round(len(output_words) * 0.25))
-    is_grounded = len(invented) <= tolerance
-    return is_grounded, list(invented)[:20]  # cap for logging
+    output_lower = output.lower()
+    output_words = _extract_content_words(output)
+
+    invented = []
+
+    # 1. Tech/skill terms claimed but absent from source
+    for term in _TECH_LEXICON:
+        if term in output_words and term not in source_vocab \
+                and term not in source_blob:
+            invented.append(f"tech:{term}")
+
+    # 2. Proper nouns (employers, institutions, products) absent from source
+    for noun in _invented_proper_nouns(output, source_vocab):
+        invented.append(f"name:{noun}")
+
+    # 3. Metrics absent from source (fake scores, fake user counts)
+    for num in _invented_numbers(output, source_blob):
+        invented.append(f"number:{num}")
+
+    # Zero tolerance — these are precise checks, not fuzzy ones.
+    is_grounded = len(invented) == 0
+    return is_grounded, invented[:20]  # cap for logging
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -488,7 +656,8 @@ class AIEnhancer:
         parts = []
         if course_names:
             parts.append(f"Enrolled in {' and '.join(course_names)} at Upskillize.")
-        goal = personal.get("career_goals") or personal.get("preferred_role")
+        goal = (personal.get("career_goals") or personal.get("preferred_role") or "")
+        goal = goal.strip().rstrip(".")   # avoid "years.." double-period
         if goal:
             parts.append(f"Career direction: {goal}.")
 

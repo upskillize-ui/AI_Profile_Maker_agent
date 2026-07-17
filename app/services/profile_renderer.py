@@ -152,6 +152,14 @@ def _dedupe_best_rows(rows: List[Dict], *key_fields: str) -> List[Dict]:
     return out
 
 
+def _split_listfield(raw: str) -> List[str]:
+    """'Cricket, Reading; Chess' → ['Cricket', 'Reading', 'Chess'].
+    LMS free-text list fields use commas/semicolons/slashes/pipes."""
+    if not raw or not isinstance(raw, str):
+        return []
+    return [x.strip() for x in re.split(r"[,;/|]", raw) if x.strip()]
+
+
 def _detect_fresher(student_data: Dict, profile_data: Dict) -> bool:
     personal = student_data.get("personal", {})
     work = profile_data.get("work_experience", [])
@@ -654,8 +662,15 @@ class ProfileRenderer:
             "projects_data":   cleaned_projects,
             "job_preferences": student_data.get("job_preferences", {}) or {},
             "personal_career_goals": personal.get("career_goals", "") or "",
-            "hobbies_data":    student_data.get("hobbies_data", []) or [],
-            "languages_data":  student_data.get("languages_data", []) or personal.get("languages") or [],
+            # v12.7 FIX: hobbies_data / languages_data were read from keys
+            # the collector never emits — hobbies and languages NEVER
+            # rendered even when filled on the LMS profile. Derive them
+            # from the real personal fields (comma/semicolon strings).
+            "hobbies_data":    (student_data.get("hobbies_data")
+                                or _split_listfield(personal.get("hobbies", ""))),
+            "languages_data":  (student_data.get("languages_data")
+                                or personal.get("languages")
+                                or _split_listfield(personal.get("languages_known", ""))),
 
             # Top Performance — deduped best-first rows for all 11 internal tabs
             "courses_data":         enriched_courses,
