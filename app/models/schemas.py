@@ -10,6 +10,9 @@ from typing import Optional, List, Dict, Any
 
 # ─── PROFILE ────────────────────────────────────────────
 
+class CorporateToggleRequest(BaseModel):
+    visible: bool
+
 class ProfileGenerateRequest(BaseModel):
     student_id: Optional[int] = None
     force_regenerate: bool = False

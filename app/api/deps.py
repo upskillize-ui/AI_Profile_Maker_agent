@@ -86,3 +86,24 @@ async def get_current_admin(authorization: str = Header(None)):
     if user.role != "admin":
         raise HTTPException(403, "Admin access required")
     return user
+
+def get_current_corporate(
+         authorization: str = Header(None),
+         db: Session = Depends(get_db),
+    ):
+         """
+         Extract JWT from Authorization: Bearer <token>, decode it,
+         look up the user, confirm role == 'corporate'.
+        """
+         if not authorization or not authorization.startswith("Bearer "):
+             raise HTTPException(401, "Corporate authentication required.")
+         token = authorization[len("Bearer "):]
+         try:
+             payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+             user_id = payload.get("id") or payload.get("sub")
+         except jwt.PyJWTError:
+             raise HTTPException(401, "Invalid token.")
+         user = db.query(User).filter_by(id=user_id).first()
+         if not user or user.role != "corporate":
+             raise HTTPException(403, "Corporate access only.")
+         return user

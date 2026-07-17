@@ -1,920 +1,962 @@
 """
-Data Collector Service — v6 COMPLETE
-═════════════════════════════════════
-ALL fixes applied:
-  • Personality: direct JSON fallback when AI interpretation fails
-  • Hobbies: wired from users.hobbies column → hobbies_list
-  • Course descriptions: c.description added to SELECT
-  • TestGen filter: brain_drill/practice tests excluded
-  • Rubric JOIN: drops student_id check, broadens evaluation_type
-  • Job preferences: already wired (was in v4)
-  • Capstone: defensively tries multiple table names
+ProfileIQ Data Collector — v6.2 (ASSESSMENTS ADDED)
+═══════════════════════════════════════════════════════════════════════════
+
+Full replacement of v6.1 with one addition and one clarification.
+
+CHANGES FROM v6.1
+──────────────────
+  1. NEW method: _get_assessments() — reads quiz_attempts joined to quizzes.
+     Faculty-uploaded quizzes ARE the "Assessments" tab on the LMS.
+     (pf_assessments = Pathfinder AI career-guidance = deliberately excluded)
+  2. asyncio.gather() now has 12 tasks (was 11). Unpacking updated to match.
+  3. Snapshot is now 8 axes:
+       1. Assignments  2. Case Studies  3. Capstones
+       4. Industry     5. Mock Test     6. Mock Interview
+       7. Assessments  8. Punctuality
+  4. Legacy alias `test_scores` now routes to the assessments list
+     (renderer's _compute_perf_snapshot line 168 reads test_scores for
+     the "assessment" axis — this naming alignment makes it work
+     without any renderer change).
+
+STILL CORRECT FROM v6.1
+────────────────────────
+  - All activity tables join on users.id via `student_id` column
+    (except student_attendance which is students.id)
+  - Section keys hold FLAT LISTS (template does its own dedup + top-N)
+  - Legacy aliases: capstone_projects, industry_interactions (for renderer)
+  - Punctuality returns None-shape when table missing (graceful N/A)
+  - Never references the dropped `visibility` column
+  - Empty state is [] or None — never NaN or 0.00 sentinel
+
+PERFORMANCE SNAPSHOT DESIGN (unchanged)
+────────────────────────────────────────
+  Axis score = mean of `score` across all items in that section's list.
+  Fair average = mean of axes with real activity (score > 0), N/A excluded.
+  Attendance folds into Punctuality (per the LMS-side Punctuality Score
+  design, not as its own snapshot axis).
+
+Author: Phase 0 data-flow rewire — v6.2
 """
 
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from typing import Dict, Any, List
-from decimal import Decimal
-from datetime import date, datetime
-import logging
+import asyncio
 import json
+import logging
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 
-def clean_data(obj):
-    if isinstance(obj, Decimal): return float(obj)
-    if isinstance(obj, datetime): return obj.isoformat()
-    if isinstance(obj, date): return obj.isoformat()
-    if isinstance(obj, dict): return {k: clean_data(v) for k, v in obj.items()}
-    if isinstance(obj, list): return [clean_data(i) for i in obj]
-    if isinstance(obj, tuple): return tuple(clean_data(i) for i in obj)
-    return obj
-
-
 class DataCollector:
+    """
+    Assembles all data needed to render a student's profile.
+
+    Reads only. Never writes. Every method is best-effort — a query
+    failure logs and returns an empty list rather than crashing
+    collect_all(). Every activity method expects users.id as user_id.
+    """
 
     def __init__(self, db: Session):
         self.db = db
 
-    async def collect_all(self, student_id: int) -> Dict[str, Any]:
-        sid_row = self.db.execute(
-            text("SELECT id FROM students WHERE user_id = :uid LIMIT 1"),
-            {"uid": student_id},
-        ).mappings().first()
-        stu_id = sid_row["id"] if sid_row else student_id
-        logger.info(f"Mapped user_id={student_id} -> students.id={stu_id}")
+    # =====================================================================
+    # PUBLIC ENTRY POINT
+    # =====================================================================
 
-        # v12.6: one-shot schema discovery — logs the REAL table names that exist
-        # for capstones / mock interviews / industry / tests so we stop guessing.
-        # Read-only INFORMATION_SCHEMA query, runs once per profile generation.
-        self._probe_schema(stu_id)
-
-        personal = self._get_personal_info(student_id)
-        courses = self._get_courses(stu_id)
-        test_scores = self._get_test_scores(stu_id)
-        case_studies = self._get_case_studies(stu_id)
-        assignments = self._get_assignments(stu_id)
-        quiz_scores = self._get_quiz_scores(stu_id)
-        personality = self._get_personality(student_id)
-        platform_activity = self._get_platform_activity(stu_id)
-        forum_activity = self._get_forum_activity(student_id)
-        batch_info = self._get_batch_info(stu_id)
-        capstone_projects = self._get_capstone_projects(stu_id)
-        semester_results = self._get_semester_results(stu_id)
-        job_preferences = self._get_job_preferences(student_id)
-
-        # v12.4: real data for the perf tabs that were previously empty
-        mock_tests        = self._get_mock_tests(stu_id)
-        mock_interviews   = self._get_mock_interviews(stu_id)
-        industry_sessions = self._get_industry_sessions(stu_id)
-        hackathons        = self._get_hackathons(stu_id)
-
-        computed = self._compute_metrics(
-            test_scores=test_scores, case_studies=case_studies,
-            assignments=assignments, quiz_scores=quiz_scores,
-            courses=courses, platform_activity=platform_activity,
-            forum_activity=forum_activity,
-        )
-
-        result = {
-            "student_id": student_id,
-            "personal": personal,
-            "courses": courses,
-            "test_scores": test_scores,
-            "case_studies": case_studies,
-            "assignments": assignments,
-            "quiz_scores": quiz_scores,
-            "projects": self._get_projects(stu_id),
-            "certifications": self._get_certifications(stu_id),
-            "personality": personality,
-            "platform_activity": platform_activity,
-            "forum_activity": forum_activity,
-            "batch_info": batch_info,
-            "computed": computed,
-            "capstone_projects": capstone_projects,
-            "semester_results": semester_results,
-            "job_preferences": job_preferences,
-            "hobbies_data": personal.get("hobbies_list", []),
-            "lms_education": personal.get("lms_education", []),
-            "lms_work_experience": personal.get("lms_work_experience", []),
-            # v12.4
-            "mock_tests": mock_tests,
-            "mock_interviews": mock_interviews,
-            "industry_sessions": industry_sessions,
-            "hackathons": hackathons,
-        }
-        return clean_data(result)
-
-    # ─── v12.6 Schema Discovery ──────────────────────────
-    # Runs once per profile generation. Logs the actual table names that exist
-    # for the buckets we keep failing to query (capstones, mock interviews,
-    # industry sessions, tests) plus the per-table foreign-key columns. The
-    # idea is: instead of guessing table+FK combinations forever, dump what's
-    # actually there and let the operator paste the log line back so v12.7's
-    # SQL can be written against real tables.
-
-    def _probe_schema(self, student_id: int) -> None:
+    async def collect_all(self, user_id: int) -> Dict[str, Any]:
+        """
+        Assemble the full data payload for one student.
+        `user_id` is users.id — the authenticated student's id.
+        """
         try:
-            buckets = {
-                "capstone":  ["%capstone%"],
-                "mock_intv": ["%mock_interview%", "%interview_review%", "%mock_int%"],
-                "industry":  ["%industry%", "%guest_lecture%", "%masterclass%"],
-                "tests":     ["%exam%", "%test_result%", "%practice_test%", "%testgen%", "%mock_test%"],
-                "rubric":    ["%rubric%", "%airev%", "%case_study_review%"],
+            personal    = await self._get_personal(user_id)
+            students_id = await self._get_students_id(user_id)
+
+            # 12 concurrent reads — assessments is now #12
+            results = await asyncio.gather(
+                self._get_courses(user_id),             # 0
+                self._get_case_studies(user_id),        # 1
+                self._get_assignments(user_id),         # 2
+                self._get_capstones(user_id),           # 3
+                self._get_industry_sessions(user_id),   # 4
+                self._get_mock_tests(user_id),          # 5
+                self._get_mock_interviews(user_id),     # 6
+                self._get_attendance(students_id),      # 7
+                self._get_punctuality(user_id),         # 8
+                self._get_psychometric(user_id),        # 9
+                self._get_certifications(user_id),      # 10
+                self._get_assessments(user_id),         # 11 — NEW
+                return_exceptions=True,
+            )
+
+            (courses, case_studies, assignments, capstones,
+             industry_sessions, mock_tests, mock_interviews,
+             attendance, punctuality, psycho, certifications,
+             assessments) = [
+                (r if not isinstance(r, Exception) else self._safe_default_list(r))
+                for r in results
+            ]
+
+            # Build the 8-axis Performance Snapshot from the flat lists
+            snapshot = self._compute_snapshot(
+                assignments        = assignments,
+                case_studies       = case_studies,
+                capstones          = capstones,
+                industry_sessions  = industry_sessions,
+                mock_tests         = mock_tests,
+                mock_interviews    = mock_interviews,
+                assessments        = assessments,
+                punctuality        = punctuality,
+            )
+
+            return {
+                "personal":              personal,
+                "courses":               courses,
+                "case_studies":          case_studies,       # LIST[dict]
+                "assignments":           assignments,        # LIST[dict]
+                "capstones":             capstones,          # LIST[dict]
+                "capstone_projects":     capstones,          # LEGACY ALIAS (renderer)
+                "industry_sessions":     industry_sessions,  # LIST[dict]
+                "industry_interactions": industry_sessions,  # LEGACY ALIAS (renderer)
+                "mock_tests":            mock_tests,         # LIST[dict]
+                "mock_interviews":       mock_interviews,    # LIST[dict]
+                "assessments":           assessments,        # NEW — LIST[dict]
+                "test_scores":           assessments,        # LEGACY ALIAS — renderer's
+                                                             # "assessment" axis reads this
+                "attendance":            attendance,         # dict summary
+                "punctuality":           punctuality,        # dict summary
+                "personality":           psycho,             # dict
+                "certifications":        certifications,     # LIST[dict]
+                "performance_snapshot":  snapshot,           # 8-axis dict
+                "batch_info":            {},
+                "computed": {
+                    "user_id":            user_id,
+                    "students_id":        students_id,
+                    "total_case_studies": len(case_studies),
+                    "total_assignments":  len(assignments),
+                    "total_capstones":    len(capstones),
+                    "total_industry":     len(industry_sessions),
+                    "total_mock_tests":   len(mock_tests),
+                    "total_interviews":   len(mock_interviews),
+                    "total_assessments":  len(assessments),
+                },
             }
-            for bucket, patterns in buckets.items():
-                found = []
-                for pat in patterns:
-                    try:
-                        rows = self.db.execute(text("""
-                            SELECT TABLE_NAME
-                            FROM INFORMATION_SCHEMA.TABLES
-                            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE :pat
-                        """), {"pat": pat}).fetchall()
-                        for r in rows: found.append(r[0])
-                    except Exception:
-                        continue
-                found = sorted(set(found))
-                if found:
-                    logger.info(f"[schema] {bucket}: {found}")
-                    # For each found table, log its FK-shaped columns so we know
-                    # whether to filter on student_id, user_id, or something else.
-                    for tname in found[:4]:
-                        try:
-                            cols = self.db.execute(text("""
-                                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-                                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t
-                                  AND (COLUMN_NAME LIKE '%user%id%' OR COLUMN_NAME LIKE '%student%id%'
-                                       OR COLUMN_NAME = 'uid' OR COLUMN_NAME = 'sid')
-                            """), {"t": tname}).fetchall()
-                            fk_cols = [c[0] for c in cols]
-                            cnt = self.db.execute(
-                                text(f"SELECT COUNT(*) FROM `{tname}`")
-                            ).scalar()
-                            logger.info(f"[schema]   {tname} fk_cols={fk_cols} total_rows={cnt}")
-                        except Exception as e:
-                            logger.info(f"[schema]   {tname} probe failed: {e}")
-                else:
-                    logger.info(f"[schema] {bucket}: (no tables matched any of {patterns})")
+
         except Exception as e:
-            logger.warning(f"[schema] probe failed: {e}")
+            logger.exception(f"collect_all failed for user_id={user_id}")
+            return self._empty_payload(user_id)
 
-    # ─── Personal Info (with hobbies) ────────────────────
+    # =====================================================================
+    # PERSONAL / IDENTITY (users table)
+    # =====================================================================
 
-    def _get_personal_info(self, student_id: int) -> Dict[str, Any]:
+    async def _get_personal(self, user_id: int) -> Dict[str, Any]:
         try:
             row = self.db.execute(text("""
-                SELECT u.id, u.full_name, u.email, u.phone,
-                       u.profile_photo AS photo_url,
-                       s.city, s.state, s.country,
-                       s.date_of_birth, s.enrollment_number, s.batch_id
-                FROM users u
-                LEFT JOIN students s ON s.user_id = u.id
-                WHERE u.id = :sid LIMIT 1
-            """), {"sid": student_id}).mappings().first()
-            if not row: return {"full_name": "Student", "email": ""}
-            d = dict(row)
-            parts = (d.get("full_name") or "Student").split(" ", 1)
-            d["first_name"] = parts[0]
-            d["last_name"] = parts[1] if len(parts) > 1 else ""
+                SELECT
+                    id, full_name, email, phone,
+                    profile_photo, bio, gender, city, state, country,
+                    current_designation, current_employer,
+                    work_experience_years, employment_type,
+                    education_level, edu_institution, institution,
+                    field_of_study, graduation_year, edu_year,
+                    key_skills, career_goals, preferred_role,
+                    preferred_location, notice_period, open_to_relocation,
+                    linkedin, github, portfolio, twitter, website,
+                    resume_url, resume_name,
+                    languages_known, hobbies, industries
+                FROM users
+                WHERE id = :uid
+                LIMIT 1
+            """), {"uid": user_id}).mappings().first()
+
+            if not row:
+                return self._empty_personal(user_id)
+
+            r = dict(row)
+            return {
+                "user_id":               r["id"],
+                "full_name":             r.get("full_name") or "",
+                "email":                 r.get("email") or "",
+                "phone":                 r.get("phone") or "",
+                "photo_url":             r.get("profile_photo") or "",
+                "bio":                   r.get("bio") or "",
+                "about_me":              r.get("bio") or "",   # legacy alias
+                "gender":                r.get("gender") or "",
+                "city":                  r.get("city") or "",
+                "state":                 r.get("state") or "",
+                "country":               r.get("country") or "",
+                "location":              self._join_location(r),
+                "current_designation":   r.get("current_designation") or "",
+                "current_employer":      r.get("current_employer") or "",
+                "work_experience_years": r.get("work_experience_years") or "",
+                "employment_type":       r.get("employment_type") or "",
+                "education_level":       r.get("education_level") or "",
+                "institution":           r.get("edu_institution") or r.get("institution") or "",
+                "field_of_study":        r.get("field_of_study") or "",
+                "graduation_year":       r.get("graduation_year") or r.get("edu_year") or "",
+                "key_skills":            r.get("key_skills") or "",
+                "career_goals":          r.get("career_goals") or "",
+                "preferred_role":        r.get("preferred_role") or "",
+                "preferred_location":    r.get("preferred_location") or "",
+                "notice_period":         r.get("notice_period") or "",
+                "open_to_relocation":    r.get("open_to_relocation") or "",
+                "linkedin_url":          r.get("linkedin") or "",
+                "github_url":            r.get("github") or "",
+                "portfolio_url":         r.get("portfolio") or "",
+                "website_url":           r.get("website") or "",
+                "twitter_url":           r.get("twitter") or "",
+                "resume_url":            r.get("resume_url") or "",
+                "resume_name":           r.get("resume_name") or "",
+                "languages_known":       r.get("languages_known") or "",
+                "hobbies":               r.get("hobbies") or "",
+                "industries":            r.get("industries") or "",
+            }
         except Exception as e:
-            logger.warning(f"personal_info basic query failed: {e}")
-            return {"first_name": "Student", "last_name": "", "email": ""}
+            logger.warning(f"_get_personal failed for user_id={user_id}: {e}")
+            return self._empty_personal(user_id)
 
-        # Extra columns on USERS table — includes hobbies
-        users_columns = {
-            "linkedin": "linkedin_url", "github": "github_url",
-            "portfolio": "portfolio_url", "twitter": "twitter_url",
-            "resume_url": "resume_url", "resume_name": "resume_name",
-            "bio": "about_me", "skills": "skills",
-            "certifications": "certifications",
-            "education_level": "education_level", "institution": "institution",
-            "graduation_year": "graduation_year",
-            "field_of_study": "field_of_study",
-            "work_experience_years": "work_experience_years",
-            "current_employer": "current_employer",
-            "current_designation": "current_designation",
-            "key_skills": "key_skills", "career_goals": "career_goals",
-            "preferred_role": "preferred_role",
-            "hobbies": "hobbies",
-        }
-        for db_col, key_name in users_columns.items():
-            try:
-                extra_row = self.db.execute(
-                    text(f"SELECT {db_col} FROM users WHERE id = :sid LIMIT 1"),
-                    {"sid": student_id},
-                ).mappings().first()
-                if extra_row and extra_row.get(db_col):
-                    d[key_name] = extra_row[db_col]
-            except Exception:
-                pass
+    async def _get_students_id(self, user_id: int) -> Optional[int]:
+        """users.id → students.id lookup, for attendance queries only."""
+        try:
+            row = self.db.execute(text("""
+                SELECT id FROM students WHERE user_id = :uid LIMIT 1
+            """), {"uid": user_id}).first()
+            return row[0] if row else None
+        except Exception as e:
+            logger.warning(f"_get_students_id failed for user_id={user_id}: {e}")
+            return None
 
-        # Parse hobbies into a list
-        raw_hobbies = d.get("hobbies", "") or ""
-        if raw_hobbies and raw_hobbies.strip():
-            d["hobbies_list"] = [h.strip() for h in raw_hobbies.replace("\n", ",").split(",") if h.strip() and len(h.strip()) > 1]
-        else:
-            d["hobbies_list"] = []
-
-        # Build structured education from LMS profile fields
-        lms_education = []
-        if d.get("education_level") or d.get("institution") or d.get("graduation_year"):
-            lms_education.append({
-                "degree": d.get("education_level", "") or "",
-                "institution": d.get("institution", "") or "",
-                "year": str(d.get("graduation_year", "") or ""),
-                "field_of_study": d.get("field_of_study", "") or "",
-                "percentage": "", "source": "lms_profile",
-            })
-        else:
-            bio = d.get("about_me", "") or ""
-            if bio:
-                parsed_edu = self._parse_education_from_bio(bio)
-                if parsed_edu:
-                    lms_education.append(parsed_edu)
-        d["lms_education"] = lms_education
-
-        lms_work_experience = []
-        if d.get("current_designation") or d.get("current_employer"):
-            years = d.get("work_experience_years", "") or ""
-            duration = f"{years} years" if years else ""
-            lms_work_experience.append({
-                "title": d.get("current_designation", "") or "",
-                "company": d.get("current_employer", "") or "",
-                "duration": duration, "description": "",
-                "source": "lms_profile",
-            })
-        d["lms_work_experience"] = lms_work_experience
-
-        return clean_data(d)
-
-    # ─── Bio → Education Parser ──────────────────────────
-
-    def _parse_education_from_bio(self, bio: str):
-        import re
-        if not bio or len(bio.strip()) < 10: return None
-        bio_lower = bio.lower()
-        degree_patterns = [
-            (r'\bb\.?\s*tech\b', 'B.Tech'), (r'\bb\.?\s*e\b', 'B.E'),
-            (r'\bb\.?\s*c\.?\s*a\b', 'BCA'), (r'\bm\.?\s*c\.?\s*a\b', 'MCA'),
-            (r'\bm\.?\s*b\.?\s*a\b', 'MBA'), (r'\bm\.?\s*tech\b', 'M.Tech'),
-            (r'\bb\.?\s*com\b', 'B.Com'), (r'\bm\.?\s*com\b', 'M.Com'),
-            (r'\bb\.?\s*sc\b', 'B.Sc'), (r'\bm\.?\s*sc\b', 'M.Sc'),
-            (r'\bph\.?\s*d\b', 'Ph.D'),
-            (r'\bbachelor\b', "Bachelor's Degree"),
-            (r'\bmaster\b', "Master's Degree"),
-            (r'\bdiploma\b', 'Diploma'),
-        ]
-        degree = ""
-        for pat, name in degree_patterns:
-            if re.search(pat, bio_lower):
-                degree = name; break
-        if not degree: return None
-        institution = ""
-        from_match = re.search(r'\bfrom\s+([^.;]+?)(?:\.\s*$|$|;)', bio, re.IGNORECASE)
-        if from_match:
-            institution = from_match.group(1).strip().rstrip(',.')
-            if len(institution) < 100:
-                words = [w.upper() if len(w) <= 4 and w.isalpha() else w.title() for w in institution.split()]
-                institution = ' '.join(words)
-        year_match = re.search(r'\b(19|20)\d{2}\b', bio)
-        year = year_match.group(0) if year_match else ""
-        field = ""
-        for pat, name in [(r'computer\s+science', 'Computer Science'), (r'\bcse\b', 'Computer Science'),
-                          (r'information\s+technology', 'Information Technology'),
-                          (r'electronics', 'Electronics'), (r'commerce', 'Commerce'), (r'e-?commerce', 'E-Commerce')]:
-            if re.search(pat, bio_lower): field = name; break
-        return {"degree": degree, "institution": institution, "year": year,
-                "field_of_study": field, "percentage": "", "source": "lms_bio_parsed"}
-
-    # ─── Courses (with description) ──────────────────────
-
-    def _get_courses(self, student_id: int) -> List[Dict]:
+    async def _get_courses(self, user_id: int) -> List[Dict[str, Any]]:
         try:
             rows = self.db.execute(text("""
-                SELECT c.id AS course_id, c.course_name, c.category,
-                       c.difficulty_level, c.description,
-                       e.progress_percentage, e.completion_status,
-                       e.completed_at, e.created_at AS enrolled_at,
-                       (SELECT COUNT(*) FROM course_modules cm WHERE cm.course_id = c.id) AS total_modules
+                SELECT
+                    e.id           AS enrollment_id,
+                    e.course_id,
+                    e.status,
+                    e.enrolled_at,
+                    c.name         AS course_name,
+                    c.description  AS description,
+                    c.category     AS category
                 FROM enrollments e
-                JOIN courses c ON c.id = e.course_id
-                WHERE e.student_id = :sid
-                ORDER BY e.created_at
-            """), {"sid": student_id}).mappings().all()
-            return clean_data([dict(r) for r in rows])
-        except Exception as e:
-            # Fallback without description column
-            try:
-                rows = self.db.execute(text("""
-                    SELECT c.id AS course_id, c.course_name, c.category,
-                           c.difficulty_level,
-                           e.progress_percentage, e.completion_status,
-                           e.completed_at, e.created_at AS enrolled_at
-                    FROM enrollments e
-                    JOIN courses c ON c.id = e.course_id
-                    WHERE e.student_id = :sid ORDER BY e.created_at
-                """), {"sid": student_id}).mappings().all()
-                return clean_data([dict(r) for r in rows])
-            except Exception as e2:
-                logger.warning(f"courses failed: {e2}")
-                return []
-
-    # ─── Test Scores (EXCLUDES TestGen) ──────────────────
-
-    def _get_test_scores(self, student_id: int) -> List[Dict]:
-        try:
-            rows = self.db.execute(text("""
-                SELECT r.id, r.score, r.total_marks, r.percentage,
-                       r.grade, r.time_taken_minutes, r.submitted_at,
-                       e.exam_name AS subject, e.exam_type AS topic,
-                       c.course_name AS course_name
-                FROM results r
-                JOIN exams e ON e.id = r.exam_id
                 LEFT JOIN courses c ON c.id = e.course_id
-                WHERE r.student_id = :sid
-                  AND (e.exam_type IS NULL OR LOWER(e.exam_type) NOT IN
-                       ('brain_drill','testgen','practice_test','ai_generated',
-                        'practice','braindrill','brain-drill'))
-                ORDER BY r.percentage DESC
-            """), {"sid": student_id}).mappings().all()
-            logger.info(f"test_scores: {len(rows)} real assessments (TestGen excluded)")
-            return clean_data([dict(r) for r in rows])
-        except Exception as e:
-            logger.warning(f"test_scores failed: {e}")
-            return []
-
-    # ─── Case Studies ────────────────────────────────────
-
-    def _get_case_studies(self, student_id: int) -> List[Dict]:
-        # v12.4: exposes BOTH faculty_score (manual mentor grade) AND ai_score (AiRev agent grade)
-        query_variants = [
-            ("with rubric_results join", """
-               SELECT css.id AS submission_id, csd.title,
-                      csd.max_score, css.grade AS score,
-                      css.grade AS faculty_score,
-                      css.feedback AS faculty_feedback, css.rubric_scores,
-                      css.notes, css.submitted_at, css.status,
-                      c.course_name,
-                      rr.total_score AS ai_score,
-                      rr.percentage AS ai_percentage,
-                      rr.grade AS ai_grade,
-                      rr.grade_label AS ai_grade_label,
-                      rr.overall_feedback AS ai_feedback
-               FROM case_study_submissions css
-               JOIN case_studies csd ON csd.id = css.case_study_id
-               LEFT JOIN courses c ON c.id = csd.course_id
-               LEFT JOIN rubric_results rr ON rr.submission_id = css.id
-                   AND (rr.evaluation_type = 'case_study' OR rr.evaluation_type IS NULL)
-               WHERE css.student_id = :sid
-                 AND css.status IN ('reviewed','graded','mentor_reviewed','completed')
-               ORDER BY css.grade DESC"""),
-            ("dedicated columns", """
-               SELECT css.id AS submission_id, csd.title,
-                      csd.max_score, css.grade AS score,
-                      css.grade AS faculty_score,
-                      css.ai_score, css.ai_feedback,
-                      css.feedback AS faculty_feedback, css.rubric_scores,
-                      css.notes, css.submitted_at, css.status,
-                      c.course_name
-               FROM case_study_submissions css
-               JOIN case_studies csd ON csd.id = css.case_study_id
-               LEFT JOIN courses c ON c.id = csd.course_id
-               WHERE css.student_id = :sid
-                 AND css.status IN ('reviewed','graded','mentor_reviewed','completed')
-               ORDER BY css.grade DESC"""),
-            ("legacy minimal", """
-               SELECT css.id AS submission_id, csd.title,
-                      css.grade AS score, css.grade AS faculty_score,
-                      css.feedback AS faculty_feedback,
-                      css.notes, css.status, css.submitted_at
-               FROM case_study_submissions css
-               JOIN case_studies csd ON csd.id = css.case_study_id
-               WHERE css.student_id = :sid
-               ORDER BY css.grade DESC"""),
-        ]
-        for label, query in query_variants:
-            try:
-                rows = self.db.execute(text(query), {"sid": student_id}).mappings().all()
-                if rows:
-                    logger.info(f"case_studies: {len(rows)} rows ('{label}')")
-                    return clean_data([dict(r) for r in rows])
-            except Exception as e:
-                logger.info(f"case_studies '{label}' failed: {e}")
-        return []
-               
-
-    # ─── Assignments (rubric JOIN FIXED) ─────────────────
-
-    def _get_assignments(self, student_id: int) -> List[Dict]:
-        # v12.4: returns BOTH faculty_score and ai_score so the template can show both
-        primary_query = """
-            SELECT asub.id,
-                asub.grade AS faculty_score,
-                COALESCE(rr.total_score, 0) AS ai_score,
-                rr.percentage AS ai_percentage,
-                COALESCE(rr.total_score, asub.grade, 0) AS score,
-                COALESCE(rr.max_score, a.total_marks, 100) AS max_score,
-                rr.percentage AS rubric_pct,
-                rr.grade AS ai_grade, rr.grade_label AS ai_grade_label,
-                rr.grade AS rubric_grade,
-                COALESCE(rr.overall_feedback, asub.feedback) AS feedback,
-                rr.overall_feedback AS ai_feedback,
-                asub.feedback AS faculty_feedback,
-                rr.strengths, rr.top_competencies,
-                asub.status, asub.submitted_at, a.title,
-                a.course_id, c.course_name
-            FROM assignment_submissions asub
-            JOIN assignments a ON a.id = asub.assignment_id
-            LEFT JOIN courses c ON c.id = a.course_id
-            LEFT JOIN rubric_results rr ON rr.submission_id = asub.id
-                AND (rr.evaluation_type IN ('assignment','rubric_assignment',
-                     'final_assessment','case_study') OR rr.evaluation_type IS NULL)
-            WHERE asub.student_id = :sid
-            ORDER BY rr.percentage DESC, asub.submitted_at DESC
-        """
-        fallback_query = """
-            SELECT asub.id, asub.grade AS score, asub.grade AS faculty_score,
-                   asub.feedback, asub.status, asub.submitted_at, a.title,
-                   a.total_marks AS max_score, a.course_id, c.course_name
-            FROM assignment_submissions asub
-            JOIN assignments a ON a.id = asub.assignment_id
-            LEFT JOIN courses c ON c.id = a.course_id
-            WHERE asub.student_id = :sid ORDER BY asub.submitted_at
-        """
-        for label, query in (("primary+rubric", primary_query), ("legacy", fallback_query)):
-            try:
-                rows = self.db.execute(text(query), {"sid": student_id}).mappings().all()
-                result = clean_data([dict(r) for r in rows])
-                if label == "primary+rubric":
-                    matched = sum(1 for r in result if r.get("rubric_pct") is not None)
-                    logger.info(f"assignments: {len(result)} rows, {matched} with rubric data")
-                return result
-            except Exception as e:
-                logger.info(f"assignments {label} query failed: {e}")
-        return []
-
-    # ─── Mock Tests (TestGen / BrainDrill — INVERSE of test_scores) ──
-    def _get_mock_tests(self, student_id: int) -> List[Dict]:
-        """TestGen / BrainDrill practice attempts — the user's `lms.upskillize.com/student/testgen`
-        page. INVERSE filter from _get_test_scores (which excludes these)."""
-        queries = [
-            ("results+exams (testgen filter)", """
-                SELECT r.id, r.score, r.total_marks, r.percentage,
-                       r.grade, r.time_taken_minutes,
-                       r.submitted_at AS attempted_at,
-                       e.exam_name AS title, e.exam_type AS test_type,
-                       c.course_name
-                FROM results r
-                JOIN exams e ON e.id = r.exam_id
-                LEFT JOIN courses c ON c.id = e.course_id
-                WHERE r.student_id = :sid
-                  AND LOWER(e.exam_type) IN
-                      ('brain_drill','testgen','practice_test','ai_generated',
-                       'practice','braindrill','brain-drill')
-                ORDER BY r.submitted_at DESC
-            """),
-            ("testgen_attempts table", """
-                SELECT * FROM testgen_attempts WHERE student_id = :sid
-                ORDER BY id DESC LIMIT 20
-            """),
-            ("brain_drill_attempts table", """
-                SELECT * FROM brain_drill_attempts WHERE student_id = :sid
-                ORDER BY id DESC LIMIT 20
-            """),
-            ("test_attempts table", """
-                SELECT * FROM test_attempts WHERE student_id = :sid
-                ORDER BY id DESC LIMIT 20
-            """),
-        ]
-        for label, q in queries:
-            try:
-                rows = self.db.execute(text(q), {"sid": student_id}).mappings().all()
-                if rows:
-                    logger.info(f"mock_tests (TestGen): {len(rows)} rows from '{label}'")
-                    return clean_data([dict(r) for r in rows])
-            except Exception as e:
-                logger.info(f"mock_tests '{label}' failed: {e}")
-        return []
-
-    # ─── Mock Interviews (InterviewIQ) ────────────────────
-    def _get_mock_interviews(self, student_id: int) -> List[Dict]:
-        queries = [
-            ("mock_interviews + reviews", """
-                SELECT mi.id,
-                       mi.score AS faculty_score,
-                       mi.overall_score AS faculty_score_alt,
-                       mi.feedback AS faculty_feedback,
-                       mi.duration_minutes, mi.scheduled_at AS submitted_at,
-                       COALESCE(mi.interview_type, mi.topic, 'Mock Interview') AS title,
-                       mi.interviewer,
-                       ir.overall_score AS ai_score, ir.feedback AS ai_feedback
-                FROM mock_interviews mi
-                LEFT JOIN interview_reviews ir ON ir.interview_id = mi.id
-                WHERE mi.student_id = :sid
-                ORDER BY mi.scheduled_at DESC LIMIT 20
-            """),
-            ("mock_interviews simple", """
-                SELECT id, score, feedback, scheduled_at AS submitted_at,
-                       interview_type AS title, status
-                FROM mock_interviews WHERE student_id = :sid
-                ORDER BY id DESC LIMIT 20
-            """),
-            ("interview_attempts", """
-                SELECT * FROM interview_attempts WHERE student_id = :sid
-                ORDER BY id DESC LIMIT 20
-            """),
-            ("interview_sessions", """
-                SELECT * FROM interview_sessions WHERE student_id = :sid
-                ORDER BY id DESC LIMIT 20
-            """),
-            ("interviewiq_sessions", """
-                SELECT * FROM interviewiq_sessions WHERE student_id = :sid
-                ORDER BY id DESC LIMIT 20
-            """),
-        ]
-        for label, q in queries:
-            try:
-                rows = self.db.execute(text(q), {"sid": student_id}).mappings().all()
-                if rows:
-                    logger.info(f"mock_interviews: {len(rows)} rows from '{label}'")
-                    return clean_data([dict(r) for r in rows])
-            except Exception as e:
-                logger.info(f"mock_interviews '{label}' failed: {e}")
-        return []
-
-    # ─── Industry Sessions (live mentor masterclasses) ────
-    def _get_industry_sessions(self, student_id: int) -> List[Dict]:
-        # Try dedicated tables first
-        for table in ("industry_sessions", "industry_session_attendance",
-                      "session_attendance", "masterclass_attendance",
-                      "live_session_attendance"):
-            try:
-                rows = self.db.execute(
-                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC LIMIT 15"),
-                    {"sid": student_id},
-                ).mappings().all()
-                if rows:
-                    logger.info(f"industry_sessions from {table}: {len(rows)}")
-                    return clean_data([dict(r) for r in rows])
-            except Exception:
-                continue
-
-        # Fall back to assignment_submissions filtered by type/category — try several columns
-        type_filters = [
-            ("a.type", "industry_session"),
-            ("a.type", "industry"),
-            ("a.assignment_type", "industry_session"),
-            ("a.category", "industry_session"),
-            ("a.coursework_type", "industry_session"),
-        ]
-        for col, val in type_filters:
-            try:
-                rows = self.db.execute(text(f"""
-                    SELECT asub.id, asub.grade AS faculty_score, asub.feedback,
-                           asub.status, asub.submitted_at, a.title,
-                           a.total_marks AS max_score, c.course_name,
-                           rr.total_score AS ai_score, rr.percentage AS ai_percentage,
-                           rr.overall_feedback AS ai_feedback
-                    FROM assignment_submissions asub
-                    JOIN assignments a ON a.id = asub.assignment_id
-                    LEFT JOIN courses c ON c.id = a.course_id
-                    LEFT JOIN rubric_results rr ON rr.submission_id = asub.id
-                    WHERE asub.student_id = :sid AND LOWER({col}) = :tv
-                    ORDER BY asub.submitted_at DESC LIMIT 15
-                """), {"sid": student_id, "tv": val.lower()}).mappings().all()
-                if rows:
-                    logger.info(f"industry_sessions from coursework where {col}='{val}': {len(rows)}")
-                    return clean_data([dict(r) for r in rows])
-            except Exception:
-                continue
-        return []
-
-    # ─── Hackathons ───────────────────────────────────────
-    def _get_hackathons(self, student_id: int) -> List[Dict]:
-        for table in ("hackathons", "hackathon_participation",
-                      "hackathon_submissions", "student_hackathons"):
-            try:
-                rows = self.db.execute(
-                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC LIMIT 10"),
-                    {"sid": student_id},
-                ).mappings().all()
-                if rows:
-                    logger.info(f"hackathons from {table}: {len(rows)}")
-                    return clean_data([dict(r) for r in rows])
-            except Exception:
-                continue
-        return []
-
-    # ─── Quiz Scores (EXCLUDES TestGen) ──────────────────
-
-    def _get_quiz_scores(self, student_id: int) -> List[Dict]:
-        try:
-            rows = self.db.execute(text("""
-                SELECT qa.id, qa.score, qa.total_marks,
-                       qa.passed, qa.time_taken_seconds, qa.submitted_at,
-                       q.title AS quiz_title, c.course_name
-                FROM quiz_attempts qa
-                JOIN quizzes q ON q.id = qa.quiz_id
-                LEFT JOIN courses c ON c.id = q.course_id
-                WHERE qa.student_id = :sid AND q.course_id IS NOT NULL
-                ORDER BY qa.submitted_at
-            """), {"sid": student_id}).mappings().all()
-            return clean_data([dict(r) for r in rows])
-        except Exception as e:
-            logger.warning(f"quiz_scores failed: {e}")
-            return []
-
-    # ─── Personality (with direct JSON fallback) ─────────
-
-    def _get_personality(self, student_id: int) -> Dict[str, Any]:
-        empty = {"personality_type": "", "traits_json": "", "traits": "",
-                 "work_style": "", "communication_profile": "", "communication": "",
-                 "leadership_indicators": "", "leadership": ""}
-        try:
-            row = self.db.execute(
-                text("SELECT psycho_result, full_name FROM users WHERE id = :sid LIMIT 1"),
-                {"sid": student_id},
-            ).mappings().first()
-            if not row: return empty
-            raw = row.get("psycho_result")
-            name = row.get("full_name", "Student") or "Student"
-            if not raw or raw == "default": return empty
-
-            # Try AI interpretation first
-            try:
-                from app.agents.personality_agent import PersonalityAgent
-                agent = PersonalityAgent()
-                result = agent.interpret(raw, student_name=name)
-                if result and result.get("personality_type"):
-                    return result
-            except Exception as e:
-                logger.warning(f"PersonalityAgent AI failed: {e}")
-
-            # DIRECT FALLBACK — read from JSON without AI
-            try:
-                data = json.loads(raw) if isinstance(raw, str) else raw
-                ptype = data.get("type") or data.get("personality_type") or ""
-                desc = data.get("desc") or data.get("description") or ""
-                return {
-                    "personality_type": ptype,
-                    "traits_json": desc,
-                    "traits": desc,
-                    "work_style": data.get("work_style") or data.get("workStyle") or "",
-                    "communication_profile": "",
-                    "communication": data.get("communication") or "",
-                    "leadership_indicators": "",
-                    "leadership": data.get("leadership") or data.get("teamRole") or "",
+                WHERE e.student_id = :uid
+                ORDER BY e.enrolled_at DESC
+            """), {"uid": user_id}).mappings().all()
+            return [
+                {
+                    "enrollment_id": r["enrollment_id"],
+                    "course_id":     r["course_id"],
+                    "course_name":   r.get("course_name") or "",
+                    "description":   r.get("description") or "",
+                    "category":      r.get("category") or "",
+                    "status":        r.get("status") or "",
+                    "enrolled_at":   str(r.get("enrolled_at") or ""),
                 }
-            except Exception:
-                logger.warning("Direct psycho_result JSON parse also failed")
-                return empty
-
+                for r in rows
+            ]
         except Exception as e:
-            logger.info(f"psycho_result not available: {e}")
-            return empty
-
-    # ─── Capstone Projects ───────────────────────────────
-
-    def _get_capstone_projects(self, student_id: int) -> list:
-        # v12.5: expanded table + FK hunt. The LMS exposes /student/capstones endpoint
-        # but the underlying table name varies. Try every plausible combination.
-        table_variants = [
-            ("capstones",            "student_id"),
-            ("capstones",            "user_id"),
-            ("capstone_projects",    "student_id"),
-            ("capstone_projects",    "user_id"),
-            ("capstone_submissions", "student_id"),
-            ("capstone_submissions", "user_id"),
-            ("student_capstones",    "student_id"),
-            ("student_capstones",    "user_id"),
-        ]
-        for table, fk in table_variants:
-            try:
-                rows = self.db.execute(
-                    text(f"SELECT * FROM {table} WHERE {fk} = :sid ORDER BY id DESC LIMIT 8"),
-                    {"sid": student_id},
-                ).mappings().all()
-                if rows:
-                    logger.info(f"capstones from {table}.{fk}: {len(rows)}")
-                    return clean_data([dict(r) for r in rows])
-            except Exception as e:
-                logger.debug(f"capstone table {table}.{fk} failed: {e}")
-
-        # Coursework-table fallback (capstone stored as assignment.type='capstone' etc)
-        type_filters = [
-            ("a.type", "capstone"),
-            ("a.assignment_type", "capstone"),
-            ("a.category", "capstone"),
-            ("a.coursework_type", "capstone"),
-            ("a.type", "capstone_project"),
-            ("a.type", "Capstone"),
-        ]
-        for col, val in type_filters:
-            try:
-                rows = self.db.execute(text(f"""
-                    SELECT asub.id, asub.grade AS faculty_score, asub.feedback AS faculty_feedback,
-                           asub.status, asub.submitted_at, a.title,
-                           a.total_marks AS max_score, c.course_name,
-                           rr.total_score AS ai_score, rr.percentage AS ai_percentage,
-                           rr.grade AS ai_grade, rr.grade_label AS ai_grade_label,
-                           rr.overall_feedback AS ai_feedback,
-                           COALESCE(rr.total_score, asub.grade, 0) AS score
-                    FROM assignment_submissions asub
-                    JOIN assignments a ON a.id = asub.assignment_id
-                    LEFT JOIN courses c ON c.id = a.course_id
-                    LEFT JOIN rubric_results rr ON rr.submission_id = asub.id
-                    WHERE asub.student_id = :sid AND LOWER({col}) = :tv
-                    ORDER BY asub.submitted_at DESC LIMIT 8
-                """), {"sid": student_id, "tv": val.lower()}).mappings().all()
-                if rows:
-                    logger.info(f"capstones from coursework where {col}='{val}': {len(rows)}")
-                    return clean_data([dict(r) for r in rows])
-            except Exception:
-                continue
-        logger.info("capstones: NONE found across all 8 table variants + 6 coursework filters")
-        return []
-
-    # ─── Semester Results ────────────────────────────────
-
-    def _get_semester_results(self, student_id: int) -> list:
-        for table in ("semester_results", "final_results", "academic_results"):
-            try:
-                rows = self.db.execute(
-                    text(f"SELECT * FROM {table} WHERE student_id = :sid ORDER BY id DESC"),
-                    {"sid": student_id},
-                ).mappings().all()
-                if rows: return clean_data([dict(r) for r in rows])
-            except Exception:
-                continue
-        return []
-
-    # ─── Job Preferences ─────────────────────────────────
-
-    def _get_job_preferences(self, student_id: int) -> dict:
-        for table in ("job_preferences", "student_job_preferences"):
-            try:
-                row = self.db.execute(
-                    text(f"SELECT * FROM {table} WHERE user_id = :sid OR student_id = :sid LIMIT 1"),
-                    {"sid": student_id},
-                ).mappings().first()
-                if row: return clean_data(dict(row))
-            except Exception:
-                continue
-        prefs = {}
-        for col in ("preferred_role", "preferred_industry", "preferred_location",
-                     "work_mode", "expected_salary", "notice_period", "open_to_relocate",
-                     "employment_type", "expected_salary_min", "expected_salary_max",
-                     "company_size"):
-            try:
-                r = self.db.execute(
-                    text(f"SELECT {col} FROM users WHERE id = :sid LIMIT 1"),
-                    {"sid": student_id},
-                ).mappings().first()
-                if r and r.get(col): prefs[col] = r[col]
-            except Exception:
-                continue
-        return clean_data(prefs)
-
-    # ─── Projects ────────────────────────────────────────
-
-    def _get_projects(self, student_id: int) -> list:
-        try:
-            rows = self.db.execute(text("""
-                SELECT title, description, technologies_used, mentor_feedback,
-                       github_url, demo_url, submitted_at
-                FROM student_projects WHERE student_id = :sid
-                ORDER BY submitted_at DESC
-            """), {"sid": student_id}).mappings().all()
-            return clean_data([dict(r) for r in rows])
-        except Exception:
+            logger.warning(f"_get_courses failed for user_id={user_id}: {e}")
             return []
 
-    # ─── Certifications ──────────────────────────────────
+    # =====================================================================
+    # ACTIVITY FLOW 1 — CASE STUDIES (flat list)
+    # =====================================================================
 
-    def _get_certifications(self, student_id: int) -> list:
+    async def _get_case_studies(self, user_id: int) -> List[Dict[str, Any]]:
         try:
             rows = self.db.execute(text("""
-                SELECT certificate_name, course_name, issued_at,
-                       verification_url, certificate_url
-                FROM certificates WHERE student_id = :sid
-                ORDER BY issued_at DESC
-            """), {"sid": student_id}).mappings().all()
-            return clean_data([dict(r) for r in rows])
-        except Exception:
+                SELECT
+                    css.id           AS submission_id,
+                    css.case_study_id,
+                    css.grade,
+                    css.status,
+                    css.rubric_scores,
+                    css.feedback,
+                    css.submitted_at,
+                    css.reviewed_at,
+                    cs.title         AS case_title,
+                    cs.description   AS case_brief,
+                    cs.course_id,
+                    co.name          AS course_name
+                FROM case_study_submissions css
+                LEFT JOIN case_studies cs ON cs.id = css.case_study_id
+                LEFT JOIN courses    co ON co.id = cs.course_id
+                WHERE css.student_id = :uid
+                ORDER BY css.grade DESC, css.submitted_at DESC
+            """), {"uid": user_id}).mappings().all()
+
+            items = []
+            for r in rows:
+                grade = r.get("grade")
+                items.append({
+                    "submission_id":  r["submission_id"],
+                    "case_study_id":  r["case_study_id"],
+                    "title":          r.get("case_title") or "Case Study",
+                    "brief":          r.get("case_brief") or "",
+                    "score":          float(grade) if grade is not None else None,
+                    "ai_score":       float(grade) if grade is not None else None,
+                    "faculty_score":  float(grade) if grade is not None else None,
+                    "max_score":      100,
+                    "ai_grade":       self._grade_letter(grade),
+                    "ai_grade_label": self._grade_label(grade),
+                    "status":         r.get("status") or "",
+                    "course_name":    r.get("course_name") or "",
+                    "module_name":    "",
+                    "submitted_at":   str(r.get("submitted_at") or ""),
+                    "reviewed_at":    str(r.get("reviewed_at") or ""),
+                    "feedback":       r.get("feedback") or "",
+                    "rubric_scores":  r.get("rubric_scores") or {},
+                })
+            return items
+        except Exception as e:
+            logger.warning(f"_get_case_studies failed for user_id={user_id}: {e}")
             return []
 
-    # ─── Platform Activity ───────────────────────────────
+    # =====================================================================
+    # ACTIVITY FLOW 2 — ASSIGNMENTS (flat list)
+    # =====================================================================
 
-    def _get_platform_activity(self, student_id: int) -> Dict[str, Any]:
+    async def _get_assignments(self, user_id: int) -> List[Dict[str, Any]]:
+        try:
+            rows = self.db.execute(text("""
+                SELECT
+                    asub.id           AS submission_id,
+                    asub.assignment_id,
+                    asub.grade,
+                    asub.status,
+                    asub.feedback,
+                    asub.submitted_at,
+                    a.title           AS assignment_title,
+                    a.description     AS assignment_brief,
+                    a.course_id,
+                    co.name           AS course_name
+                FROM assignment_submissions asub
+                LEFT JOIN assignments a ON a.id = asub.assignment_id
+                LEFT JOIN courses    co ON co.id = a.course_id
+                WHERE asub.student_id = :uid
+                ORDER BY asub.grade DESC, asub.submitted_at DESC
+            """), {"uid": user_id}).mappings().all()
+
+            items = []
+            for r in rows:
+                grade = r.get("grade")
+                items.append({
+                    "submission_id":   r["submission_id"],
+                    "assignment_id":   r["assignment_id"],
+                    "title":           r.get("assignment_title") or "Assignment",
+                    "brief":           r.get("assignment_brief") or "",
+                    "score":           float(grade) if grade is not None else None,
+                    "ai_score":        float(grade) if grade is not None else None,
+                    "faculty_score":   float(grade) if grade is not None else None,
+                    "rubric_pct":      float(grade) if grade is not None else None,
+                    "max_score":       100,
+                    "ai_grade_label":  self._grade_label(grade),
+                    "rubric_grade":    self._grade_letter(grade),
+                    "status":          r.get("status") or "",
+                    "course_name":     r.get("course_name") or "",
+                    "module_name":     "",
+                    "submitted_at":    str(r.get("submitted_at") or ""),
+                    "feedback":        r.get("feedback") or "",
+                })
+            return items
+        except Exception as e:
+            logger.warning(f"_get_assignments failed for user_id={user_id}: {e}")
+            return []
+
+    # =====================================================================
+    # ACTIVITY FLOW 3 — CAPSTONES (flat list)
+    # =====================================================================
+
+    async def _get_capstones(self, user_id: int) -> List[Dict[str, Any]]:
+        try:
+            rows = self.db.execute(text("""
+                SELECT
+                    c.id, c.title, c.description, c.course_id,
+                    c.due_date, c.total_marks, c.status,
+                    c.grade, c.feedback,
+                    c.submitted_at, c.reviewed_at,
+                    co.name AS course_name
+                FROM capstones c
+                LEFT JOIN courses co ON co.id = c.course_id
+                WHERE c.student_id = :uid
+                ORDER BY c.grade DESC, c.submitted_at DESC
+            """), {"uid": user_id}).mappings().all()
+
+            items = []
+            for r in rows:
+                grade = r.get("grade")
+                total = r.get("total_marks") or 100
+                pct = None
+                if grade is not None and total:
+                    try:
+                        pct = round(float(grade) / float(total) * 100, 2)
+                    except Exception:
+                        pct = None
+                items.append({
+                    "capstone_id":   r["id"],
+                    "title":         r.get("title") or "Capstone",
+                    "brief":         r.get("description") or "",
+                    "description":   r.get("description") or "",
+                    "score":         pct,
+                    "score_pct":     pct,
+                    "ai_score":      pct,
+                    "faculty_score": pct,
+                    "grade":         self._grade_letter(pct),
+                    "raw_grade":     float(grade) if grade is not None else None,
+                    "total_marks":   float(total) if total else None,
+                    "max_score":     100,
+                    "status":        r.get("status") or "",
+                    "course_name":   r.get("course_name") or "",
+                    "due_date":      str(r.get("due_date") or ""),
+                    "submitted_at":  str(r.get("submitted_at") or ""),
+                    "feedback":      r.get("feedback") or "",
+                })
+            return items
+        except Exception as e:
+            logger.warning(f"_get_capstones failed for user_id={user_id}: {e}")
+            return []
+
+    # =====================================================================
+    # ACTIVITY FLOW 4 — INDUSTRY SESSIONS (flat list)
+    # =====================================================================
+
+    async def _get_industry_sessions(self, user_id: int) -> List[Dict[str, Any]]:
+        try:
+            rows = self.db.execute(text("""
+                SELECT
+                    iss.id                AS submission_id,
+                    iss.session_id,
+                    iss.score,
+                    iss.band,
+                    iss.grade,
+                    iss.insight_text,
+                    iss.feedback_json,
+                    iss.has_feedback,
+                    iss.attempt_number,
+                    iss.submitted_at,
+                    iss.reviewed_at,
+                    ise.title             AS session_title,
+                    ise.description       AS session_brief,
+                    ise.speaker_name      AS speaker
+                FROM industry_session_submissions iss
+                LEFT JOIN industry_sessions ise ON ise.id = iss.session_id
+                WHERE iss.student_id = :uid
+                ORDER BY iss.score DESC, iss.submitted_at DESC
+            """), {"uid": user_id}).mappings().all()
+
+            items = []
+            for r in rows:
+                score = r.get("score")
+                items.append({
+                    "submission_id": r["submission_id"],
+                    "session_id":    r["session_id"],
+                    "title":         r.get("session_title") or "Industry Session",
+                    "brief":         r.get("session_brief") or "",
+                    "score":         float(score) if score is not None else None,
+                    "band":          r.get("band") or "",
+                    "grade":         r.get("grade") or "",
+                    "speaker":       r.get("speaker") or "",
+                    "insight":       r.get("insight_text") or "",
+                    "insight_text":  r.get("insight_text") or "",
+                    "held_at":       str(r.get("submitted_at") or ""),
+                    "duration":      "",
+                    "submitted_at":  str(r.get("submitted_at") or ""),
+                })
+            return items
+        except Exception as e:
+            logger.warning(f"_get_industry_sessions failed for user_id={user_id}: {e}")
+            return []
+
+    # =====================================================================
+    # ACTIVITY FLOW 5 — MOCK TESTS (TestGen) (flat list)
+    # =====================================================================
+
+    async def _get_mock_tests(self, user_id: int) -> List[Dict[str, Any]]:
+        try:
+            rows = self.db.execute(text("""
+                SELECT
+                    id, test_id, topic, difficulty,
+                    total_questions, correct_answers,
+                    score_percentage, performance_band,
+                    created_at, completed_at
+                FROM test_history
+                WHERE student_id = :uid
+                ORDER BY score_percentage DESC, completed_at DESC
+            """), {"uid": user_id}).mappings().all()
+
+            items = []
+            for r in rows:
+                pct = r.get("score_percentage")
+                items.append({
+                    "test_id":         r.get("test_id"),
+                    "title":           r.get("topic") or "TestGen Practice",
+                    "topic":           r.get("topic") or "",
+                    "test_name":       r.get("topic") or "",
+                    "exam_name":       r.get("topic") or "",
+                    "difficulty":      r.get("difficulty") or "",
+                    "total_questions": r.get("total_questions") or 0,
+                    "correct_answers": r.get("correct_answers") or 0,
+                    "score":           float(pct) if pct is not None else None,
+                    "percentage":      float(pct) if pct is not None else None,
+                    "total_marks":     100,
+                    "max_score":       100,
+                    "grade":           r.get("performance_band") or "",
+                    "band":            r.get("performance_band") or "",
+                    "test_type":       "mock",
+                    "attempted_at":    str(r.get("completed_at") or r.get("created_at") or ""),
+                    "submitted_at":    str(r.get("completed_at") or r.get("created_at") or ""),
+                    "course_name":     "",
+                })
+            return items
+        except Exception as e:
+            logger.warning(f"_get_mock_tests failed for user_id={user_id}: {e}")
+            return []
+
+    # =====================================================================
+    # ACTIVITY FLOW 6 — MOCK INTERVIEWS (flat list)
+    # =====================================================================
+
+    async def _get_mock_interviews(self, user_id: int) -> List[Dict[str, Any]]:
+        try:
+            rows = self.db.execute(text("""
+                SELECT
+                    id, user_id, session_type, role, status,
+                    created_at, completed_at, ended_at
+                FROM vyom_sessions
+                WHERE user_id = :uid
+                ORDER BY created_at DESC
+            """), {"uid": user_id}).mappings().all()
+
+            items = []
+            for row in rows:
+                sess = dict(row)
+                sess_id = sess["id"]
+                agg = self.db.execute(text("""
+                    SELECT AVG(rating) AS avg_rating, COUNT(*) AS answer_count
+                    FROM vyom_answer_ratings
+                    WHERE session_id = :sid
+                """), {"sid": sess_id}).mappings().first()
+
+                avg = agg["avg_rating"] if agg else None
+                cnt = int(agg["answer_count"]) if agg and agg["answer_count"] else 0
+                score = None
+                if avg is not None and cnt > 0:
+                    try:
+                        avg_f = float(avg)
+                        if avg_f <= 5:
+                            score = round(avg_f / 5.0 * 100, 2)
+                        elif avg_f <= 10:
+                            score = round(avg_f / 10.0 * 100, 2)
+                        else:
+                            score = round(min(avg_f, 100), 2)
+                    except Exception:
+                        score = None
+
+                items.append({
+                    "session_id":   sess_id,
+                    "title":        (sess.get("role") or sess.get("session_type") or "Mock Interview"),
+                    "session_type": sess.get("session_type") or "",
+                    "role":         sess.get("role") or "",
+                    "status":       sess.get("status") or "",
+                    "answer_count": cnt,
+                    "score":        score,
+                    "percentage":   score,
+                    "max_score":    100,
+                    "completed_at": str(sess.get("completed_at") or sess.get("ended_at") or ""),
+                    "created_at":   str(sess.get("created_at") or ""),
+                })
+            items.sort(key=lambda x: (x["score"] or 0), reverse=True)
+            return items
+        except Exception as e:
+            logger.warning(f"_get_mock_interviews failed for user_id={user_id}: {e}")
+            return []
+
+    # =====================================================================
+    # ACTIVITY FLOW 7 — ASSESSMENTS (NEW — faculty-uploaded quizzes)
+    # =====================================================================
+
+    async def _get_assessments(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        Faculty-uploaded assessments live in the `quizzes` table.
+        Student attempts live in `quiz_attempts`.
+
+          quizzes:        id, course_id, title, description, pass_percentage,
+                          time_limit_minutes, is_active
+          quiz_attempts:  id, quiz_id, student_id, score, total_marks,
+                          passed, submitted_at, time_taken_seconds
+
+        NOT to be confused with pf_assessments (Pathfinder = AI career-
+        guidance, deliberately excluded from ProfileIQ).
+
+        student_id in quiz_attempts stores users.id (consistent with all
+        other activity tables in this schema).
+        """
+        try:
+            rows = self.db.execute(text("""
+                SELECT
+                    qa.id           AS attempt_id,
+                    qa.quiz_id,
+                    qa.score,
+                    qa.total_marks,
+                    qa.passed,
+                    qa.submitted_at,
+                    qa.time_taken_seconds,
+                    qa.created_at,
+                    q.title         AS quiz_title,
+                    q.description   AS quiz_description,
+                    q.course_id,
+                    q.pass_percentage,
+                    q.time_limit_minutes,
+                    co.name         AS course_name
+                FROM quiz_attempts qa
+                LEFT JOIN quizzes q  ON q.id  = qa.quiz_id
+                LEFT JOIN courses co ON co.id = q.course_id
+                WHERE qa.student_id = :uid
+                ORDER BY qa.score DESC, qa.submitted_at DESC
+            """), {"uid": user_id}).mappings().all()
+
+            items = []
+            for r in rows:
+                score = r.get("score")
+                total = r.get("total_marks") or 100
+                pct = None
+                if score is not None and total:
+                    try:
+                        pct = round(float(score) / float(total) * 100, 2)
+                    except Exception:
+                        pct = None
+                items.append({
+                    "attempt_id":     r["attempt_id"],
+                    "quiz_id":        r["quiz_id"],
+                    "title":          r.get("quiz_title") or "Assessment",
+                    "test_name":      r.get("quiz_title") or "",
+                    "exam_name":      r.get("quiz_title") or "",
+                    "brief":          r.get("quiz_description") or "",
+                    "description":    r.get("quiz_description") or "",
+                    "score":          pct,             # normalized 0-100 for snapshot
+                    "percentage":     pct,
+                    "raw_score":      float(score) if score is not None else None,
+                    "total_marks":    float(total) if total else None,
+                    "max_score":      100,
+                    "grade":          self._grade_letter(pct),
+                    "ai_grade_label": self._grade_label(pct),
+                    "passed":         bool(r.get("passed")),
+                    "pass_percentage":r.get("pass_percentage") or 60,
+                    "time_taken_sec": r.get("time_taken_seconds") or 0,
+                    "time_limit_min": r.get("time_limit_minutes") or 0,
+                    "course_name":    r.get("course_name") or "",
+                    "module_name":    "",
+                    "test_type":      "quiz",
+                    "attempted_at":   str(r.get("submitted_at") or r.get("created_at") or ""),
+                    "submitted_at":   str(r.get("submitted_at") or ""),
+                })
+            return items
+        except Exception as e:
+            logger.warning(f"_get_assessments failed for user_id={user_id}: {e}")
+            return []
+
+    # =====================================================================
+    # ATTENDANCE (uses students.id — folds into Punctuality, not its own axis)
+    # =====================================================================
+
+    async def _get_attendance(self, students_id: Optional[int]) -> Dict[str, Any]:
+        if students_id is None:
+            return self._empty_attendance()
         try:
             row = self.db.execute(text("""
-                SELECT COALESCE(SUM(total_watch_time),0) AS total_watch_seconds,
-                       COUNT(DISTINCT lesson_id) AS lessons_watched,
-                       COUNT(DISTINCT DATE(last_watched_at)) AS active_days,
-                       MIN(created_at) AS first_activity,
-                       MAX(last_watched_at) AS last_activity
-                FROM video_watch_history WHERE student_id = :sid
-            """), {"sid": student_id}).mappings().first()
-            d = dict(row) if row else {}
-            d["total_minutes"] = round(float(d.get("total_watch_seconds", 0) or 0) / 60, 1)
-            return clean_data(d)
-        except Exception:
-            return {"total_minutes": 0, "active_days": 0, "lessons_watched": 0}
+                SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) AS present
+                FROM student_attendance
+                WHERE student_id = :sid
+            """), {"sid": students_id}).mappings().first()
 
-    # ─── Forum Activity ──────────────────────────────────
+            total = int((row["total"] or 0)) if row else 0
+            present = int((row["present"] or 0)) if row else 0
+            pct = round(present / total * 100, 2) if total > 0 else None
 
-    def _get_forum_activity(self, student_id: int) -> Dict[str, Any]:
-        try:
-            threads = self.db.execute(text("SELECT COUNT(*) AS cnt FROM forum_threads WHERE author_id = :sid"), {"sid": student_id}).mappings().first()
-            replies = self.db.execute(text("SELECT COUNT(*) AS cnt FROM forum_replies WHERE author_id = :sid"), {"sid": student_id}).mappings().first()
-            answers = self.db.execute(text("SELECT COUNT(*) AS cnt FROM forum_replies WHERE author_id = :sid AND is_answer = 1"), {"sid": student_id}).mappings().first()
-            return {"threads_created": int(threads["cnt"]) if threads else 0,
-                    "replies_given": int(replies["cnt"]) if replies else 0,
-                    "answers_accepted": int(answers["cnt"]) if answers else 0}
-        except Exception:
-            return {"threads_created": 0, "replies_given": 0, "answers_accepted": 0}
+            recent = self.db.execute(text("""
+                SELECT session_id, status, marked_at
+                FROM student_attendance
+                WHERE student_id = :sid
+                ORDER BY marked_at DESC
+                LIMIT 10
+            """), {"sid": students_id}).mappings().all()
 
-    # ─── Batch Info ──────────────────────────────────────
+            return {
+                "sessions_attended":  present,
+                "sessions_total":     total,
+                "attendance_percent": pct,
+                "recent_sessions":    [dict(r) for r in recent],
+            }
+        except Exception as e:
+            logger.warning(f"_get_attendance failed for students_id={students_id}: {e}")
+            return self._empty_attendance()
 
-    def _get_batch_info(self, student_id: int) -> Dict[str, Any]:
+    # =====================================================================
+    # PUNCTUALITY (8th axis)
+    # =====================================================================
+
+    async def _get_punctuality(self, user_id: int) -> Dict[str, Any]:
+        """
+        Reads from the punctuality_scores table (LMS-side cron output).
+        Returns None-shaped dict if the table doesn't exist yet — snapshot
+        treats as N/A. When the cron ships, this axis lights up automatically.
+
+        Attendance is one component INSIDE Punctuality per the design.
+        We don't count attendance as a separate axis.
+        """
         try:
             row = self.db.execute(text("""
-                SELECT b.name AS batch_name, b.start_date, b.end_date, b.status
-                FROM batch_students bs JOIN batches b ON b.id = bs.batch_id
-                WHERE bs.student_id = :sid ORDER BY b.id DESC LIMIT 1
-            """), {"sid": student_id}).mappings().first()
-            return clean_data(dict(row)) if row else {}
-        except Exception:
-            return {}
+                SELECT
+                    student_id,
+                    score,
+                    band,
+                    events_counted,
+                    computed_at
+                FROM punctuality_scores
+                WHERE student_id = :uid
+                ORDER BY computed_at DESC
+                LIMIT 1
+            """), {"uid": user_id}).mappings().first()
 
-    # ─── Computed Metrics ────────────────────────────────
+            if not row:
+                return {"score": None, "band": None, "events_counted": 0, "status": "no_data"}
 
-    def _compute_metrics(self, **data) -> Dict[str, Any]:
-        test_scores = data.get("test_scores", [])
-        case_studies = data.get("case_studies", [])
-        assignments = data.get("assignments", [])
-        quiz_scores = data.get("quiz_scores", [])
-        courses = data.get("courses", [])
-        activity = data.get("platform_activity", {})
-        forum = data.get("forum_activity", {})
+            return {
+                "score":          float(row["score"]) if row["score"] is not None else None,
+                "band":           row.get("band") or "",
+                "events_counted": int(row.get("events_counted") or 0),
+                "computed_at":    str(row.get("computed_at") or ""),
+                "status":         "available",
+            }
+        except Exception as e:
+            logger.info(f"_get_punctuality: unavailable for user_id={user_id} ({e})")
+            return {"score": None, "band": None, "events_counted": 0, "status": "table_missing"}
 
-        test_pcts = [float(t["percentage"]) for t in test_scores
-                     if t.get("percentage") and float(t.get("percentage", 0)) > 0]
-        best_test = max(test_pcts) if test_pcts else 0
-        avg_test = round(sum(test_pcts) / len(test_pcts), 1) if test_pcts else 0
+    # =====================================================================
+    # PSYCHOMETRIC (Beyond Work section)
+    # =====================================================================
 
-        subj_map = {}
-        for t in test_scores:
-            s = t.get("subject") or t.get("course_name") or "General"
-            pct = float(t.get("percentage", 0))
-            if pct > 0: subj_map.setdefault(s, []).append(pct)
-        subj_avgs = {s: round(sum(v)/len(v), 1) for s, v in subj_map.items()}
-        top_subjects = sorted(subj_avgs.items(), key=lambda x: -x[1])
+    async def _get_psychometric(self, user_id: int) -> Dict[str, Any]:
+        try:
+            row = self.db.execute(text("""
+                SELECT psycho_result FROM users WHERE id = :uid LIMIT 1
+            """), {"uid": user_id}).first()
+            if not row or not row[0]:
+                return {"personality_type": None, "traits": [], "summary": "", "status": "no_data"}
+            raw = row[0]
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            if not isinstance(data, dict):
+                data = {}
+            return {
+                "personality_type": data.get("type") or data.get("mbti") or "",
+                "traits":           data.get("traits") or [],
+                "strengths":        data.get("strengths") or [],
+                "summary":          data.get("summary") or "",
+                "status":           "available",
+            }
+        except Exception as e:
+            logger.warning(f"_get_psychometric failed for user_id={user_id}: {e}")
+            return {"personality_type": None, "traits": [], "summary": "", "status": "no_data"}
 
-        case_scores = [float(c["score"]) for c in case_studies
-                       if c.get("score") and float(c.get("score", 0)) > 0]
-        avg_case = round(sum(case_scores)/len(case_scores), 1) if case_scores else 0
-        best_case = max(case_scores) if case_scores else 0
+    # =====================================================================
+    # CERTIFICATIONS
+    # =====================================================================
 
-        quiz_pcts = []
-        for q in quiz_scores:
-            tm = q.get("total_marks", 0) or 0
-            sc = q.get("score", 0) or 0
-            if int(tm) > 0: quiz_pcts.append(round(int(sc)/int(tm)*100, 1))
-        avg_quiz = round(sum(quiz_pcts)/len(quiz_pcts), 1) if quiz_pcts else 0
+    async def _get_certifications(self, user_id: int) -> List[Dict[str, Any]]:
+        try:
+            row = self.db.execute(text("""
+                SELECT certifications FROM users WHERE id = :uid LIMIT 1
+            """), {"uid": user_id}).first()
+            if not row or not row[0]:
+                return []
+            raw = row[0]
+            if isinstance(raw, str):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        return [
+                            (c if isinstance(c, dict) else {"name": str(c), "certificate_name": str(c)})
+                            for c in parsed
+                        ]
+                except Exception:
+                    return [
+                        {"name": c.strip(), "certificate_name": c.strip()}
+                        for c in raw.split(",") if c.strip()
+                    ]
+            return []
+        except Exception as e:
+            logger.warning(f"_get_certifications failed for user_id={user_id}: {e}")
+            return []
 
-        all_pcts = test_pcts + quiz_pcts
-        improvement = 0.0
-        if len(all_pcts) >= 4:
-            half = len(all_pcts) // 2
-            improvement = round(sum(all_pcts[half:])/(len(all_pcts)-half) - sum(all_pcts[:half])/half, 1)
+    # =====================================================================
+    # PERFORMANCE SNAPSHOT — 8 axes with FAIR AVERAGE
+    # =====================================================================
 
-        completed_courses = [c for c in courses if c.get("completion_status") == "completed"]
-        overall = round((avg_test*0.30)+(avg_case*0.30)+(avg_quiz*0.15)+(min(len(completed_courses),10)*2.5), 1)
-        total_hours = round(float(activity.get("total_minutes", 0))/60, 1)
+    def _compute_snapshot(self, **sections) -> Dict[str, Any]:
+        """
+        Build the 8-axis snapshot:
+          1. Assignments
+          2. Case Studies
+          3. Capstones
+          4. Industry Sessions
+          5. Mock Test
+          6. Mock Interview
+          7. Assessments
+          8. Punctuality (N/A until LMS cron ships)
 
-        consistency = 85.0
-        if len(all_pcts) > 2:
-            mean = sum(all_pcts)/len(all_pcts)
-            std = (sum((x-mean)**2 for x in all_pcts)/len(all_pcts))**0.5
-            consistency = max(0, round(100-std, 1))
+        Axis score = mean of `score` across items in that section's list.
+        Fair average = mean of axes with real activity (score > 0); N/A axes
+        excluded. Attendance folds into Punctuality per the LMS-side design.
+        """
+        def _axis_avg(items: list) -> Optional[float]:
+            if not items:
+                return None
+            scores = [x.get("score") for x in items if x.get("score") is not None]
+            if not scores:
+                return None
+            try:
+                return round(sum(float(s) for s in scores) / len(scores), 2)
+            except Exception:
+                return None
+
+        punct = sections.get("punctuality") or {}
+        axes = {
+            "assignments":       _axis_avg(sections.get("assignments")       or []),
+            "case_studies":      _axis_avg(sections.get("case_studies")      or []),
+            "capstones":         _axis_avg(sections.get("capstones")         or []),
+            "industry_sessions": _axis_avg(sections.get("industry_sessions") or []),
+            "mock_tests":        _axis_avg(sections.get("mock_tests")        or []),
+            "mock_interviews":   _axis_avg(sections.get("mock_interviews")   or []),
+            "assessments":       _axis_avg(sections.get("assessments")       or []),
+            "punctuality":       punct.get("score") if punct.get("score") is not None else None,
+        }
+
+        # Fair average: only axes with score > 0
+        active_values = [v for v in axes.values() if v is not None and v > 0]
+        fair_avg = round(sum(active_values) / len(active_values), 1) if active_values else None
 
         return {
-            "overall_score": min(overall, 100),
-            "best_test_score": best_test, "avg_test_score": avg_test,
-            "total_tests": len(test_scores), "total_case_studies": len(case_studies),
-            "avg_case_study_score": avg_case, "best_case_study_score": best_case,
-            "total_assignments": len(assignments), "total_quizzes": len(quiz_scores),
-            "avg_quiz_score": avg_quiz, "total_courses": len(courses),
-            "completed_courses": len(completed_courses),
-            "subject_averages": subj_avgs, "top_subjects": top_subjects,
-            "improvement_pct": improvement, "total_hours": total_hours,
-            "active_days": int(activity.get("active_days", 0) or 0),
-            "lessons_watched": int(activity.get("lessons_watched", 0) or 0),
-            "consistency_score": consistency,
-            "forum_threads": int(forum.get("threads_created", 0) or 0),
-            "forum_replies": int(forum.get("replies_given", 0) or 0),
-            "forum_answers": int(forum.get("answers_accepted", 0) or 0),
+            "axes":              axes,
+            "active_axis_count": len(active_values),
+            "fair_average":      fair_avg,
+            "average":           fair_avg,   # legacy alias for template
+            "axis_labels": {
+                "assignments":       "Assignments",
+                "case_studies":      "Case Studies",
+                "capstones":         "Capstones",
+                "industry_sessions": "Industry Sessions",
+                "mock_tests":        "Mock Tests",
+                "mock_interviews":   "Mock Interviews",
+                "assessments":       "Assessments",
+                "punctuality":       "Punctuality",
+            },
+            "punctuality_status": punct.get("status", "no_data"),
+            "punctuality_band":   punct.get("band", ""),
         }
+
+    # =====================================================================
+    # HELPERS
+    # =====================================================================
+
+    def _join_location(self, r: Dict) -> str:
+        parts = [r.get(k) for k in ("city", "state", "country") if r.get(k)]
+        return ", ".join(str(p) for p in parts if p)
+
+    def _grade_letter(self, score) -> str:
+        if score is None:
+            return ""
+        try:
+            s = float(score)
+        except Exception:
+            return ""
+        if s >= 90: return "A+"
+        if s >= 80: return "A"
+        if s >= 70: return "B"
+        if s >= 60: return "C"
+        if s >= 50: return "D"
+        return "F"
+
+    def _grade_label(self, score) -> str:
+        if score is None:
+            return ""
+        try:
+            s = float(score)
+        except Exception:
+            return ""
+        if s >= 90: return "Excellent"
+        if s >= 80: return "Very Good"
+        if s >= 70: return "Good"
+        if s >= 60: return "Satisfactory"
+        if s >= 50: return "Needs Improvement"
+        return "Insufficient"
+
+    def _empty_personal(self, user_id: int) -> Dict[str, Any]:
+        return {
+            "user_id": user_id, "full_name": "", "email": "",
+            "phone": "", "photo_url": "", "bio": "", "about_me": "",
+            "location": "",
+            "current_designation": "", "current_employer": "",
+            "work_experience_years": "", "employment_type": "",
+            "education_level": "", "institution": "",
+            "field_of_study": "", "graduation_year": "",
+            "key_skills": "", "career_goals": "", "preferred_role": "",
+            "preferred_location": "", "notice_period": "", "open_to_relocation": "",
+            "linkedin_url": "", "github_url": "", "portfolio_url": "",
+            "website_url": "", "twitter_url": "",
+            "resume_url": "", "resume_name": "",
+            "languages_known": "", "hobbies": "", "industries": "",
+        }
+
+    def _empty_attendance(self) -> Dict[str, Any]:
+        return {
+            "sessions_attended":   0,
+            "sessions_total":      0,
+            "attendance_percent":  None,
+            "recent_sessions":     [],
+        }
+
+    def _empty_payload(self, user_id: int) -> Dict[str, Any]:
+        return {
+            "personal":              self._empty_personal(user_id),
+            "courses":               [],
+            "case_studies":          [],
+            "assignments":           [],
+            "capstones":             [],
+            "capstone_projects":     [],
+            "industry_sessions":     [],
+            "industry_interactions": [],
+            "mock_tests":            [],
+            "mock_interviews":       [],
+            "assessments":           [],
+            "test_scores":           [],
+            "attendance":            self._empty_attendance(),
+            "punctuality":           {"score": None, "band": None,
+                                      "events_counted": 0, "status": "no_data"},
+            "personality":           {"personality_type": None, "traits": [],
+                                      "summary": "", "status": "no_data"},
+            "certifications":        [],
+            "performance_snapshot":  self._compute_snapshot(),
+            "batch_info":            {},
+            "computed": {
+                "user_id":            user_id,
+                "students_id":        None,
+                "total_case_studies": 0,
+                "total_assignments":  0,
+                "total_capstones":    0,
+                "total_industry":     0,
+                "total_mock_tests":   0,
+                "total_interviews":   0,
+                "total_assessments":  0,
+            },
+        }
+
+    def _safe_default_list(self, exc):
+        """Return an empty list when a section-collector task raises."""
+        logger.warning(f"Collector task failed: {exc}")
+        return []

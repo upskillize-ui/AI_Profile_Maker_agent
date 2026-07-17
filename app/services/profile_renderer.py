@@ -131,6 +131,7 @@ PERF_AXES = [
     ("interview",   "INTERVIEW"),
     ("capstone",    "CAPSTONE"),
     ("case_study",  "CASE STUDY"),
+    ("punctuality",  "PUNCTUALITY"), 
 ]
 
 
@@ -162,12 +163,20 @@ def _avg_pct(items: List[Dict], *keys: str) -> float:
 
 def _compute_perf_snapshot(student_data: Dict, profile_data: Dict, computed: Dict) -> Dict[str, Any]:
     assignments     = student_data.get("assignments", []) or []
+    assessments     = student_data.get("assessments", []) or []
     test_scores     = student_data.get("test_scores", []) or []
     case_studies    = student_data.get("case_studies", []) or []
     capstones       = student_data.get("capstone_projects", []) or []
     mock_tests      = student_data.get("mock_tests", []) or student_data.get("quiz_scores", []) or []
     mock_interviews = student_data.get("mock_interviews", []) or []
     industry        = student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or []
+    punctuality     = student_data.get("punctuality", {}) or {}
+
+    punct_score = punctuality.get("score")
+    try:
+        punct_val = float(punct_score) if punct_score is not None else 0.0
+    except (TypeError, ValueError):
+        punct_val = 0.0
 
     scores = {
         "assignment":  _avg_pct(assignments,     "rubric_pct", "percentage", "score", "grade"),
@@ -177,6 +186,8 @@ def _compute_perf_snapshot(student_data: Dict, profile_data: Dict, computed: Dic
         "interview":   _avg_pct(mock_interviews, "score", "percentage", "overall_score"),
         "capstone":    _avg_pct(capstones,       "score", "rubric_pct", "percentage"),
         "case_study":  _avg_pct(case_studies,    "score", "ai_score", "percentage"),
+        "punctuality":  round(max(0.0, min(100.0, punct_val)), 1),   # NEW 8th axis
+        
     }
 
     cx, cy, max_r, n = 180.0, 145.0, 100.0, len(PERF_AXES)
@@ -345,6 +356,8 @@ def _compute_cohort_comparison(perf_snapshot: Dict, perf_data: Dict) -> List[Dic
         ("Capstone",          "capstone"),
         ("Mock Test",         "mock_test"),
         ("Mock Interview",    "interview"),
+        ("punctuality",  "PUNCTUALITY"), 
+        
     ]
     axes_by_key = {a["key"]: a["score"] for a in perf_snapshot.get("axes", [])}
     rows = []

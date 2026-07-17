@@ -26,6 +26,7 @@ from app.services.github_fetcher import GitHubFetcher
 from app.services.linkedin_fetcher import LinkedInFetcher
 from app.services.data_merger import DataMerger
 from app.config import get_settings
+from app.agents.ai_enhancer import AIEnhancer
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -59,6 +60,7 @@ class ProfileOrchestrator:
         self.github_fetcher = GitHubFetcher()
         self.linkedin_fetcher = LinkedInFetcher()
         self.data_merger = DataMerger()
+        self.ai_enhancer = AIEnhancer(self.summary_agent, self.ai_polisher)
 
     # ══════════════════════════════════════════════════════════════════
     # SHARED: Fetch external data (resume, GitHub, LinkedIn)
@@ -166,6 +168,7 @@ class ProfileOrchestrator:
 
         # ── Step 3: Merge all data sources ──
         merged_data = self.data_merger.merge(student_data, resume_data, github_data, linkedin_data)
+        summary = await self.ai_enhancer.generate_summary(student_data, merged_data)
 
         # ── Step 4: Generate AI summary + rule-based skills (parallel) ──
         summary, skills = await asyncio.gather(
@@ -381,6 +384,11 @@ class ProfileOrchestrator:
         """
         start = time.time()
         personal = student_data.get("personal", {})
+        personal["hobbies"]      = self.ai_enhancer.clean_field(personal.get("hobbies"),      "hobbies")
+        personal["bio"]          = self.ai_enhancer.clean_field(personal.get("bio"),          "bio")
+        personal["about_me"]     = self.ai_enhancer.clean_field(personal.get("about_me"),     "about_me")
+        personal["career_goals"] = self.ai_enhancer.clean_field(personal.get("career_goals"), "career_goals")
+        
 
         # ── Fetch external data ──
         ext = await self._fetch_external_data(personal)
@@ -483,7 +491,7 @@ class ProfileOrchestrator:
         # ── Summary ──
         if SECTION_SUMMARY in changed:
             try:
-                summary = await self.summary_agent.generate(merged_data)
+                summary = await self.ai_enhancer.generate_summary(student_data, merged_data)
             except Exception as e:
                 logger.error(f"Summary agent failed in partial regen: {e}")
                 summary = updated.get("professional_summary", "") or self._emergency_summary(merged_data)
