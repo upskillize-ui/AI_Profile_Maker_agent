@@ -39,6 +39,8 @@ class StudentProfile(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     student_id = Column(Integer, unique=True, nullable=False, index=True)
     slug = Column(String(100), unique=True, index=True)
+    visible_to_corporates = Column(Boolean, nullable=False, default=True)
+    share_token = Column(String(64), unique=True, nullable=True)
 
     # AI-Generated Content
     professional_summary = Column(Text)
