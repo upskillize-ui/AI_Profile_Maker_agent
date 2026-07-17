@@ -64,21 +64,35 @@ class DataCollector:
         try:
             personal = await self._get_personal(user_id)
 
-            # 11 concurrent reads (dropped _get_students_id; attendance now
-            # uses user_id directly)
+            # v6.5 — ID CONVENTION (verified against production 18 Jul 2026):
+            # Some activity tables key student_id on users.id, others on
+            # students.id. Resolve students.id ONCE and route each read to the
+            # correct id. Verified per-table:
+            #   users.id  → test_history, vyom_sessions, capstones, attendance(user_id),
+            #               punctuality, psychometric, certifications
+            #   students.id → enrollments (courses), case_study_submissions,
+            #               assignment_submissions, quiz_attempts (assessments),
+            #               industry_session_submissions
+            # NOT hardcoded — _resolve_students_id maps EACH user to their own
+            # students.id. Falls back to user_id if no students row (query then
+            # simply returns nothing, gracefully).
+            students_id = self._resolve_students_id(user_id)
+            sid = students_id if students_id is not None else user_id
+
+            # 11 concurrent reads
             results = await asyncio.gather(
-                self._get_courses(user_id),             # 0
-                self._get_case_studies(user_id),        # 1
-                self._get_assignments(user_id),         # 2
-                self._get_capstones(user_id),           # 3
-                self._get_industry_sessions(user_id),   # 4
-                self._get_mock_tests(user_id),          # 5
-                self._get_mock_interviews(user_id),     # 6
-                self._get_attendance(user_id),          # 7 — now uses user_id
-                self._get_punctuality(user_id),         # 8
-                self._get_psychometric(user_id),        # 9
-                self._get_certifications(user_id),      # 10
-                self._get_assessments(user_id),         # 11
+                self._get_courses(user_id),             # 0  (resolves students.id itself)
+                self._get_case_studies(sid),            # 1  students.id
+                self._get_assignments(sid),             # 2  students.id
+                self._get_capstones(user_id),           # 3  users.id
+                self._get_industry_sessions(sid),       # 4  students.id
+                self._get_mock_tests(user_id),          # 5  users.id (varchar)
+                self._get_mock_interviews(user_id),     # 6  users.id (varchar)
+                self._get_attendance(user_id),          # 7  users.id
+                self._get_punctuality(user_id),         # 8  users.id
+                self._get_psychometric(user_id),        # 9  users.id
+                self._get_certifications(user_id),      # 10 users.id
+                self._get_assessments(sid),             # 11 students.id
                 return_exceptions=True,
             )
 
