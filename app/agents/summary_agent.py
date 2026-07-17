@@ -358,12 +358,20 @@ class SummaryAgent:
 - 3 to 5 bullets. Pick 3 if data is thin. 5 only if 5 different things are worth saying.
 - Each bullet: one sentence, max 25 words. No two-line bullets.
 - Every claim traces to a fact in the data. Nothing invented. Nothing inflated.
+- LEAD WITH STRENGTHS: real work experience, qualifications, a standout score, key skills, and the goal.
+  Build the summary around the candidate's actual experience and education, not just LMS coursework.
 - Never mention: ProfileIQ, TestGen, AiRev, NudgeAI, InterviewIQ, CareerIQ.
-- Course scores are course scores. Say "scored X%" not "delivered measurable output of X%".
-- Completing 1-2 courses is completing 1-2 courses. Not "sustained commitment" or "deep specialisation".
-- Skills on a profile = "trained in" or "skills include". Only say "working with" if currently employed using them.
-- Do not restate what the Education, Experience, Skills, or Certifications sections already show. Synthesise — tell the story these facts create together, don't list the facts again.
-- If someone is an intern, say intern. If fresher, don't pretend they're experienced. The summary must survive the interview — nothing should feel exaggerated when the recruiter meets the candidate.""")
+- DO NOT report raw tallies: NO "completed X of Y courses", NO "N assessments attempted",
+  NO course counts, NO attempt counts. Recruiters don't want a progress log.
+- DO NOT state an overall/aggregate score or completion percentage (e.g. "overall score 24%").
+  Never surface a weak average, and never use defensive framing like "still in progress" or
+  "when fully engaged". If a single score is strong, name that one score; otherwise omit scores.
+- DO NOT describe Upskillize as an employer. NEVER write "interning at Upskillize" or imply the
+  platform is a workplace — Upskillize is where they learn, not where they work.
+- Course scores are course scores. Skills = "trained in" or "skills include"; only "working with" if
+  currently employed using them. Completing courses is completing courses — no "deep specialisation".
+- If someone is an intern (real internship at a real company), say intern. If fresher, don't pretend
+  they're experienced. The summary must survive the interview — nothing exaggerated.""")
 
         # Banned phrases
         banned_sample = ", ".join(f'"{p}"' for p in BANNED_PHRASES[:12])
@@ -479,18 +487,12 @@ Example B (active learner with personality data):
             lines.append(f"Certifications: {', '.join(ctx['cert_names'])}")
         if ctx["overall_score"] > 0:
             lines.append(f"Overall score: {ctx['overall_score']}%")
-        if ctx["best_test_score"] > 0:
-            lines.append(f"Best assessment: {ctx['best_test_score']}%")
-        if ctx["total_assessments"] > 0:
-            lines.append(f"Assessments completed: {ctx['total_assessments']}")
-        if ctx["completed_courses"] > 0:
-            lines.append(f"Courses done: {ctx['completed_courses']}/{ctx['total_courses']}")
-        if ctx["training_hours"] > 0:
-            lines.append(f"Training hours: {ctx['training_hours']}")
-        if ctx["consistency"] > 0:
-            lines.append(f"Consistency: {ctx['consistency']}%")
-        if ctx["improvement_pct"] > 0:
-            lines.append(f"Score improvement: {ctx['improvement_pct']}%")
+        # v11.1: expose the single best score as a strength signal, but NOT
+        # aggregate/overall score, course tallies, attempt counts, or
+        # "consistency %" — those read as a progress log or a weak average
+        # and must never appear in the summary (see prompt RULES).
+        if ctx["best_test_score"] >= 60:
+            lines.append(f"Strongest assessment score: {ctx['best_test_score']}%")
         if ctx["personality_type"] and ctx["personality_type"] != "Getting Started":
             lines.append(f"Personality: {ctx['personality_type']}")
         if ctx["personality_traits"]:
@@ -599,19 +601,18 @@ Example B (active learner with personality data):
         return f"• Early-career candidate in {ctx['domain']}."
 
     def _courses_bullet(self, ctx: Dict, seed: int) -> str:
+        # v11.1: no "X of Y" tallies — name the coursework as a skill signal.
         courses = ctx["top_courses"]
-        completed = ctx["completed_courses"]
-        total = ctx["total_courses"]
         if not courses:
             return ""
-        if completed > 0:
-            cl = ", ".join(courses[:2])
+        cl = ", ".join(courses[:2])
+        if ctx["completed_courses"] > 0:
             return self._pick([
-                f"• Completed {cl} {'courses' if completed > 1 else 'course'} on Upskillize ({completed} of {total} enrolled).",
-                f"• {completed} course{'s' if completed != 1 else ''} completed on Upskillize: {cl}.",
-                f"• Finished {cl} through Upskillize coursework.",
+                f"• Trained in {cl} through Upskillize coursework.",
+                f"• Completed {cl} on Upskillize.",
+                f"• Upskillize coursework in {cl}.",
             ], seed + 4)
-        return f"• Currently enrolled in {', '.join(courses[:2])} on Upskillize."
+        return f"• Building {cl} skills through Upskillize."
 
     def _scores_bullet(self, ctx: Dict, seed: int) -> str:
         parts = []
@@ -666,10 +667,8 @@ Example B (active learner with personality data):
                 f"• Career direction: {g}.",
                 f"• Goal: {g.lower()}.",
             ], seed + 8)
-        if ctx["improvement_pct"] >= 15:
-            return f"• Assessment scores improved by {ctx['improvement_pct']}% over the course of training."
-        if ctx["consistency"] >= 70:
-            return f"• {ctx['consistency']}% consistency score across coursework and submissions."
+        # v11.1: dropped the improvement% / consistency% fallbacks — no weak
+        # aggregate percentages in the summary.
         return ""
 
     # ═══════════════════════════════════════════════════════════

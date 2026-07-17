@@ -13,6 +13,7 @@ breaks them fails CI instead of shipping:
 
 Run:  python -m pytest tests/test_aggregation.py -v
 """
+import asyncio
 import re
 
 import pytest
@@ -226,11 +227,12 @@ class TestTabContent:
         assert counts["assessments"] == 2      # 2 quizzes, not 3 attempts
 
     def test_rendered_tabs_cap_at_five(self):
-        # 9 distinct mock tests → panel must show exactly 5 + a "+4 more" note
+        # 9 distinct passing mock tests → panel shows exactly 5 + "+4 more".
+        # Scores >= 60 so the v12.8 score floor keeps them all.
         sd = _base_student()
         sd["mock_tests"] = [
             {"test_id": i, "topic": f"Topic {i}", "title": f"Topic {i}",
-             "score": 50 + i, "percentage": 50 + i, "total_marks": 100}
+             "score": 70 + i, "percentage": 70 + i, "total_marks": 100}
             for i in range(9)
         ]
         html = _render(sd)
@@ -241,8 +243,34 @@ class TestTabContent:
 
     def test_attempt_badges_render(self):
         html = _render(_base_student())
-        assert "4 attempts · best score" in html   # retried mock test
-        assert "2 attempts · best score" in html   # retaken quiz
+        assert "4 attempts · best score" in html   # retried mock test (best 100)
+        assert "2 attempts · best score" in html   # retaken quiz (best 90)
+
+    def test_score_floor_hides_below_60(self):
+        # v12.8: only work scoring >= 60 appears in Top Performance tabs.
+        sd = _base_student()
+        sd["mock_tests"] = [
+            {"test_id": 1, "topic": "AlphaTest", "title": "AlphaTest",
+             "score": 90, "percentage": 90, "total_marks": 100},
+            {"test_id": 2, "topic": "BetaTest", "title": "BetaTest",
+             "score": 55, "percentage": 55, "total_marks": 100},
+            {"test_id": 3, "topic": "GammaTest", "title": "GammaTest",
+             "score": 0, "percentage": 0, "total_marks": 100},
+        ]
+        html = _render(sd)
+        panel = re.search(
+            r'data-tab-id="mock-test">(?:(?!itab-panel).)*', html, re.S).group(0)
+        assert "AlphaTest" in panel          # 90 -> shown
+        assert "BetaTest" not in panel       # 55 -> hidden
+        assert "GammaTest" not in panel      # 0  -> hidden
+
+    def test_command_bar_has_no_count_numbers(self):
+        # User rule: chips read "Enrolled Courses", not "3 Enrolled Courses".
+        html = _render(_base_student())
+        cbar = re.search(r'<div class="command-bar">.*?</div>\s*</div>', html, re.S)
+        assert cbar, "command bar not found"
+        assert 'class="cmd-chip-num">' not in cbar.group(0)   # count circles gone
+        assert "Enrolled Courses" in cbar.group(0)            # labels stay
 
     def test_all_courses_shown_uncapped(self):
         sd = _base_student()
@@ -478,6 +506,70 @@ class TestBeyondWork:
             "courses": [{"course_name": "Payments & Cards"}],
         })
         assert ".." not in out
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Summary content rules (template fallback, no API) — v11.1
+# Regression: no course tallies, no "attempts", no aggregate score,
+# no "interning at Upskillize"; lead with real experience.
+# ═══════════════════════════════════════════════════════════════════
+
+class TestSummaryContent:
+
+    def _agent(self):
+        import os
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        from app.agents.summary_agent import SummaryAgent
+        a = SummaryAgent()
+        a.has_api = False   # force template fallback (deterministic, no LLM)
+        return a
+
+    def _data(self):
+        return {
+            "personal": {"full_name": "Ranjana Kumari",
+                         "current_designation": "Software Developer",
+                         "current_employer": "TCS",
+                         "career_goals": "Senior Software Engineer in 3 to 5 years",
+                         "key_skills": "Python, SQL"},
+            "computed": {"overall_score": 24, "best_test_score": 100,
+                         "total_quizzes": 11, "completed_courses": 2,
+                         "total_courses": 3, "total_case_studies": 0,
+                         "consistency_score": 80, "improvement_pct": 18},
+            "courses": [{"course_name": "BFSI Foundations"},
+                        {"course_name": "Payments & Cards"}],
+            "education": [{"degree": "B.Tech", "field_of_study": "CSE",
+                           "institution": "NIT"}],
+            "work_experience": [{"title": "Software Developer", "company": "TCS"}],
+            "case_studies": [], "certifications": [], "personality": {},
+            "all_skills": {},
+        }
+
+    def test_no_banned_patterns(self):
+        agent = self._agent()
+        out = asyncio.new_event_loop().run_until_complete(
+            agent.generate(self._data())).lower()
+        assert "of 3" not in out and "2 of" not in out      # no course tally
+        assert "attempt" not in out                          # no attempts
+        assert "24%" not in out and "overall score" not in out
+        assert "interning at upskillize" not in out
+        assert "still in progress" not in out and "consistency" not in out
+
+    def test_leads_with_real_experience(self):
+        agent = self._agent()
+        out = asyncio.new_event_loop().run_until_complete(
+            agent.generate(self._data()))
+        first = out.strip().splitlines()[0].lower()
+        assert "software developer" in first and "tcs" in first
+
+    def test_grounding_vocab_includes_experience_and_education(self):
+        from app.agents.ai_enhancer import _extract_source_vocabulary
+        vocab = _extract_source_vocabulary({
+            "personal": {}, "education": [{"degree": "B.Tech", "field_of_study": "CSE",
+                                           "institution": "NIT Patna"}],
+            "work_experience": [{"title": "Backend Developer", "company": "Infosys"}],
+            "all_skills": {"technical_skills": [{"name": "Django"}]},
+        })
+        assert "patna" in vocab and "infosys" in vocab and "django" in vocab
 
 
 # ═══════════════════════════════════════════════════════════════════

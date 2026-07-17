@@ -273,6 +273,31 @@ def _collect_source_parts(source_data: Dict) -> List[str]:
         parts.extend([str(cert.get("name", "")), str(cert.get("certificate_name", "")),
                       str(cert.get("issuer", ""))])
 
+    # v1.3: merged education / work_experience / skills / projects so the
+    # summary can cite experience & qualifications without the gate flagging
+    # those words as "invented".
+    for edu in source_data.get("education", []) or []:
+        if isinstance(edu, dict):
+            parts.extend([str(edu.get("degree", "")), str(edu.get("field_of_study", "")),
+                          str(edu.get("institution", "")), str(edu.get("year", ""))])
+    for w in source_data.get("work_experience", []) or []:
+        if isinstance(w, dict):
+            parts.extend([str(w.get("title", "")), str(w.get("company", "")),
+                          str(w.get("duration", "")), str(w.get("description", ""))])
+    allsk = source_data.get("all_skills", {}) or {}
+    if isinstance(allsk, dict):
+        for grp in allsk.values():
+            for s in (grp or []):
+                parts.append(str(s.get("name", "")) if isinstance(s, dict) else str(s))
+    for p in source_data.get("projects", []) or []:
+        if isinstance(p, dict):
+            parts.extend([str(p.get("title", "")), str(p.get("name", "")),
+                          str(p.get("description", ""))])
+    gh = source_data.get("github_profile", {}) or {}
+    if isinstance(gh, dict):
+        for lang in (gh.get("languages", {}) or {}):
+            parts.append(str(lang))
+
     perso = source_data.get("personality", {}) or {}
     parts.append(str(perso.get("personality_type", "")))
     parts.append(str(perso.get("summary", "")))
@@ -580,9 +605,18 @@ class AIEnhancer:
         user_id = (student_data.get("personal", {}) or {}).get("user_id", 0)
         merged = merged_data or {}
 
-        # Combine student_data + merged_data into a single source for
-        # grounding checks (external sources come from merged_data).
-        source_data = dict(student_data)
+        # v1.3 FIX: generate FROM the merged profile (LMS + resume + LinkedIn +
+        # GitHub), not raw LMS data. merged is a superset of student_data and
+        # adds parsed education, work_experience, and all_skills — so the
+        # summary can actually use experience + qualifications, not just LMS.
+        source_data = dict(merged) if merged else dict(student_data)
+        # Guard: if a thin merged dict was passed, keep the LMS essentials.
+        for _k in ("personal", "computed", "personality", "courses",
+                   "case_studies", "assignments", "capstones", "mock_tests",
+                   "mock_interviews", "assessments", "certifications"):
+            if not source_data.get(_k) and student_data.get(_k):
+                source_data[_k] = student_data[_k]
+        # nested raw external dicts (extra grounding vocab)
         if merged.get("linkedin_data"):
             source_data["linkedin_data"] = merged["linkedin_data"]
         if merged.get("resume_data"):
