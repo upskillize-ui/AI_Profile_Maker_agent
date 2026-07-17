@@ -114,6 +114,26 @@ def _row_score(row: Dict) -> float:
     return None
 
 
+# Top Performance quality floor (user-confirmed): show only work scoring
+# at or above this, best 5. Below it (including 0) is hidden from the tabs.
+SCORE_FLOOR = 60
+
+
+def _apply_score_floor(rows: List[Dict], keep_unscored: bool = False) -> List[Dict]:
+    """Keep rows whose best score is >= SCORE_FLOOR. Unscored rows (score is
+    None) are dropped unless keep_unscored=True (used for attendance-only
+    industry sessions, where presence has value without a number)."""
+    out = []
+    for r in rows:
+        s = _row_score(r)
+        if s is None:
+            if keep_unscored:
+                out.append(r)
+        elif s >= SCORE_FLOOR:
+            out.append(r)
+    return out
+
+
 def _dedupe_best_rows(rows: List[Dict], *key_fields: str) -> List[Dict]:
     """One entry per item: group by the first present key field (prefer a
     real id, fall back to title), keep the highest-scored attempt, annotate
@@ -158,6 +178,51 @@ def _split_listfield(raw: str) -> List[str]:
     if not raw or not isinstance(raw, str):
         return []
     return [x.strip() for x in re.split(r"[,;/|]", raw) if x.strip()]
+
+
+def _salary_to_lpa(raw) -> str:
+    """Normalize an LMS salary string to a lakhs-per-annum display number.
+    LMS stores preferred_salary_* as free-text varchar — could be '8',
+    '8 LPA', or raw rupees like '800000'. Returns '' if nothing numeric."""
+    if raw is None:
+        return ""
+    digits = re.sub(r"[^\d.]", "", str(raw))
+    if not digits:
+        return ""
+    try:
+        val = float(digits)
+    except (TypeError, ValueError):
+        return ""
+    if val <= 0:
+        return ""
+    if val >= 100000:          # entered as absolute rupees → convert to lakhs
+        val = val / 100000.0
+    # trim trailing .0 so '8.0' renders as '8'
+    return f"{val:g}"
+
+
+def _build_job_preferences(personal: Dict, student_data: Dict) -> Dict[str, str]:
+    """Assemble the Open To card from the real `personal` fields the collector
+    now emits. Maps LMS column names → the keys profile_template.html expects.
+    Previously the template read student_data['job_preferences'] which nothing
+    ever populated, so Role / CTC / Work Mode all rendered empty even when the
+    learner had filled them on the LMS. Fix once, for every student."""
+    override = student_data.get("job_preferences") or {}
+    if override:  # explicit upstream override wins (kept for forward-compat)
+        return override
+    industries = _split_listfield(personal.get("industries", "") or "")
+    return {
+        "preferred_role":      personal.get("preferred_role", "") or "",
+        "preferred_industry":  industries[0] if industries else "",
+        "preferred_location":  personal.get("preferred_location", "") or "",
+        "work_mode":           personal.get("work_mode", "") or "",
+        "employment_type":     personal.get("employment_type", "") or "",
+        "notice_period":       personal.get("notice_period", "") or "",
+        "open_to_relocation":  personal.get("open_to_relocation", "") or "",
+        # template renders `₹{{ expected_salary_min }}–{{ expected_salary_max }} LPA`
+        "expected_salary_min": _salary_to_lpa(personal.get("preferred_salary_min")),
+        "expected_salary_max": _salary_to_lpa(personal.get("preferred_salary_max")),
+    }
 
 
 def _detect_fresher(student_data: Dict, profile_data: Dict) -> bool:
@@ -605,7 +670,18 @@ class ProfileRenderer:
 
         # Derivations
         perf_snapshot     = _compute_perf_snapshot(student_data, profile_data, computed)
+        # activity_counts stays TRUE distinct counts (Cohort stats use them) —
+        # computed BEFORE the score floor is applied to the tab lists.
         activity_counts   = _compute_activity_counts(student_data, ranked)
+
+        # v12.8 — Top Performance shows only PASSING work (score >= 60), best 5.
+        # User-confirmed rule: no zero/low-value rows in the ranked tabs.
+        # Attendance-only industry sessions (no numeric score) still show —
+        # attendance is engagement, not "zero value".
+        for _k in ("capstones", "case_studies", "assignments",
+                   "assessments", "mock_tests", "mock_interviews"):
+            ranked[_k] = _apply_score_floor(ranked[_k])
+        ranked["industry"] = _apply_score_floor(ranked["industry"], keep_unscored=True)
         cohort_comparison = _compute_cohort_comparison(perf_snapshot, profile_data.get("performance_data", {}) or {})
         mock_domains      = _compute_mock_domains(student_data, profile_data, perf_snapshot)
         achievement_cards = _compute_achievement_cards(student_data, profile_data)
@@ -660,7 +736,7 @@ class ProfileRenderer:
             "skills_data":     profile_data.get("skills_data", {}) or {},
             "role_matches":    profile_data.get("role_matches", []) or [],
             "projects_data":   cleaned_projects,
-            "job_preferences": student_data.get("job_preferences", {}) or {},
+            "job_preferences": _build_job_preferences(personal, student_data),
             "personal_career_goals": personal.get("career_goals", "") or "",
             # v12.7 FIX: hobbies_data / languages_data were read from keys
             # the collector never emits — hobbies and languages NEVER

@@ -542,15 +542,15 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
 <!-- COMMAND BAR (deep-links to perf tabs) -->
 <div class="command-bar-wrap">
   <div class="command-bar">
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('courses');return false;"><span class="cmd-chip-num">{{ activity_counts.enrolled_courses or 0 }}</span>Enrolled Courses</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('capstones');return false;"><span class="cmd-chip-num">{{ activity_counts.capstones or 0 }}</span>Capstones</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('casestudies');return false;"><span class="cmd-chip-num">{{ activity_counts.case_studies or 0 }}</span>Case Studies</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('assignments');return false;"><span class="cmd-chip-num">{{ activity_counts.assignments or 0 }}</span>Assignments</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('assessments');return false;"><span class="cmd-chip-num">{{ activity_counts.assessments or 0 }}</span>Assessments</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('mock-int');return false;"><span class="cmd-chip-num">{{ activity_counts.mock_interviews or 0 }}</span>Mock Interviews</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('mock-test');return false;"><span class="cmd-chip-num">{{ activity_counts.mock_tests or 0 }}</span>Mock Tests</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('industry');return false;"><span class="cmd-chip-num">{{ activity_counts.industry or 0 }}</span>Industry Sessions</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('hack');return false;"><span class="cmd-chip-num">{{ activity_counts.hackathons or 0 }}</span>Hackathons</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('courses');return false;">Enrolled Courses</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('capstones');return false;">Capstones</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('casestudies');return false;">Case Studies</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('assignments');return false;">Assignments</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('assessments');return false;">Assessments</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('mock-int');return false;">Mock Interviews</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('mock-test');return false;">Mock Tests</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('industry');return false;">Industry Sessions</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('hack');return false;">Hackathons</a>
     {% if cohort_label %}<a href="#performance" class="cmd-chip" onclick="goToPerf('cohort');return false;"><span class="cmd-chip-num wide">{{ cohort_label }}</span>Cohort</a>{% endif %}
   </div>
 </div>
