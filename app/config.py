@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # AI — only used for professional summary (Haiku = cheapest)
     ANTHROPIC_API_KEY: str = ""
-    AI_MODEL: str = "claude-haiku-4-5-20251001"
+    AI_MODEL: str = "claude-sonnet-5"
 
     MAIL_SERVER: str = "smtp.gmail.com"
     MAIL_PORT: int = 587
