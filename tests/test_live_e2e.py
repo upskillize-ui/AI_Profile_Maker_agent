@@ -36,10 +36,19 @@ requests = pytest.importorskip("requests")
 jwt = pytest.importorskip("jwt")
 
 BASE = os.environ.get("PROFILEIQ_BASE_URL",
-                      "https://upskill25-ai-enhancer.hf.space").rstrip("/")
+                      "https://upskill25-profile-iq.hf.space").rstrip("/")
 API = f"{BASE}/api/v1"
 JWT_SECRET = os.environ.get("JWT_SECRET", "")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+# conftest.py sets offline placeholders so the OFFLINE suite can import
+# app modules. Those placeholders must never be mistaken for real
+# credentials here — treat them as "not set" so live tests SKIP loudly
+# instead of failing with 401s / sqlite errors.
+if JWT_SECRET == "offline-test-secret":
+    JWT_SECRET = ""
+if DATABASE_URL.startswith("sqlite"):
+    DATABASE_URL = ""
 STUDENT_IDS = [int(x) for x in
                os.environ.get("TEST_STUDENT_IDS", "74,87,94").split(",")
                if x.strip()]

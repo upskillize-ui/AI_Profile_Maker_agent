@@ -85,7 +85,7 @@ logger   = logging.getLogger(__name__)
 # When you set up upskillize.com/profile/*, change this env var — no code
 # change needed. Every share URL and corporate URL automatically updates.
 AGENT_BASE = getattr(settings, "PUBLIC_DOMAIN", None) \
-             or "https://upskill25-ai-enhancer.hf.space"
+             or "https://upskill25-profile-iq.hf.space"   # Space renamed 17 Jul 2026
 
 # Unified error text — do not vary this. Different messages leak information
 # about which paths hit rows vs miss rows.
@@ -956,3 +956,5 @@ def _fmt_result(r, db):
             for s in scores
         ],
     }
+
+

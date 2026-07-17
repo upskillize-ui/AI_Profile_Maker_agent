@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     BASE_URL: str = "https://upskillize.com"
     PROFILE_URL_PREFIX: str = "https://upskillize.com/profile"
 
+    # Public domain for share/corporate URLs. Overridable via HF secret —
+    # v5.1 FIX: routes.py always read this via getattr(), but the field
+    # didn't exist on Settings, so the documented override silently never
+    # worked (launch report M2). Renamed Space default set 17 Jul 2026.
+    PUBLIC_DOMAIN: str = "https://upskill25-profile-iq.hf.space"
+
     DATABASE_URL: str = "mysql+pymysql://root:password@localhost:3306/upskillize_lms"
 
     REDIS_URL: str = "redis://localhost:6379/0"
