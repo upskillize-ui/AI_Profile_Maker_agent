@@ -166,6 +166,21 @@ _GROUND_STOPWORDS = {
     "banking", "finance", "financial",  # domain terms, usually safe
     "python", "sql", "excel", "java",  # tools frequently in LMS skills
     "on", "at", "in", "from", "to", "into", "onto",
+    # v1.1 — platform-activity vocabulary. These describe WHAT KIND of
+    # activity happened, not invented claims; treating them as claims
+    # made the gate reject virtually every honest summary (prod 17 Jul
+    # 2026, "All tiers failed"). Facts (names, scores, employers) are
+    # still checked — none of these words can smuggle in a fake skill.
+    "enrolled", "enrolling", "enrollment", "mock", "interview", "interviews",
+    "capstone", "capstones", "practice", "practiced", "practising",
+    "scored", "scoring", "targeting", "targeted", "band", "bands",
+    "reached", "reaching", "including", "included", "scenario", "scenarios",
+    "session", "sessions", "quiz", "quizzes", "module", "modules",
+    "certificate", "certificates", "certification", "certifications",
+    "hackathon", "hackathons", "punctuality", "attendance", "attended",
+    "highest", "lowest", "latest", "recent", "recently", "currently",
+    "coursework", "curriculum", "cohort", "batch", "track", "tracks",
+    "earned", "finished", "finishing", "pursuing", "preparing",
 }
 
 
@@ -194,11 +209,19 @@ def _extract_source_vocabulary(source_data: Dict) -> set:
         parts.extend([c.get("course_name", ""), c.get("description", ""),
                       c.get("category", "")])
 
+    # v1.1: mock_interviews added (was missing — interview roles/companies
+    # counted as "invented" words and helped fail the gate), plus extra
+    # per-item fields that legitimately appear in summaries.
     for section in ("case_studies", "assignments", "capstones",
-                    "industry_sessions", "mock_tests", "assessments"):
+                    "industry_sessions", "mock_tests", "mock_interviews",
+                    "assessments", "test_scores"):
         for item in source_data.get(section, []) or []:
+            if not isinstance(item, dict):
+                continue
             for f in ("title", "topic", "brief", "course_name", "band",
-                      "insight_text", "session_type", "role", "quiz_title"):
+                      "insight_text", "session_type", "role", "quiz_title",
+                      "level", "company", "focus", "speaker", "difficulty",
+                      "exam_name", "test_name", "grade", "status"):
                 v = item.get(f)
                 if v:
                     parts.append(str(v))
@@ -234,9 +257,14 @@ def _check_groundedness(output: str, source_data: Dict) -> Tuple[bool, List[str]
     source_words = _extract_source_vocabulary(source_data)
     invented = output_words - source_words
 
-    # Small tolerance: allow up to 3 unmatched content words. Anything more
-    # is likely inflation ("expertise", "leadership", "cross-functional").
-    tolerance = 3
+    # v1.1: tolerance scales with summary length. The old flat cap of 3
+    # rejected virtually every normal 4-5 bullet summary (observed in
+    # production 17 Jul 2026: "All tiers failed for user_id=87"), which
+    # burned up to 6 LLM calls per profile and shipped the minimal
+    # fallback line instead. A quarter of content words may be connective
+    # vocabulary not literally present in source; wholesale invention
+    # (fake skills, fake employers) still blows well past 25%.
+    tolerance = max(4, round(len(output_words) * 0.25))
     is_grounded = len(invented) <= tolerance
     return is_grounded, list(invented)[:20]  # cap for logging
 
@@ -432,7 +460,9 @@ class AIEnhancer:
         # ─── Groundedness gate ─────────────────────────────────────
         grounded, invented = _check_groundedness(summary, source_data)
         if not grounded:
-            logger.info(f"Groundedness failed at tier={tier}, invented={invented}")
+            # warning (not info): app loggers default to WARNING on the
+            # Space, so info-level rejections were invisible in logs.
+            logger.warning(f"Groundedness failed at tier={tier}, invented={invented}")
             if retry_once:
                 # Retry once — summary_agent has its own variety_seed so
                 # a second call will produce different phrasing.
