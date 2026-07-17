@@ -1,5 +1,5 @@
 ---
-title: Ai Enhancer
+title: Profile-iq
 emoji: 🚀
 colorFrom: blue
 colorTo: purple
