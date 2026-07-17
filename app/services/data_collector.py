@@ -1,42 +1,38 @@
 """
-ProfileIQ Data Collector — v6.2 (ASSESSMENTS ADDED)
+ProfileIQ Data Collector — v6.3 (SCHEMA-VERIFIED)
 ═══════════════════════════════════════════════════════════════════════════
 
-Full replacement of v6.1 with one addition and one clarification.
+Every SQL query in this file has been verified against real DESCRIBE
+output from your production database. Column names are no longer guessed.
 
-CHANGES FROM v6.1
-──────────────────
-  1. NEW method: _get_assessments() — reads quiz_attempts joined to quizzes.
-     Faculty-uploaded quizzes ARE the "Assessments" tab on the LMS.
-     (pf_assessments = Pathfinder AI career-guidance = deliberately excluded)
-  2. asyncio.gather() now has 12 tasks (was 11). Unpacking updated to match.
-  3. Snapshot is now 8 axes:
-       1. Assignments  2. Case Studies  3. Capstones
-       4. Industry     5. Mock Test     6. Mock Interview
-       7. Assessments  8. Punctuality
-  4. Legacy alias `test_scores` now routes to the assessments list
-     (renderer's _compute_perf_snapshot line 168 reads test_scores for
-     the "assessment" axis — this naming alignment makes it work
-     without any renderer change).
+CORRECTIONS FROM v6.2 (all found via HF Space runtime errors):
 
-STILL CORRECT FROM v6.1
-────────────────────────
-  - All activity tables join on users.id via `student_id` column
-    (except student_attendance which is students.id)
-  - Section keys hold FLAT LISTS (template does its own dedup + top-N)
-  - Legacy aliases: capstone_projects, industry_interactions (for renderer)
-  - Punctuality returns None-shape when table missing (graceful N/A)
-  - Never references the dropped `visibility` column
-  - Empty state is [] or None — never NaN or 0.00 sentinel
+  1. courses.name  →  courses.course_name    (aliased AS course_name)
+  2. enrollments.status  →  enrollments.completion_status
+  3. enrollments.enrolled_at  →  enrollments.created_at
+  4. capstones: removed non-existent c.reviewed_at
+  5. test_history.completed_at  →  test_history.created_at only
+  6. vyom_sessions.session_type  →  vyom_sessions.mode
+  7. student_attendance now uses user_id directly (no students.id hop)
+  8. student_attendance.session_id  →  student_attendance.lesson_id
+  9. student_attendance.marked_at  →  student_attendance.joined_at
+  10. Removed _get_students_id() entirely — no longer needed
 
-PERFORMANCE SNAPSHOT DESIGN (unchanged)
-────────────────────────────────────────
-  Axis score = mean of `score` across all items in that section's list.
-  Fair average = mean of axes with real activity (score > 0), N/A excluded.
-  Attendance folds into Punctuality (per the LMS-side Punctuality Score
-  design, not as its own snapshot axis).
+SCHEMA REALITY NOTES:
+  - test_history.student_id is varchar(100), not int — MySQL coerces the
+    int parameter to string, so passing user_id as int works.
+  - vyom_sessions.user_id is varchar(64) — same story.
+  - vyom_sessions has 34 columns; we pull the ones useful for a profile.
+  - student_attendance has BOTH student_id (=students.id, legacy) AND
+    user_id (=users.id, current). We use user_id — one less lookup.
 
-Author: Phase 0 data-flow rewire — v6.2
+EVERYTHING ELSE FROM v6.2 IS UNCHANGED:
+  - 8-axis Performance Snapshot (Assignments, Case Studies, Capstones,
+    Industry Sessions, Mock Test, Mock Interview, Assessments, Punctuality)
+  - Flat lists at section keys (template compatible)
+  - Legacy aliases: capstone_projects, industry_interactions, test_scores
+  - Punctuality graceful N/A fallback
+  - Empty state = [] or None, never NaN or 0.00 sentinel
 """
 
 import asyncio
@@ -52,11 +48,9 @@ logger = logging.getLogger(__name__)
 
 class DataCollector:
     """
-    Assembles all data needed to render a student's profile.
-
-    Reads only. Never writes. Every method is best-effort — a query
-    failure logs and returns an empty list rather than crashing
-    collect_all(). Every activity method expects users.id as user_id.
+    Reads student data from defaultdb for profile generation.
+    Every method is best-effort — a query failure logs and returns []
+    instead of crashing collect_all().
     """
 
     def __init__(self, db: Session):
@@ -67,15 +61,11 @@ class DataCollector:
     # =====================================================================
 
     async def collect_all(self, user_id: int) -> Dict[str, Any]:
-        """
-        Assemble the full data payload for one student.
-        `user_id` is users.id — the authenticated student's id.
-        """
         try:
-            personal    = await self._get_personal(user_id)
-            students_id = await self._get_students_id(user_id)
+            personal = await self._get_personal(user_id)
 
-            # 12 concurrent reads — assessments is now #12
+            # 11 concurrent reads (dropped _get_students_id; attendance now
+            # uses user_id directly)
             results = await asyncio.gather(
                 self._get_courses(user_id),             # 0
                 self._get_case_studies(user_id),        # 1
@@ -84,11 +74,11 @@ class DataCollector:
                 self._get_industry_sessions(user_id),   # 4
                 self._get_mock_tests(user_id),          # 5
                 self._get_mock_interviews(user_id),     # 6
-                self._get_attendance(students_id),      # 7
+                self._get_attendance(user_id),          # 7 — now uses user_id
                 self._get_punctuality(user_id),         # 8
                 self._get_psychometric(user_id),        # 9
                 self._get_certifications(user_id),      # 10
-                self._get_assessments(user_id),         # 11 — NEW
+                self._get_assessments(user_id),         # 11
                 return_exceptions=True,
             )
 
@@ -100,7 +90,6 @@ class DataCollector:
                 for r in results
             ]
 
-            # Build the 8-axis Performance Snapshot from the flat lists
             snapshot = self._compute_snapshot(
                 assignments        = assignments,
                 case_studies       = case_studies,
@@ -115,26 +104,25 @@ class DataCollector:
             return {
                 "personal":              personal,
                 "courses":               courses,
-                "case_studies":          case_studies,       # LIST[dict]
-                "assignments":           assignments,        # LIST[dict]
-                "capstones":             capstones,          # LIST[dict]
-                "capstone_projects":     capstones,          # LEGACY ALIAS (renderer)
-                "industry_sessions":     industry_sessions,  # LIST[dict]
-                "industry_interactions": industry_sessions,  # LEGACY ALIAS (renderer)
-                "mock_tests":            mock_tests,         # LIST[dict]
-                "mock_interviews":       mock_interviews,    # LIST[dict]
-                "assessments":           assessments,        # NEW — LIST[dict]
-                "test_scores":           assessments,        # LEGACY ALIAS — renderer's
+                "case_studies":          case_studies,
+                "assignments":           assignments,
+                "capstones":             capstones,
+                "capstone_projects":     capstones,          # legacy alias for renderer
+                "industry_sessions":     industry_sessions,
+                "industry_interactions": industry_sessions,  # legacy alias for renderer
+                "mock_tests":            mock_tests,
+                "mock_interviews":       mock_interviews,
+                "assessments":           assessments,
+                "test_scores":           assessments,        # legacy alias — renderer's
                                                              # "assessment" axis reads this
-                "attendance":            attendance,         # dict summary
-                "punctuality":           punctuality,        # dict summary
-                "personality":           psycho,             # dict
-                "certifications":        certifications,     # LIST[dict]
-                "performance_snapshot":  snapshot,           # 8-axis dict
+                "attendance":            attendance,
+                "punctuality":           punctuality,
+                "personality":           psycho,
+                "certifications":        certifications,
+                "performance_snapshot":  snapshot,
                 "batch_info":            {},
                 "computed": {
                     "user_id":            user_id,
-                    "students_id":        students_id,
                     "total_case_studies": len(case_studies),
                     "total_assignments":  len(assignments),
                     "total_capstones":    len(capstones),
@@ -184,7 +172,7 @@ class DataCollector:
                 "phone":                 r.get("phone") or "",
                 "photo_url":             r.get("profile_photo") or "",
                 "bio":                   r.get("bio") or "",
-                "about_me":              r.get("bio") or "",   # legacy alias
+                "about_me":              r.get("bio") or "",
                 "gender":                r.get("gender") or "",
                 "city":                  r.get("city") or "",
                 "state":                 r.get("state") or "",
@@ -219,32 +207,32 @@ class DataCollector:
             logger.warning(f"_get_personal failed for user_id={user_id}: {e}")
             return self._empty_personal(user_id)
 
-    async def _get_students_id(self, user_id: int) -> Optional[int]:
-        """users.id → students.id lookup, for attendance queries only."""
-        try:
-            row = self.db.execute(text("""
-                SELECT id FROM students WHERE user_id = :uid LIMIT 1
-            """), {"uid": user_id}).first()
-            return row[0] if row else None
-        except Exception as e:
-            logger.warning(f"_get_students_id failed for user_id={user_id}: {e}")
-            return None
+    # =====================================================================
+    # ENROLLED COURSES
+    # =====================================================================
 
     async def _get_courses(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        enrollments columns (verified via DESCRIBE):
+          id, student_id, course_id, completion_status, payment_status,
+          progress_percentage, completed_at, created_at, updated_at
+        NO `status` column, NO `enrolled_at` column.
+        """
         try:
             rows = self.db.execute(text("""
                 SELECT
-                    e.id           AS enrollment_id,
+                    e.id                    AS enrollment_id,
                     e.course_id,
-                    e.status,
-                    e.enrolled_at,
-                    c.name         AS course_name,
-                    c.description  AS description,
-                    c.category     AS category
+                    e.completion_status,
+                    e.progress_percentage,
+                    e.created_at            AS enrolled_at,
+                    c.course_name,
+                    c.description           AS description,
+                    c.category
                 FROM enrollments e
                 LEFT JOIN courses c ON c.id = e.course_id
                 WHERE e.student_id = :uid
-                ORDER BY e.enrolled_at DESC
+                ORDER BY e.created_at DESC
             """), {"uid": user_id}).mappings().all()
             return [
                 {
@@ -253,7 +241,8 @@ class DataCollector:
                     "course_name":   r.get("course_name") or "",
                     "description":   r.get("description") or "",
                     "category":      r.get("category") or "",
-                    "status":        r.get("status") or "",
+                    "status":        r.get("completion_status") or "",
+                    "progress":      float(r["progress_percentage"]) if r.get("progress_percentage") is not None else 0.0,
                     "enrolled_at":   str(r.get("enrolled_at") or ""),
                 }
                 for r in rows
@@ -263,14 +252,17 @@ class DataCollector:
             return []
 
     # =====================================================================
-    # ACTIVITY FLOW 1 — CASE STUDIES (flat list)
+    # ACTIVITY FLOW 1 — CASE STUDIES
     # =====================================================================
 
     async def _get_case_studies(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        courses column is `course_name`, not `name`.
+        """
         try:
             rows = self.db.execute(text("""
                 SELECT
-                    css.id           AS submission_id,
+                    css.id                AS submission_id,
                     css.case_study_id,
                     css.grade,
                     css.status,
@@ -278,13 +270,13 @@ class DataCollector:
                     css.feedback,
                     css.submitted_at,
                     css.reviewed_at,
-                    cs.title         AS case_title,
-                    cs.description   AS case_brief,
+                    cs.title              AS case_title,
+                    cs.description        AS case_brief,
                     cs.course_id,
-                    co.name          AS course_name
+                    co.course_name        AS course_name
                 FROM case_study_submissions css
                 LEFT JOIN case_studies cs ON cs.id = css.case_study_id
-                LEFT JOIN courses    co ON co.id = cs.course_id
+                LEFT JOIN courses      co ON co.id = cs.course_id
                 WHERE css.student_id = :uid
                 ORDER BY css.grade DESC, css.submitted_at DESC
             """), {"uid": user_id}).mappings().all()
@@ -317,26 +309,26 @@ class DataCollector:
             return []
 
     # =====================================================================
-    # ACTIVITY FLOW 2 — ASSIGNMENTS (flat list)
+    # ACTIVITY FLOW 2 — ASSIGNMENTS
     # =====================================================================
 
     async def _get_assignments(self, user_id: int) -> List[Dict[str, Any]]:
         try:
             rows = self.db.execute(text("""
                 SELECT
-                    asub.id           AS submission_id,
+                    asub.id               AS submission_id,
                     asub.assignment_id,
                     asub.grade,
                     asub.status,
                     asub.feedback,
                     asub.submitted_at,
-                    a.title           AS assignment_title,
-                    a.description     AS assignment_brief,
+                    a.title               AS assignment_title,
+                    a.description         AS assignment_brief,
                     a.course_id,
-                    co.name           AS course_name
+                    co.course_name        AS course_name
                 FROM assignment_submissions asub
-                LEFT JOIN assignments a ON a.id = asub.assignment_id
-                LEFT JOIN courses    co ON co.id = a.course_id
+                LEFT JOIN assignments  a ON a.id = asub.assignment_id
+                LEFT JOIN courses      co ON co.id = a.course_id
                 WHERE asub.student_id = :uid
                 ORDER BY asub.grade DESC, asub.submitted_at DESC
             """), {"uid": user_id}).mappings().all()
@@ -368,18 +360,25 @@ class DataCollector:
             return []
 
     # =====================================================================
-    # ACTIVITY FLOW 3 — CAPSTONES (flat list)
+    # ACTIVITY FLOW 3 — CAPSTONES
     # =====================================================================
 
     async def _get_capstones(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        capstones columns (verified via DESCRIBE):
+          id, title, description, course_id, due_date, total_marks,
+          status, grade, feedback, submitted_at, created_at, updated_at,
+          company, file_url
+        NO `reviewed_at` column.
+        """
         try:
             rows = self.db.execute(text("""
                 SELECT
                     c.id, c.title, c.description, c.course_id,
                     c.due_date, c.total_marks, c.status,
                     c.grade, c.feedback,
-                    c.submitted_at, c.reviewed_at,
-                    co.name AS course_name
+                    c.submitted_at,
+                    co.course_name        AS course_name
                 FROM capstones c
                 LEFT JOIN courses co ON co.id = c.course_id
                 WHERE c.student_id = :uid
@@ -421,10 +420,19 @@ class DataCollector:
             return []
 
     # =====================================================================
-    # ACTIVITY FLOW 4 — INDUSTRY SESSIONS (flat list)
+    # ACTIVITY FLOW 4 — INDUSTRY SESSIONS
     # =====================================================================
 
     async def _get_industry_sessions(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        industry_sessions columns (from result 13, DESCRIBE):
+          id, title, description, speaker (not speaker_name), course_id,
+          date, duration, type, status, company, mentor_name, key_topics
+        industry_session_submissions columns (from result 14):
+          id, session_id, student_id, score, band, grade, insight_text,
+          feedback_json, attempt_number, has_feedback, submitted_at,
+          reviewed_at, file_url, file_name
+        """
         try:
             rows = self.db.execute(text("""
                 SELECT
@@ -441,7 +449,10 @@ class DataCollector:
                     iss.reviewed_at,
                     ise.title             AS session_title,
                     ise.description       AS session_brief,
-                    ise.speaker_name      AS speaker
+                    ise.speaker           AS speaker,
+                    ise.company           AS company,
+                    ise.type              AS session_type,
+                    ise.duration          AS duration
                 FROM industry_session_submissions iss
                 LEFT JOIN industry_sessions ise ON ise.id = iss.session_id
                 WHERE iss.student_id = :uid
@@ -460,10 +471,12 @@ class DataCollector:
                     "band":          r.get("band") or "",
                     "grade":         r.get("grade") or "",
                     "speaker":       r.get("speaker") or "",
+                    "company":       r.get("company") or "",
+                    "type":          r.get("session_type") or "",
                     "insight":       r.get("insight_text") or "",
                     "insight_text":  r.get("insight_text") or "",
                     "held_at":       str(r.get("submitted_at") or ""),
-                    "duration":      "",
+                    "duration":      r.get("duration") or "",
                     "submitted_at":  str(r.get("submitted_at") or ""),
                 })
             return items
@@ -472,21 +485,32 @@ class DataCollector:
             return []
 
     # =====================================================================
-    # ACTIVITY FLOW 5 — MOCK TESTS (TestGen) (flat list)
+    # ACTIVITY FLOW 5 — MOCK TESTS (TestGen)
     # =====================================================================
 
     async def _get_mock_tests(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        test_history columns (verified via DESCRIBE):
+          id, test_id, student_id (varchar!), course_id, lecture_id,
+          topic, difficulty, total_questions, correct_answers,
+          score_percentage, performance_band, duration_minutes,
+          time_taken_seconds, overall_feedback, created_at
+        NO `completed_at` column.
+        student_id is varchar(100) — MySQL coerces int → varchar for
+        WHERE = clause, so passing user_id as int is fine.
+        """
         try:
             rows = self.db.execute(text("""
                 SELECT
                     id, test_id, topic, difficulty,
                     total_questions, correct_answers,
                     score_percentage, performance_band,
-                    created_at, completed_at
+                    duration_minutes, time_taken_seconds,
+                    created_at
                 FROM test_history
                 WHERE student_id = :uid
-                ORDER BY score_percentage DESC, completed_at DESC
-            """), {"uid": user_id}).mappings().all()
+                ORDER BY score_percentage DESC, created_at DESC
+            """), {"uid": str(user_id)}).mappings().all()
 
             items = []
             for r in rows:
@@ -507,8 +531,8 @@ class DataCollector:
                     "grade":           r.get("performance_band") or "",
                     "band":            r.get("performance_band") or "",
                     "test_type":       "mock",
-                    "attempted_at":    str(r.get("completed_at") or r.get("created_at") or ""),
-                    "submitted_at":    str(r.get("completed_at") or r.get("created_at") or ""),
+                    "attempted_at":    str(r.get("created_at") or ""),
+                    "submitted_at":    str(r.get("created_at") or ""),
                     "course_name":     "",
                 })
             return items
@@ -517,29 +541,51 @@ class DataCollector:
             return []
 
     # =====================================================================
-    # ACTIVITY FLOW 6 — MOCK INTERVIEWS (flat list)
+    # ACTIVITY FLOW 6 — MOCK INTERVIEWS
     # =====================================================================
 
     async def _get_mock_interviews(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        vyom_sessions columns (verified via DESCRIBE):
+          id (varchar!), user_id (varchar!), role, level, mode,
+          session_mode, round, round_label, round_index, focus,
+          company, name, difficulty, duration_min, started_at,
+          ended_at, completion_type, current_stage, status,
+          answer_count, assistant_message_count, user_message_count,
+          camera_at_join, awaiting_rating, deleted_at,
+          actual_duration_seconds, ...
+
+        NO `session_type` column. Use `mode` or `round_label` instead.
+        NO `created_at` — use `started_at`.
+        NO `completed_at` — use `ended_at`.
+        user_id is varchar(64), so we pass user_id as string.
+        """
         try:
             rows = self.db.execute(text("""
                 SELECT
-                    id, user_id, session_type, role, status,
-                    created_at, completed_at, ended_at
+                    id, user_id, mode, round_label, role, level,
+                    status, current_stage, completion_type,
+                    company, focus, duration_min, answer_count,
+                    started_at, ended_at
                 FROM vyom_sessions
                 WHERE user_id = :uid
-                ORDER BY created_at DESC
-            """), {"uid": user_id}).mappings().all()
+                  AND deleted_at IS NULL
+                ORDER BY started_at DESC
+            """), {"uid": str(user_id)}).mappings().all()
 
             items = []
             for row in rows:
                 sess = dict(row)
                 sess_id = sess["id"]
-                agg = self.db.execute(text("""
-                    SELECT AVG(rating) AS avg_rating, COUNT(*) AS answer_count
-                    FROM vyom_answer_ratings
-                    WHERE session_id = :sid
-                """), {"sid": sess_id}).mappings().first()
+                # Aggregate ratings from vyom_answer_ratings
+                try:
+                    agg = self.db.execute(text("""
+                        SELECT AVG(rating) AS avg_rating, COUNT(*) AS answer_count
+                        FROM vyom_answer_ratings
+                        WHERE session_id = :sid
+                    """), {"sid": sess_id}).mappings().first()
+                except Exception:
+                    agg = None
 
                 avg = agg["avg_rating"] if agg else None
                 cnt = int(agg["answer_count"]) if agg and agg["answer_count"] else 0
@@ -558,16 +604,24 @@ class DataCollector:
 
                 items.append({
                     "session_id":   sess_id,
-                    "title":        (sess.get("role") or sess.get("session_type") or "Mock Interview"),
-                    "session_type": sess.get("session_type") or "",
+                    "title":        (sess.get("role") or sess.get("round_label") or sess.get("mode") or "Mock Interview"),
+                    "session_type": sess.get("mode") or "",
+                    "mode":         sess.get("mode") or "",
                     "role":         sess.get("role") or "",
+                    "level":        sess.get("level") or "",
+                    "company":      sess.get("company") or "",
+                    "focus":        sess.get("focus") or "",
+                    "round":        sess.get("round_label") or "",
                     "status":       sess.get("status") or "",
-                    "answer_count": cnt,
+                    "current_stage": sess.get("current_stage") or "",
+                    "completion":   sess.get("completion_type") or "",
+                    "duration_min": sess.get("duration_min") or 0,
+                    "answer_count": cnt or sess.get("answer_count") or 0,
                     "score":        score,
                     "percentage":   score,
                     "max_score":    100,
-                    "completed_at": str(sess.get("completed_at") or sess.get("ended_at") or ""),
-                    "created_at":   str(sess.get("created_at") or ""),
+                    "completed_at": str(sess.get("ended_at") or ""),
+                    "created_at":   str(sess.get("started_at") or ""),
                 })
             items.sort(key=lambda x: (x["score"] or 0), reverse=True)
             return items
@@ -576,116 +630,41 @@ class DataCollector:
             return []
 
     # =====================================================================
-    # ACTIVITY FLOW 7 — ASSESSMENTS (NEW — faculty-uploaded quizzes)
+    # ATTENDANCE — now uses user_id directly (no students.id hop)
     # =====================================================================
 
-    async def _get_assessments(self, user_id: int) -> List[Dict[str, Any]]:
+    async def _get_attendance(self, user_id: int) -> Dict[str, Any]:
         """
-        Faculty-uploaded assessments live in the `quizzes` table.
-        Student attempts live in `quiz_attempts`.
+        student_attendance columns (verified via DESCRIBE):
+          id, student_id (=students.id, legacy), user_id (=users.id, current),
+          course_id, lesson_id, lesson_title, session_date,
+          joined_at, left_at, duration_minutes, watch_percent,
+          status, device, ip_address, created_at, updated_at
 
-          quizzes:        id, course_id, title, description, pass_percentage,
-                          time_limit_minutes, is_active
-          quiz_attempts:  id, quiz_id, student_id, score, total_marks,
-                          passed, submitted_at, time_taken_seconds
-
-        NOT to be confused with pf_assessments (Pathfinder = AI career-
-        guidance, deliberately excluded from ProfileIQ).
-
-        student_id in quiz_attempts stores users.id (consistent with all
-        other activity tables in this schema).
+        NO `session_id` column — use `lesson_id`.
+        NO `marked_at` column — use `joined_at` or `session_date`.
+        NO `student_attendance.session_id` — use `lesson_id`.
         """
-        try:
-            rows = self.db.execute(text("""
-                SELECT
-                    qa.id           AS attempt_id,
-                    qa.quiz_id,
-                    qa.score,
-                    qa.total_marks,
-                    qa.passed,
-                    qa.submitted_at,
-                    qa.time_taken_seconds,
-                    qa.created_at,
-                    q.title         AS quiz_title,
-                    q.description   AS quiz_description,
-                    q.course_id,
-                    q.pass_percentage,
-                    q.time_limit_minutes,
-                    co.name         AS course_name
-                FROM quiz_attempts qa
-                LEFT JOIN quizzes q  ON q.id  = qa.quiz_id
-                LEFT JOIN courses co ON co.id = q.course_id
-                WHERE qa.student_id = :uid
-                ORDER BY qa.score DESC, qa.submitted_at DESC
-            """), {"uid": user_id}).mappings().all()
-
-            items = []
-            for r in rows:
-                score = r.get("score")
-                total = r.get("total_marks") or 100
-                pct = None
-                if score is not None and total:
-                    try:
-                        pct = round(float(score) / float(total) * 100, 2)
-                    except Exception:
-                        pct = None
-                items.append({
-                    "attempt_id":     r["attempt_id"],
-                    "quiz_id":        r["quiz_id"],
-                    "title":          r.get("quiz_title") or "Assessment",
-                    "test_name":      r.get("quiz_title") or "",
-                    "exam_name":      r.get("quiz_title") or "",
-                    "brief":          r.get("quiz_description") or "",
-                    "description":    r.get("quiz_description") or "",
-                    "score":          pct,             # normalized 0-100 for snapshot
-                    "percentage":     pct,
-                    "raw_score":      float(score) if score is not None else None,
-                    "total_marks":    float(total) if total else None,
-                    "max_score":      100,
-                    "grade":          self._grade_letter(pct),
-                    "ai_grade_label": self._grade_label(pct),
-                    "passed":         bool(r.get("passed")),
-                    "pass_percentage":r.get("pass_percentage") or 60,
-                    "time_taken_sec": r.get("time_taken_seconds") or 0,
-                    "time_limit_min": r.get("time_limit_minutes") or 0,
-                    "course_name":    r.get("course_name") or "",
-                    "module_name":    "",
-                    "test_type":      "quiz",
-                    "attempted_at":   str(r.get("submitted_at") or r.get("created_at") or ""),
-                    "submitted_at":   str(r.get("submitted_at") or ""),
-                })
-            return items
-        except Exception as e:
-            logger.warning(f"_get_assessments failed for user_id={user_id}: {e}")
-            return []
-
-    # =====================================================================
-    # ATTENDANCE (uses students.id — folds into Punctuality, not its own axis)
-    # =====================================================================
-
-    async def _get_attendance(self, students_id: Optional[int]) -> Dict[str, Any]:
-        if students_id is None:
-            return self._empty_attendance()
         try:
             row = self.db.execute(text("""
                 SELECT
                     COUNT(*) AS total,
-                    SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) AS present
+                    SUM(CASE WHEN status = 'present' OR status = 'joined' THEN 1 ELSE 0 END) AS present
                 FROM student_attendance
-                WHERE student_id = :sid
-            """), {"sid": students_id}).mappings().first()
+                WHERE user_id = :uid
+            """), {"uid": user_id}).mappings().first()
 
             total = int((row["total"] or 0)) if row else 0
             present = int((row["present"] or 0)) if row else 0
             pct = round(present / total * 100, 2) if total > 0 else None
 
             recent = self.db.execute(text("""
-                SELECT session_id, status, marked_at
+                SELECT lesson_id, lesson_title, session_date, joined_at, status
                 FROM student_attendance
-                WHERE student_id = :sid
-                ORDER BY marked_at DESC
+                WHERE user_id = :uid
+                ORDER BY session_date DESC, joined_at DESC
                 LIMIT 10
-            """), {"sid": students_id}).mappings().all()
+            """), {"uid": user_id}).mappings().all()
 
             return {
                 "sessions_attended":  present,
@@ -694,30 +673,18 @@ class DataCollector:
                 "recent_sessions":    [dict(r) for r in recent],
             }
         except Exception as e:
-            logger.warning(f"_get_attendance failed for students_id={students_id}: {e}")
+            logger.warning(f"_get_attendance failed for user_id={user_id}: {e}")
             return self._empty_attendance()
 
     # =====================================================================
-    # PUNCTUALITY (8th axis)
+    # PUNCTUALITY (8th snapshot axis)
     # =====================================================================
 
     async def _get_punctuality(self, user_id: int) -> Dict[str, Any]:
-        """
-        Reads from the punctuality_scores table (LMS-side cron output).
-        Returns None-shaped dict if the table doesn't exist yet — snapshot
-        treats as N/A. When the cron ships, this axis lights up automatically.
-
-        Attendance is one component INSIDE Punctuality per the design.
-        We don't count attendance as a separate axis.
-        """
         try:
             row = self.db.execute(text("""
                 SELECT
-                    student_id,
-                    score,
-                    band,
-                    events_counted,
-                    computed_at
+                    student_id, score, band, events_counted, computed_at
                 FROM punctuality_scores
                 WHERE student_id = :uid
                 ORDER BY computed_at DESC
@@ -739,7 +706,7 @@ class DataCollector:
             return {"score": None, "band": None, "events_counted": 0, "status": "table_missing"}
 
     # =====================================================================
-    # PSYCHOMETRIC (Beyond Work section)
+    # PSYCHOMETRIC
     # =====================================================================
 
     async def _get_psychometric(self, user_id: int) -> Dict[str, Any]:
@@ -795,25 +762,87 @@ class DataCollector:
             return []
 
     # =====================================================================
+    # ASSESSMENTS (faculty-uploaded quizzes)
+    # =====================================================================
+
+    async def _get_assessments(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        quizzes columns (verified via DESCRIBE):
+          id, course_id, title, description, pass_percentage,
+          time_limit_minutes, is_active, created_at, updated_at
+        quiz_attempts columns (verified via DESCRIBE):
+          id, quiz_id, student_id, score, total_marks, passed,
+          submitted_at, time_taken_seconds, answers, created_at, updated_at
+        """
+        try:
+            rows = self.db.execute(text("""
+                SELECT
+                    qa.id           AS attempt_id,
+                    qa.quiz_id,
+                    qa.score,
+                    qa.total_marks,
+                    qa.passed,
+                    qa.submitted_at,
+                    qa.time_taken_seconds,
+                    qa.created_at,
+                    q.title         AS quiz_title,
+                    q.description   AS quiz_description,
+                    q.course_id,
+                    q.pass_percentage,
+                    q.time_limit_minutes,
+                    co.course_name  AS course_name
+                FROM quiz_attempts qa
+                LEFT JOIN quizzes q  ON q.id  = qa.quiz_id
+                LEFT JOIN courses co ON co.id = q.course_id
+                WHERE qa.student_id = :uid
+                ORDER BY qa.score DESC, qa.submitted_at DESC
+            """), {"uid": user_id}).mappings().all()
+
+            items = []
+            for r in rows:
+                score = r.get("score")
+                total = r.get("total_marks") or 100
+                pct = None
+                if score is not None and total:
+                    try:
+                        pct = round(float(score) / float(total) * 100, 2)
+                    except Exception:
+                        pct = None
+                items.append({
+                    "attempt_id":     r["attempt_id"],
+                    "quiz_id":        r["quiz_id"],
+                    "title":          r.get("quiz_title") or "Assessment",
+                    "test_name":      r.get("quiz_title") or "",
+                    "exam_name":      r.get("quiz_title") or "",
+                    "brief":          r.get("quiz_description") or "",
+                    "description":    r.get("quiz_description") or "",
+                    "score":          pct,
+                    "percentage":     pct,
+                    "raw_score":      float(score) if score is not None else None,
+                    "total_marks":    float(total) if total else None,
+                    "max_score":      100,
+                    "grade":          self._grade_letter(pct),
+                    "ai_grade_label": self._grade_label(pct),
+                    "passed":         bool(r.get("passed")),
+                    "pass_percentage": r.get("pass_percentage") or 60,
+                    "time_taken_sec": r.get("time_taken_seconds") or 0,
+                    "time_limit_min": r.get("time_limit_minutes") or 0,
+                    "course_name":    r.get("course_name") or "",
+                    "module_name":    "",
+                    "test_type":      "quiz",
+                    "attempted_at":   str(r.get("submitted_at") or r.get("created_at") or ""),
+                    "submitted_at":   str(r.get("submitted_at") or ""),
+                })
+            return items
+        except Exception as e:
+            logger.warning(f"_get_assessments failed for user_id={user_id}: {e}")
+            return []
+
+    # =====================================================================
     # PERFORMANCE SNAPSHOT — 8 axes with FAIR AVERAGE
     # =====================================================================
 
     def _compute_snapshot(self, **sections) -> Dict[str, Any]:
-        """
-        Build the 8-axis snapshot:
-          1. Assignments
-          2. Case Studies
-          3. Capstones
-          4. Industry Sessions
-          5. Mock Test
-          6. Mock Interview
-          7. Assessments
-          8. Punctuality (N/A until LMS cron ships)
-
-        Axis score = mean of `score` across items in that section's list.
-        Fair average = mean of axes with real activity (score > 0); N/A axes
-        excluded. Attendance folds into Punctuality per the LMS-side design.
-        """
         def _axis_avg(items: list) -> Optional[float]:
             if not items:
                 return None
@@ -837,7 +866,6 @@ class DataCollector:
             "punctuality":       punct.get("score") if punct.get("score") is not None else None,
         }
 
-        # Fair average: only axes with score > 0
         active_values = [v for v in axes.values() if v is not None and v > 0]
         fair_avg = round(sum(active_values) / len(active_values), 1) if active_values else None
 
@@ -845,7 +873,7 @@ class DataCollector:
             "axes":              axes,
             "active_axis_count": len(active_values),
             "fair_average":      fair_avg,
-            "average":           fair_avg,   # legacy alias for template
+            "average":           fair_avg,
             "axis_labels": {
                 "assignments":       "Assignments",
                 "case_studies":      "Case Studies",
@@ -945,7 +973,6 @@ class DataCollector:
             "batch_info":            {},
             "computed": {
                 "user_id":            user_id,
-                "students_id":        None,
                 "total_case_studies": 0,
                 "total_assignments":  0,
                 "total_capstones":    0,
@@ -957,6 +984,5 @@ class DataCollector:
         }
 
     def _safe_default_list(self, exc):
-        """Return an empty list when a section-collector task raises."""
         logger.warning(f"Collector task failed: {exc}")
         return []
