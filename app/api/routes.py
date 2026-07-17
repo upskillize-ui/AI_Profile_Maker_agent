@@ -194,6 +194,7 @@ def _profile_response(profile: StudentProfile) -> dict:
     return {
         "id":                     profile.id,
         "slug":                   profile.slug,
+        "student_name":           profile.student_name or "",
         "status":                 profile.status.value if profile.status else "pending",
         "visible_to_corporates":  bool(profile.visible_to_corporates),
         "has_share_link":         profile.share_token is not None,
@@ -955,5 +956,3 @@ def _fmt_result(r, db):
             for s in scores
         ],
     }
-
-

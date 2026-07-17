@@ -82,12 +82,23 @@ class DataCollector:
                 return_exceptions=True,
             )
 
+            # Type-aware failure defaults: attendance/punctuality/psycho are
+            # dicts — replacing them with [] crashes every downstream .get().
+            defaults = [
+                [], [], [], [], [], [], [],          # 0-6 list sections
+                self._empty_attendance(),             # 7 attendance
+                {"score": None, "band": None,
+                 "events_counted": 0, "status": "no_data"},   # 8 punctuality
+                {"personality_type": None, "traits": [],
+                 "summary": "", "status": "no_data"},          # 9 psychometric
+                [], [],                                # 10-11 lists
+            ]
             (courses, case_studies, assignments, capstones,
              industry_sessions, mock_tests, mock_interviews,
              attendance, punctuality, psycho, certifications,
              assessments) = [
-                (r if not isinstance(r, Exception) else self._safe_default_list(r))
-                for r in results
+                (r if not isinstance(r, Exception) else self._safe_default(r, defaults[i]))
+                for i, r in enumerate(results)
             ]
 
             snapshot = self._compute_snapshot(
@@ -121,16 +132,14 @@ class DataCollector:
                 "certifications":        certifications,
                 "performance_snapshot":  snapshot,
                 "batch_info":            {},
-                "computed": {
-                    "user_id":            user_id,
-                    "total_case_studies": len(case_studies),
-                    "total_assignments":  len(assignments),
-                    "total_capstones":    len(capstones),
-                    "total_industry":     len(industry_sessions),
-                    "total_mock_tests":   len(mock_tests),
-                    "total_interviews":   len(mock_interviews),
-                    "total_assessments":  len(assessments),
-                },
+                "computed": self._compute_metrics(
+                    user_id, snapshot,
+                    courses=courses, mock_tests=mock_tests,
+                    assessments=assessments, case_studies=case_studies,
+                    assignments=assignments, capstones=capstones,
+                    industry_sessions=industry_sessions,
+                    mock_interviews=mock_interviews,
+                ),
             }
 
         except Exception as e:
@@ -225,6 +234,7 @@ class DataCollector:
                     e.course_id,
                     e.completion_status,
                     e.progress_percentage,
+                    e.completed_at,
                     e.created_at            AS enrolled_at,
                     c.course_name,
                     c.description           AS description,
@@ -242,7 +252,12 @@ class DataCollector:
                     "description":   r.get("description") or "",
                     "category":      r.get("category") or "",
                     "status":        r.get("completion_status") or "",
-                    "progress":      float(r["progress_percentage"]) if r.get("progress_percentage") is not None else 0.0,
+                    # Both key spellings — template reads completion_status /
+                    # progress_percentage; older code reads status / progress.
+                    "completion_status":   r.get("completion_status") or "",
+                    "progress":            float(r["progress_percentage"]) if r.get("progress_percentage") is not None else 0.0,
+                    "progress_percentage": float(r["progress_percentage"]) if r.get("progress_percentage") is not None else 0.0,
+                    "completed_at":  str(r.get("completed_at") or ""),
                     "enrolled_at":   str(r.get("enrolled_at") or ""),
                 }
                 for r in rows
@@ -615,12 +630,14 @@ class DataCollector:
                     "status":       sess.get("status") or "",
                     "current_stage": sess.get("current_stage") or "",
                     "completion":   sess.get("completion_type") or "",
-                    "duration_min": sess.get("duration_min") or 0,
+                    "duration_min":     sess.get("duration_min") or 0,
+                    "duration_minutes": sess.get("duration_min") or 0,  # template key
                     "answer_count": cnt or sess.get("answer_count") or 0,
                     "score":        score,
                     "percentage":   score,
                     "max_score":    100,
                     "completed_at": str(sess.get("ended_at") or ""),
+                    "submitted_at": str(sess.get("ended_at") or sess.get("started_at") or ""),  # template key
                     "created_at":   str(sess.get("started_at") or ""),
                 })
             items.sort(key=lambda x: (x["score"] or 0), reverse=True)
@@ -842,6 +859,58 @@ class DataCollector:
     # PERFORMANCE SNAPSHOT — 8 axes with FAIR AVERAGE
     # =====================================================================
 
+    # LOCKED AGGREGATION RULE (user-confirmed, Jul 2026):
+    #   1. Per axis: dedupe to the BEST attempt per item (a retried mock
+    #      test counts once, at its highest score), then average those
+    #      best attempts across the category.
+    #   2. Overall Average Score: sum of all 8 axis values ÷ 8, with an
+    #      empty/no-data axis counting as 0. The score doubles as a
+    #      programme-completion signal — locked product decision.
+
+    @staticmethod
+    def _dedupe_best(items: list, *key_fields: str) -> list:
+        """One row per item: group by the first present key field
+        (id-based key preferred, title fallback), keep the highest-scored
+        row, and annotate it with attempt_count."""
+        if not items:
+            return []
+        best: Dict[Any, Dict] = {}
+        order: List[Any] = []
+        for row in items:
+            key = None
+            for f in key_fields:
+                v = row.get(f)
+                if v not in (None, ""):
+                    key = (f, str(v).strip().lower())
+                    break
+            if key is None:
+                key = ("__row__", id(row))
+            try:
+                sc = float(row.get("score")) if row.get("score") is not None else None
+            except (TypeError, ValueError):
+                sc = None
+            if key not in best:
+                entry = dict(row)
+                entry["attempt_count"] = 1
+                entry["_best"] = sc
+                best[key] = entry
+                order.append(key)
+            else:
+                cur = best[key]
+                cur["attempt_count"] += 1
+                if sc is not None and (cur["_best"] is None or sc > cur["_best"]):
+                    n = cur["attempt_count"]
+                    entry = dict(row)
+                    entry["attempt_count"] = n
+                    entry["_best"] = sc
+                    best[key] = entry
+        out = [best[k] for k in order]
+        for r in out:
+            r.pop("_best", None)
+        out.sort(key=lambda r: (r.get("score") is not None,
+                                float(r.get("score") or 0)), reverse=True)
+        return out
+
     def _compute_snapshot(self, **sections) -> Dict[str, Any]:
         def _axis_avg(items: list) -> Optional[float]:
             if not items:
@@ -854,26 +923,36 @@ class DataCollector:
             except Exception:
                 return None
 
+        # Best attempt per item FIRST, then average per category.
+        assignments = self._dedupe_best(sections.get("assignments") or [], "assignment_id", "title")
+        case_studies = self._dedupe_best(sections.get("case_studies") or [], "case_study_id", "title")
+        capstones = self._dedupe_best(sections.get("capstones") or [], "capstone_id", "title")
+        industry = self._dedupe_best(sections.get("industry_sessions") or [], "session_id", "title")
+        mock_tests = self._dedupe_best(sections.get("mock_tests") or [], "test_id", "topic", "title")
+        mock_interviews = self._dedupe_best(sections.get("mock_interviews") or [], "session_id", "title")
+        assessments = self._dedupe_best(sections.get("assessments") or [], "quiz_id", "title")
+
         punct = sections.get("punctuality") or {}
         axes = {
-            "assignments":       _axis_avg(sections.get("assignments")       or []),
-            "case_studies":      _axis_avg(sections.get("case_studies")      or []),
-            "capstones":         _axis_avg(sections.get("capstones")         or []),
-            "industry_sessions": _axis_avg(sections.get("industry_sessions") or []),
-            "mock_tests":        _axis_avg(sections.get("mock_tests")        or []),
-            "mock_interviews":   _axis_avg(sections.get("mock_interviews")   or []),
-            "assessments":       _axis_avg(sections.get("assessments")       or []),
+            "assignments":       _axis_avg(assignments),
+            "case_studies":      _axis_avg(case_studies),
+            "capstones":         _axis_avg(capstones),
+            "industry_sessions": _axis_avg(industry),
+            "mock_tests":        _axis_avg(mock_tests),
+            "mock_interviews":   _axis_avg(mock_interviews),
+            "assessments":       _axis_avg(assessments),
             "punctuality":       punct.get("score") if punct.get("score") is not None else None,
         }
 
         active_values = [v for v in axes.values() if v is not None and v > 0]
-        fair_avg = round(sum(active_values) / len(active_values), 1) if active_values else None
+        # Locked rule: divide by all 8 axes; empty axis counts as 0.
+        overall_avg = round(sum(float(v or 0) for v in axes.values()) / 8.0, 1)
 
         return {
             "axes":              axes,
             "active_axis_count": len(active_values),
-            "fair_average":      fair_avg,
-            "average":           fair_avg,
+            "fair_average":      overall_avg,
+            "average":           overall_avg,
             "axis_labels": {
                 "assignments":       "Assignments",
                 "case_studies":      "Case Studies",
@@ -886,6 +965,72 @@ class DataCollector:
             },
             "punctuality_status": punct.get("status", "no_data"),
             "punctuality_band":   punct.get("band", ""),
+        }
+
+    # =====================================================================
+    # COMPUTED METRICS
+    # =====================================================================
+    # Downstream consumers (orchestrator._performance, _testgen, DataMerger
+    # top_subjects skills path, routes richness guards) read these keys.
+    # v6.3 never produced them — everything read 0. v6.4 computes them.
+
+    def _compute_metrics(self, user_id: int, snapshot: Dict, *,
+                         courses, mock_tests, assessments, case_studies,
+                         assignments, capstones, industry_sessions,
+                         mock_interviews) -> Dict[str, Any]:
+        def _f(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        best_tests = self._dedupe_best(mock_tests, "test_id", "topic", "title")
+        test_scores = [_f(t.get("score")) for t in best_tests]
+        test_scores = [s for s in test_scores if s is not None]
+
+        # top_subjects: best score per topic (feeds LMS-verified skills)
+        by_topic: Dict[str, float] = {}
+        for t in best_tests:
+            topic = (t.get("topic") or "").strip()
+            sc = _f(t.get("score"))
+            if topic and sc is not None:
+                if topic not in by_topic or sc > by_topic[topic]:
+                    by_topic[topic] = sc
+        top_subjects = sorted(
+            [(k, round(v, 1)) for k, v in by_topic.items()],
+            key=lambda x: x[1], reverse=True,
+        )[:8]
+
+        completed_courses = sum(
+            1 for c in courses
+            if (c.get("completion_status") or c.get("status") or "").lower() == "completed"
+            or float(c.get("progress_percentage") or c.get("progress") or 0) >= 100
+        )
+
+        axes = snapshot.get("axes", {}) or {}
+        avg_case = _f(axes.get("case_studies"))
+        avg_quiz = _f(axes.get("assessments"))
+
+        return {
+            "user_id":            user_id,
+            "total_case_studies": len(case_studies),
+            "total_assignments":  len(assignments),
+            "total_capstones":    len(capstones),
+            "total_industry":     len(industry_sessions),
+            "total_mock_tests":   len(mock_tests),
+            "total_interviews":   len(mock_interviews),
+            "total_assessments":  len(assessments),
+            # Metrics the rest of the pipeline reads:
+            "overall_score":        snapshot.get("average") or 0,
+            "best_test_score":      round(max(test_scores), 1) if test_scores else 0,
+            "avg_test_score":       round(sum(test_scores) / len(test_scores), 1) if test_scores else 0,
+            "avg_case_study_score": avg_case or 0,
+            "avg_quiz_score":       avg_quiz or 0,
+            "total_tests":          len(best_tests),
+            "total_quizzes":        len(assessments),
+            "total_courses":        len(courses),
+            "completed_courses":    completed_courses,
+            "top_subjects":         top_subjects,
         }
 
     # =====================================================================
@@ -983,6 +1128,6 @@ class DataCollector:
             },
         }
 
-    def _safe_default_list(self, exc):
+    def _safe_default(self, exc, default):
         logger.warning(f"Collector task failed: {exc}")
-        return []
+        return default

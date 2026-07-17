@@ -2,7 +2,7 @@
 Profile Renderer v12
 ═══════════════════════
 Matches profile_template.html v12 — the full magazine-style Upskillize AI Profile
-with command-bar deep-linking (goToPerf) and ten internal performance tabs.
+with command-bar deep-linking (goToPerf) and eleven internal performance tabs.
 
 Adds over v11:
   • Pass-through for mock_interviews / mock_tests / industry_sessions / hackathons
@@ -90,20 +90,63 @@ def _profanity_check(text: str) -> str:
     return cleaned
 
 
-def _best_scores(scores: List[Dict]) -> List[Dict]:
-    if not scores:
-        return []
-    best = {}
-    for s in scores:
-        key = (s.get("subject") or s.get("topic") or s.get("course_name") or "General").strip().lower()
-        v = s.get("percentage") or s.get("score") or 0
+# ═══════════════════════════════════════════
+# LOCKED AGGREGATION RULE (user-confirmed, Jul 2026)
+#   Axis value   = average of the BEST attempt per item in that category.
+#   Average      = sum of all 8 axis values ÷ 8 (empty axis counts as 0).
+#   Tab rankings = best attempt per item, top 5 shown (courses: all).
+# ═══════════════════════════════════════════
+
+_SCORE_KEYS = ("rubric_pct", "ai_score", "faculty_score", "percentage",
+               "score", "overall_score")
+
+
+def _row_score(row: Dict) -> float:
+    """Best-available numeric score for a row, or None."""
+    for k in _SCORE_KEYS:
+        v = row.get(k)
+        if v is None:
+            continue
         try:
-            v = float(v)
+            return float(v)
         except (TypeError, ValueError):
-            v = 0
-        if key not in best or v > best[key].get("_v", 0):
-            entry = dict(s); entry["_v"] = v; best[key] = entry
-    out = sorted(best.values(), key=lambda x: x.get("_v", 0), reverse=True)
+            continue
+    return None
+
+
+def _dedupe_best_rows(rows: List[Dict], *key_fields: str) -> List[Dict]:
+    """One entry per item: group by the first present key field (prefer a
+    real id, fall back to title), keep the highest-scored attempt, annotate
+    attempt_count, and sort best-first (unscored rows sink to the bottom)."""
+    if not rows:
+        return []
+    best, order = {}, []
+    for row in rows:
+        key = None
+        for f in key_fields:
+            v = row.get(f)
+            if v not in (None, ""):
+                key = (f, str(v).strip().lower())
+                break
+        if key is None:
+            key = ("__row__", id(row))
+        sc = _row_score(row)
+        if key not in best:
+            entry = dict(row)
+            entry["attempt_count"] = 1
+            entry["_v"] = sc
+            best[key] = entry
+            order.append(key)
+        else:
+            cur = best[key]
+            n = cur["attempt_count"] + 1
+            if sc is not None and (cur["_v"] is None or sc > cur["_v"]):
+                entry = dict(row)
+                entry["_v"] = sc
+                best[key] = entry
+            best[key]["attempt_count"] = n
+    out = [best[k] for k in order]
+    out.sort(key=lambda r: (r["_v"] is not None, r["_v"] or 0), reverse=True)
     for r in out:
         r.pop("_v", None)
     return out
@@ -162,14 +205,19 @@ def _avg_pct(items: List[Dict], *keys: str) -> float:
 
 
 def _compute_perf_snapshot(student_data: Dict, profile_data: Dict, computed: Dict) -> Dict[str, Any]:
-    assignments     = student_data.get("assignments", []) or []
-    assessments     = student_data.get("assessments", []) or []
-    test_scores     = student_data.get("test_scores", []) or []
-    case_studies    = student_data.get("case_studies", []) or []
-    capstones       = student_data.get("capstone_projects", []) or []
-    mock_tests      = student_data.get("mock_tests", []) or student_data.get("quiz_scores", []) or []
-    mock_interviews = student_data.get("mock_interviews", []) or []
-    industry        = student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or []
+    # Best attempt per item FIRST (locked rule) — a retried mock test
+    # counts once at its highest score, never averaged across attempts.
+    assignments     = _dedupe_best_rows(student_data.get("assignments", []) or [], "assignment_id", "title")
+    test_scores     = _dedupe_best_rows(student_data.get("test_scores", []) or [], "quiz_id", "title")
+    case_studies    = _dedupe_best_rows(student_data.get("case_studies", []) or [], "case_study_id", "title")
+    capstones       = _dedupe_best_rows(student_data.get("capstone_projects", []) or [], "capstone_id", "title")
+    mock_tests      = _dedupe_best_rows(
+        (student_data.get("mock_tests", []) or student_data.get("quiz_scores", []) or []),
+        "test_id", "topic", "title")
+    mock_interviews = _dedupe_best_rows(student_data.get("mock_interviews", []) or [], "session_id", "title")
+    industry        = _dedupe_best_rows(
+        (student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or []),
+        "session_id", "title")
     punctuality     = student_data.get("punctuality", {}) or {}
 
     punct_score = punctuality.get("score")
@@ -212,29 +260,45 @@ def _compute_perf_snapshot(student_data: Dict, profile_data: Dict, computed: Dic
                          "vx": vx, "vy": vy, "ex": ex, "ey": ey, "lx": lx, "ly": ly})
         poly.append(f"{vx},{vy}")
 
-    nz = [a["score"] for a in axes_out if a["score"] > 0]
-    avg = int(round(sum(nz) / len(nz))) if nz else 0
+    # Locked rule: overall average divides by ALL 8 axes; an empty axis
+    # counts as 0. The score doubles as a programme-completion signal.
+    avg = int(round(sum(a["score"] for a in axes_out) / float(n)))
+
+    # Guide rings generated for the real axis count — the old template had
+    # hardcoded 7-sided rings behind 8 axes, which skewed the radar.
+    rings = []
+    for frac in (0.25, 0.50, 0.75, 1.00):
+        pts = []
+        for i in range(n):
+            a = math.radians(-90 + i * (360.0 / n))
+            pts.append(f"{round(cx + math.cos(a) * max_r * frac, 1)},"
+                       f"{round(cy + math.sin(a) * max_r * frac, 1)}")
+        rings.append(" ".join(pts))
+
     return {"axes": axes_out, "polygon_points": " ".join(poly),
-            "average": avg, "cx": cx, "cy": cy}
+            "rings": rings, "average": avg, "cx": cx, "cy": cy,
+            # Punctuality tab reads these (band pill + coming-soon switch)
+            "punctuality_band":   punctuality.get("band") or "",
+            "punctuality_status": punctuality.get("status") or "no_data"}
 
 
 # ═══════════════════════════════════════════
 # Activity counts (command bar chips)
 # ═══════════════════════════════════════════
 
-def _compute_activity_counts(student_data: Dict, profile_data: Dict, computed: Dict,
-                              combined_assessments: List[Dict]) -> Dict[str, Any]:
-    """Counts must match what the corresponding template panel renders, line-for-line."""
-    courses = student_data.get("courses", []) or []
+def _compute_activity_counts(student_data: Dict, ranked: Dict[str, List[Dict]]) -> Dict[str, Any]:
+    """Counts must match what the corresponding template panel represents:
+    DISTINCT items (post best-attempt dedup), not raw attempt rows. '24 mock
+    tests' when the student retried 3 tests 8 times each reads as wrong data."""
     return {
-        "enrolled_courses": len(courses),
-        "capstones":        len(student_data.get("capstone_projects", []) or []),
-        "case_studies":     len(student_data.get("case_studies", []) or []),
-        "assignments":      len(student_data.get("assignments", []) or []),
-        "assessments":      len(combined_assessments),
-        "mock_interviews":  len(student_data.get("mock_interviews", []) or []),
-        "mock_tests":       len(student_data.get("mock_tests", []) or []),
-        "industry":         len(student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or []),
+        "enrolled_courses": len(student_data.get("courses", []) or []),
+        "capstones":        len(ranked["capstones"]),
+        "case_studies":     len(ranked["case_studies"]),
+        "assignments":      len(ranked["assignments"]),
+        "assessments":      len(ranked["assessments"]),
+        "mock_interviews":  len(ranked["mock_interviews"]),
+        "mock_tests":       len(ranked["mock_tests"]),
+        "industry":         len(ranked["industry"]),
         "hackathons":       len(student_data.get("hackathons", []) or []),
     }
 
@@ -259,7 +323,8 @@ def _combine_assessments(student_data: Dict) -> List[Dict]:
             except (TypeError, ValueError, ZeroDivisionError):
                 pct = 0
         rows.append({
-            "title":       t.get("subject") or t.get("exam_name") or "Assessment",
+            "quiz_id":     t.get("quiz_id"),
+            "title":       t.get("subject") or t.get("exam_name") or t.get("title") or "Assessment",
             "course_name": t.get("course_name") or "",
             "topic":       t.get("topic") or "",
             "submitted_at": str(t.get("submitted_at") or t.get("exam_date") or ""),
@@ -280,6 +345,7 @@ def _combine_assessments(student_data: Dict) -> List[Dict]:
             except (TypeError, ValueError, ZeroDivisionError):
                 pct = 0
         rows.append({
+            "quiz_id":     q.get("quiz_id"),
             "title":       q.get("quiz_title") or q.get("title") or "Module Quiz",
             "course_name": q.get("course_name") or "",
             "topic":       "",
@@ -291,9 +357,10 @@ def _combine_assessments(student_data: Dict) -> List[Dict]:
             "kind":        "quiz",
         })
 
-    # Sort by percentage descending — best work surfaces first
-    rows.sort(key=lambda r: r["percentage"], reverse=True)
-    return rows
+    # Best attempt per quiz/exam (locked rule) — retakes collapse into one
+    # row at the highest score, annotated with attempt_count. Key on quiz_id
+    # first (two different quizzes may share a display title).
+    return _dedupe_best_rows(rows, "quiz_id", "title")
 
 
 # ═══════════════════════════════════════════
@@ -302,9 +369,19 @@ def _combine_assessments(student_data: Dict) -> List[Dict]:
 
 def _enrich_courses(student_data: Dict) -> List[Dict]:
     """Attach per-course quiz aggregates so each Enrolled Courses card can show
-    real progress detail — module count, quiz attempts, average quiz score."""
+    real progress detail — module count, quiz attempts, average quiz score.
+
+    v12.6 fixes:
+      • quiz stats now read from `assessments`/`test_scores` (real collector
+        keys) — the old `quiz_scores` key never existed, so stats were always 0.
+      • emits completion_status / progress_percentage aliases — the template
+        reads those names; the collector's older spelling was status/progress,
+        which made every course render as 0% "Enrolled".
+    """
     raw_courses = student_data.get("courses", []) or []
-    quiz_scores = student_data.get("quiz_scores", []) or []
+    quiz_scores = (student_data.get("assessments", [])
+                   or student_data.get("test_scores", [])
+                   or student_data.get("quiz_scores", []) or [])
 
     by_course: Dict[str, List[Dict]] = {}
     for q in quiz_scores:
@@ -315,6 +392,10 @@ def _enrich_courses(student_data: Dict) -> List[Dict]:
     out = []
     for c in raw_courses:
         course = dict(c)
+        if course.get("completion_status") is None and course.get("status") is not None:
+            course["completion_status"] = course["status"]
+        if course.get("progress_percentage") is None and course.get("progress") is not None:
+            course["progress_percentage"] = course["progress"]
         cn = (course.get("course_name") or "").strip().lower()
         quizzes = by_course.get(cn, [])
         if quizzes:
@@ -356,8 +437,7 @@ def _compute_cohort_comparison(perf_snapshot: Dict, perf_data: Dict) -> List[Dic
         ("Capstone",          "capstone"),
         ("Mock Test",         "mock_test"),
         ("Mock Interview",    "interview"),
-        ("punctuality",  "PUNCTUALITY"), 
-        
+        ("Punctuality",       "punctuality"),
     ]
     axes_by_key = {a["key"]: a["score"] for a in perf_snapshot.get("axes", [])}
     rows = []
@@ -484,9 +564,6 @@ class ProfileRenderer:
 
         is_fresher = _detect_fresher(student_data, profile_data)
 
-        # Best-of slices
-        best_test_scores = _best_scores(student_data.get("test_scores", []) or [])
-
         # Cleaned projects
         cleaned_projects = []
         for proj in (profile_data.get("projects_data", []) or []):
@@ -502,9 +579,23 @@ class ProfileRenderer:
         combined_assessments = _combine_assessments(student_data)
         enriched_courses     = _enrich_courses(student_data)
 
+        # v12.6: deduped, best-first lists for every Top Performance tab
+        # (locked rule — one row per item at its best attempt, top 5 shown)
+        ranked = {
+            "capstones":       _dedupe_best_rows(student_data.get("capstone_projects", []) or [], "capstone_id", "title"),
+            "case_studies":    _dedupe_best_rows(student_data.get("case_studies", []) or [], "case_study_id", "title"),
+            "assignments":     _dedupe_best_rows(student_data.get("assignments", []) or [], "assignment_id", "title"),
+            "assessments":     combined_assessments,   # already deduped
+            "mock_tests":      _dedupe_best_rows(student_data.get("mock_tests", []) or [], "test_id", "topic", "title"),
+            "mock_interviews": _dedupe_best_rows(student_data.get("mock_interviews", []) or [], "session_id", "title"),
+            "industry":        _dedupe_best_rows(
+                (student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or []),
+                "session_id", "title"),
+        }
+
         # Derivations
         perf_snapshot     = _compute_perf_snapshot(student_data, profile_data, computed)
-        activity_counts   = _compute_activity_counts(student_data, profile_data, computed, combined_assessments)
+        activity_counts   = _compute_activity_counts(student_data, ranked)
         cohort_comparison = _compute_cohort_comparison(perf_snapshot, profile_data.get("performance_data", {}) or {})
         mock_domains      = _compute_mock_domains(student_data, profile_data, perf_snapshot)
         achievement_cards = _compute_achievement_cards(student_data, profile_data)
@@ -564,15 +655,15 @@ class ProfileRenderer:
             "hobbies_data":    student_data.get("hobbies_data", []) or [],
             "languages_data":  student_data.get("languages_data", []) or personal.get("languages") or [],
 
-            # Top Performance — raw rows for all 10 internal tabs
+            # Top Performance — deduped best-first rows for all 11 internal tabs
             "courses_data":         enriched_courses,
-            "capstone_projects":    student_data.get("capstone_projects", []) or [],
-            "case_studies_raw":     student_data.get("case_studies", []) or [],
-            "assignments_raw":      student_data.get("assignments", []) or [],
+            "capstone_projects":    ranked["capstones"],
+            "case_studies_raw":     ranked["case_studies"],
+            "assignments_raw":      ranked["assignments"],
             "test_scores_raw":      combined_assessments,
-            "mock_interviews_raw":  student_data.get("mock_interviews", []) or [],
-            "mock_tests_raw":       student_data.get("mock_tests", []) or [],
-            "industry_sessions_raw": student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or [],
+            "mock_interviews_raw":  ranked["mock_interviews"],
+            "mock_tests_raw":       ranked["mock_tests"],
+            "industry_sessions_raw": ranked["industry"],
             "hackathons_raw":       student_data.get("hackathons", []) or [],
 
             # Personality / Achievements

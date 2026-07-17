@@ -341,6 +341,23 @@ section:last-of-type{border-bottom:none;}
 .powered-btn.primary:hover{background:var(--gold-bright);}
 .powered-btn.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,0.25);}
 .powered-btn.ghost:hover{background:rgba(255,255,255,0.06);}
+
+/* ── Punctuality panel card (v12.6) ── */
+.punct-card{padding:32px 24px;background:#FAF7F0;border:1px solid #EDE7D8;border-radius:12px;max-width:640px;margin:0 auto;}
+.punct-score-row{display:flex;align-items:baseline;gap:18px;padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid #EDE7D8;}
+.punct-score-num{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-weight:500;font-size:56px;color:#0B1628;line-height:1;}
+.punct-score-suffix{font-family:'DM Mono',ui-monospace,monospace;font-style:normal;font-size:20px;color:#94A3B8;font-weight:400;margin-left:4px;}
+.punct-score-band{font-family:'DM Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#0F6E56;font-weight:500;padding:6px 12px;background:#E1F5EE;border-radius:999px;}
+.punct-heading{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:16px;color:#0B1628;margin-bottom:12px;font-weight:500;}
+.punct-bullets{list-style:none;padding:0;margin:0;}
+.punct-bullets li{position:relative;padding:8px 0 8px 20px;font-size:14px;color:#475569;line-height:1.6;}
+.punct-bullets li::before{content:"";position:absolute;left:4px;top:15px;width:6px;height:6px;border-radius:50%;background:#C8992A;}
+/* Coming-soon variant */
+.punct-coming-soon{text-align:center;padding:8px;}
+.punct-cs-eyebrow{font-family:'DM Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#C8992A;margin-bottom:8px;font-weight:500;}
+.punct-cs-heading{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:28px;color:#0B1628;margin-bottom:12px;font-weight:500;}
+.punct-cs-lead{font-size:14px;color:#475569;line-height:1.65;max-width:480px;margin:0 auto 20px;}
+.punct-coming-soon .punct-bullets{max-width:440px;margin:0 auto;text-align:left;}
 footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px;text-align:center;font-size:11px;border-top:1px solid rgba(255,255,255,0.06);font-family:'DM Mono',monospace;letter-spacing:0.1em;}
 
 @media (max-width:1180px){
@@ -490,13 +507,11 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       </div>
       <div class="dna-svg-wrap">
         <svg class="dna-svg" viewBox="0 0 360 290" xmlns="http://www.w3.org/2000/svg">
-          <polygon class="dna-ring" points="180,120 199.5,129.4 204.4,150.5 190.8,167.5 169.2,167.5 155.6,150.5 160.5,129.4"/>
-          <polygon class="dna-ring" points="180,95 219.1,113.8 228.7,156.1 201.7,190 158.3,190 131.3,156.1 140.9,113.8"/>
-          <polygon class="dna-ring" points="180,70 238.6,98.2 253.1,161.7 212.5,212.6 147.5,212.6 106.9,161.7 121.4,98.2"/>
-          <polygon class="dna-ring outer" points="180,45 258.2,82.6 277.5,167.3 223.4,235.1 136.6,235.1 82.5,167.3 101.8,82.6"/>
+          {# v12.6 — rings generated for the real axis count (8), no longer hardcoded heptagons #}
+          {% for ring in perf_snapshot.rings %}<polygon class="dna-ring{% if loop.last %} outer{% endif %}" points="{{ ring }}"/>{% endfor %}
           {% for a in perf_snapshot.axes %}<line class="dna-axis" x1="{{ perf_snapshot.cx }}" y1="{{ perf_snapshot.cy }}" x2="{{ a.ex }}" y2="{{ a.ey }}"/>{% endfor %}
           <polygon class="dna-data" points="{{ perf_snapshot.polygon_points }}"/>
-          {% set axis_tab_map = {'assignment':'assignments','assessment':'assessments','mock_test':'mock-test','industry':'industry','interview':'mock-int','capstone':'capstones','case_study':'casestudies'} %}
+          {% set axis_tab_map = {'assignment':'assignments','assessment':'assessments','mock_test':'mock-test','industry':'industry','interview':'mock-int','capstone':'capstones','case_study':'casestudies','punctuality':'punctuality'} %}
           {% for a in perf_snapshot.axes %}
           <g class="dna-vertex" onclick="goToPerf('{{ axis_tab_map[a.key] }}')">
             <rect class="dna-vertex-bg" x="{{ a.lx - 36 }}" y="{{ a.ly - 20 }}" width="72" height="40" rx="6"/>
@@ -641,22 +656,26 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   </div>
 </section>
 
-<!-- ═══ 03 TOP PERFORMANCE (10 internal tabs) ═══ -->
+<!-- ═══ 03 TOP PERFORMANCE (11 internal tabs) ═══ -->
 <section id="performance">
   <div class="section-head">
     <div><span class="section-num">03 / Verified Performance</span><h2 class="section-title">Top Performance</h2></div>
     <span class="section-sub">Score · Course · Date</span>
   </div>
   <div class="section-rule"></div>
+  {# v12.6 — locked 11-tab order: Courses → Assignments → Case Studies → Assessments →
+     Mock Tests → Industry Sessions → Mock Interviews → Capstones → Punctuality →
+     Hackathon → Cohort #}
   <div class="itab-bar">
     <button class="itab-btn active" data-tab-group="perf" data-tab-id="courses" onclick="switchTab('perf','courses')">Enrolled Courses<span class="itab-count">{{ activity_counts.enrolled_courses or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="capstones" onclick="switchTab('perf','capstones')">Capstones<span class="itab-count">{{ activity_counts.capstones or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="casestudies" onclick="switchTab('perf','casestudies')">Case Studies<span class="itab-count">{{ activity_counts.case_studies or 0 }}</span></button>
     <button class="itab-btn" data-tab-group="perf" data-tab-id="assignments" onclick="switchTab('perf','assignments')">Assignments<span class="itab-count">{{ activity_counts.assignments or 0 }}</span></button>
+    <button class="itab-btn" data-tab-group="perf" data-tab-id="casestudies" onclick="switchTab('perf','casestudies')">Case Studies<span class="itab-count">{{ activity_counts.case_studies or 0 }}</span></button>
     <button class="itab-btn" data-tab-group="perf" data-tab-id="assessments" onclick="switchTab('perf','assessments')">Assessments<span class="itab-count">{{ activity_counts.assessments or 0 }}</span></button>
-    <button class="itab-btn" data-tab-group="perf" data-tab-id="mock-int" onclick="switchTab('perf','mock-int')">Mock Interviews<span class="itab-count">{{ activity_counts.mock_interviews or 0 }}</span></button>
     <button class="itab-btn" data-tab-group="perf" data-tab-id="mock-test" onclick="switchTab('perf','mock-test')">Mock Tests<span class="itab-count">{{ activity_counts.mock_tests or 0 }}</span></button>
     <button class="itab-btn" data-tab-group="perf" data-tab-id="industry" onclick="switchTab('perf','industry')">Industry Sessions<span class="itab-count">{{ activity_counts.industry or 0 }}</span></button>
+    <button class="itab-btn" data-tab-group="perf" data-tab-id="mock-int" onclick="switchTab('perf','mock-int')">Mock Interviews<span class="itab-count">{{ activity_counts.mock_interviews or 0 }}</span></button>
+    <button class="itab-btn" data-tab-group="perf" data-tab-id="capstones" onclick="switchTab('perf','capstones')">Capstones<span class="itab-count">{{ activity_counts.capstones or 0 }}</span></button>
+    <button class="itab-btn" data-tab-group="perf" data-tab-id="punctuality" onclick="switchTab('perf','punctuality')">Punctuality</button>
     <button class="itab-btn" data-tab-group="perf" data-tab-id="hack" onclick="switchTab('perf','hack')">Hackathons<span class="itab-count">{{ activity_counts.hackathons or 0 }}</span></button>
     <button class="itab-btn" data-tab-group="perf" data-tab-id="cohort" onclick="switchTab('perf','cohort')">Cohort</button>
   </div>
@@ -665,7 +684,8 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel active" data-tab-group="perf" data-tab-id="courses">
     {% if courses_data and courses_data|length > 0 %}
     <div class="perf-card">
-      {% for c in courses_data[:10] %}
+      {# v12.6 — ALL enrolled courses, no cap (locked rule) #}
+      {% for c in courses_data %}
       {% set cs = (c.completion_status or 'enrolled')|lower %}
       {% set pct = c.progress_percentage or 0 %}
       {# v12.5: derive a status from progress if completion_status is missing/ambiguous #}
@@ -699,11 +719,11 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="capstones">
     {% if capstone_projects and capstone_projects|length > 0 %}
     <div class="perf-card">
-      {% for cp in capstone_projects[:10] %}
+      {% for cp in capstone_projects[:5] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ cp.title or cp.project_name or 'Capstone' }}</div>
+          <div class="perf-name">{{ cp.title or cp.project_name or 'Capstone' }}{% if cp.attempt_count and cp.attempt_count > 1 %} <span class="perf-badge-mini">{{ cp.attempt_count }} attempts · best score</span>{% endif %}</div>
           <div class="perf-context">
             {% if cp.course_name %}<span>{{ cp.course_name }}</span>{% endif %}
             {% if cp.duration %} · {{ cp.duration }}{% endif %}
@@ -714,33 +734,20 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         {{ dual_score(cp.faculty_score or cp.grade, cp.ai_score or cp.rubric_pct, cp.max_score, 'Rubric AI') }}
       </div>
       {% endfor %}
-      {% if activity_counts.capstones > capstone_projects[:10]|length %}<div class="perf-more">+ {{ activity_counts.capstones - 10 }} More Capstones in Portfolio</div>{% endif %}
+      {% if capstone_projects|length > 5 %}<div class="perf-more">+ {{ capstone_projects|length - 5 }} More Capstones in Portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No capstones yet</b>Capstones unlock at the end of each Upskillize track.</div>{% endif %}
   </div>
 
-  {# ── Case Studies (v12.5 — deduped by title, best score only) ── #}
+  {# ── Case Studies (v12.6 — deduped best-first in renderer, top 5) ── #}
   <div class="itab-panel" data-tab-group="perf" data-tab-id="casestudies">
     {% if case_studies_raw and case_studies_raw|length > 0 %}
-    {# Dedupe by title — group, keep highest score #}
-    {% set ns = namespace(seen={}, best=[]) %}
-    {% for c in case_studies_raw %}
-      {% set t = (c.title or 'Case Study')|string %}
-      {% set sc = (c.ai_score or c.faculty_score or c.score or 0)|float(0) %}
-      {% if t not in ns.seen or sc > ns.seen[t].score %}
-        {% set _ = ns.seen.update({t: {'row': c, 'score': sc, 'count': (ns.seen[t].count + 1) if t in ns.seen else 1}}) %}
-      {% else %}
-        {% set _ = ns.seen.update({t: {'row': ns.seen[t].row, 'score': ns.seen[t].score, 'count': ns.seen[t].count + 1}}) %}
-      {% endif %}
-    {% endfor %}
-    {% set deduped = ns.seen.values()|sort(attribute='score', reverse=true)|list %}
     <div class="perf-card">
-      {% for entry in deduped[:10] %}
-      {% set c = entry.row %}
+      {% for c in case_studies_raw[:5] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ c.title or 'Case Study' }}{% if entry.count > 1 %} <span class="perf-badge-mini">{{ entry.count }} attempts · best score</span>{% endif %}</div>
+          <div class="perf-name">{{ c.title or 'Case Study' }}{% if c.attempt_count and c.attempt_count > 1 %} <span class="perf-badge-mini">{{ c.attempt_count }} attempts · best score</span>{% endif %}</div>
           <div class="perf-context">
             {% if c.course_name %}<span>{{ c.course_name }}</span>{% endif %}
             {% if c.module_name %} · {{ c.module_name }}{% endif %}
@@ -752,32 +759,20 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         {{ dual_score(c.faculty_score or c.score, c.ai_score, c.max_score, 'AiRev') }}
       </div>
       {% endfor %}
-      {% if deduped|length > 10 %}<div class="perf-more">+ {{ deduped|length - 10 }} more case studies in portfolio</div>{% endif %}
+      {% if case_studies_raw|length > 5 %}<div class="perf-more">+ {{ case_studies_raw|length - 5 }} more case studies in portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No case studies yet</b>AiRev-reviewed case studies appear here once submitted.</div>{% endif %}
   </div>
 
-  {# ── Assignments (v12.5 — deduped, best score) ── #}
+  {# ── Assignments (v12.6 — deduped best-first in renderer, top 5) ── #}
   <div class="itab-panel" data-tab-group="perf" data-tab-id="assignments">
     {% if assignments_raw and assignments_raw|length > 0 %}
-    {% set ns = namespace(seen={}) %}
-    {% for a in assignments_raw %}
-      {% set t = (a.title or 'Assignment')|string %}
-      {% set sc = (a.rubric_pct or a.ai_score or a.faculty_score or a.score or 0)|float(0) %}
-      {% if t not in ns.seen or sc > ns.seen[t].score %}
-        {% set _ = ns.seen.update({t: {'row': a, 'score': sc, 'count': (ns.seen[t].count + 1) if t in ns.seen else 1}}) %}
-      {% else %}
-        {% set _ = ns.seen.update({t: {'row': ns.seen[t].row, 'score': ns.seen[t].score, 'count': ns.seen[t].count + 1}}) %}
-      {% endif %}
-    {% endfor %}
-    {% set deduped = ns.seen.values()|sort(attribute='score', reverse=true)|list %}
     <div class="perf-card">
-      {% for entry in deduped[:10] %}
-      {% set a = entry.row %}
+      {% for a in assignments_raw[:5] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ a.title or 'Assignment' }}{% if entry.count > 1 %} <span class="perf-badge-mini">{{ entry.count }} attempts · best score</span>{% endif %}</div>
+          <div class="perf-name">{{ a.title or 'Assignment' }}{% if a.attempt_count and a.attempt_count > 1 %} <span class="perf-badge-mini">{{ a.attempt_count }} attempts · best score</span>{% endif %}</div>
           <div class="perf-context">
             {% if a.course_name %}<span>{{ a.course_name }}</span>{% endif %}
             {% if a.module_name %} · {{ a.module_name }}{% endif %}
@@ -788,7 +783,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         {{ dual_score(a.faculty_score, a.ai_score or a.rubric_pct, a.max_score, 'Rubric AI') }}
       </div>
       {% endfor %}
-      {% if deduped|length > 10 %}<div class="perf-more">+ {{ deduped|length - 10 }} more assignments in portfolio</div>{% endif %}
+      {% if assignments_raw|length > 5 %}<div class="perf-more">+ {{ assignments_raw|length - 5 }} more assignments in portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No graded assignments yet</b>Submit assignments on the LMS to populate this ranking.</div>{% endif %}
   </div>
@@ -797,12 +792,12 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="assessments">
     {% if test_scores_raw and test_scores_raw|length > 0 %}
     <div class="perf-card">
-      {% for t in test_scores_raw[:10] %}
+      {% for t in test_scores_raw[:5] %}
       {% set tp = t.percentage or 0 %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ t.title }}</div>
+          <div class="perf-name">{{ t.title }}{% if t.attempt_count and t.attempt_count > 1 %} <span class="perf-badge-mini">{{ t.attempt_count }} attempts · best score</span>{% endif %}</div>
           <div class="perf-context">
             {% if t.course_name %}<span>{{ t.course_name }}</span>{% endif %}
             {% if t.topic %} · {{ t.topic|capitalize }}{% endif %}
@@ -816,6 +811,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         </div>
       </div>
       {% endfor %}
+      {% if test_scores_raw|length > 5 %}<div class="perf-more">+ {{ test_scores_raw|length - 5 }} more assessments in portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No assessments yet</b>Take module assessments or quizzes on the LMS — both formal exams and module checkpoints appear here.</div>{% endif %}
   </div>
@@ -824,20 +820,23 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="mock-int">
     {% if mock_interviews_raw and mock_interviews_raw|length > 0 %}
     <div class="perf-card">
-      {% for m in mock_interviews_raw[:10] %}
+      {% for m in mock_interviews_raw[:5] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ m.title or m.topic or 'Mock Interview' }}</div>
+          <div class="perf-name">{{ m.title or m.topic or 'Mock Interview' }}{% if m.attempt_count and m.attempt_count > 1 %} <span class="perf-badge-mini">{{ m.attempt_count }} attempts · best score</span>{% endif %}</div>
           <div class="perf-context">
-            {% if m.duration_minutes %}<span>{{ m.duration_minutes }} min</span>{% elif m.duration %}<span>{{ m.duration }}</span>{% endif %}
+            {% if m.duration_minutes %}<span>{{ m.duration_minutes }} min</span>{% elif m.duration_min %}<span>{{ m.duration_min }} min</span>{% elif m.duration %}<span>{{ m.duration }}</span>{% endif %}
+            {% if m.role %} · {{ m.role }}{% endif %}
+            {% if m.round %} · {{ m.round }}{% endif %}
             {% if m.interviewer %} · {{ m.interviewer }}{% endif %}
-            {% if m.submitted_at %} · {{ fmt_date(m.submitted_at) }}{% elif m.scheduled_at %} · {{ fmt_date(m.scheduled_at) }}{% endif %}
+            {% if m.submitted_at %} · {{ fmt_date(m.submitted_at) }}{% elif m.completed_at %} · {{ fmt_date(m.completed_at) }}{% elif m.scheduled_at %} · {{ fmt_date(m.scheduled_at) }}{% endif %}
           </div>
         </div>
         {{ dual_score(m.faculty_score or m.faculty_score_alt or m.score or m.overall_score, m.ai_score, 100, 'InterviewIQ') }}
       </div>
       {% endfor %}
+      {% if mock_interviews_raw|length > 5 %}<div class="perf-more">+ {{ mock_interviews_raw|length - 5 }} more mock interviews in portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No mock interviews yet</b>Mock interviews with industry mentors via InterviewIQ appear here once completed.</div>{% endif %}
   </div>
@@ -846,12 +845,12 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="mock-test">
     {% if mock_tests_raw and mock_tests_raw|length > 0 %}
     <div class="perf-card">
-      {% for t in mock_tests_raw[:10] %}
+      {% for t in mock_tests_raw[:5] %}
       {% set tp = t.percentage if t.percentage is not none else ((t.score/t.total_marks*100) if t.total_marks and t.total_marks > 0 else (t.score or 0)) %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ t.title or t.test_name or t.exam_name or 'TestGen Practice' }}</div>
+          <div class="perf-name">{{ t.title or t.test_name or t.exam_name or 'TestGen Practice' }}{% if t.attempt_count and t.attempt_count > 1 %} <span class="perf-badge-mini">{{ t.attempt_count }} attempts · best score</span>{% endif %}</div>
           <div class="perf-context">
             {% if t.course_name %}<span>{{ t.course_name }}</span>{% endif %}
             {% if t.test_type %} · {{ t.test_type|capitalize }}{% else %} · TestGen{% endif %}
@@ -865,6 +864,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         </div>
       </div>
       {% endfor %}
+      {% if mock_tests_raw|length > 5 %}<div class="perf-more">+ {{ mock_tests_raw|length - 5 }} more mock tests in portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No mock tests yet</b>TestGen-powered timed practice tests appear here once attempted.</div>{% endif %}
   </div>
@@ -873,25 +873,70 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="industry">
     {% if industry_sessions_raw and industry_sessions_raw|length > 0 %}
     <div class="perf-card">
-      {% for s in industry_sessions_raw[:10] %}
+      {% for s in industry_sessions_raw[:5] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ s.title or 'Industry Session' }}</div>
-          <div class="perf-context">{% if s.speaker %}<span>{{ s.speaker }}</span>{% endif %}{% if s.duration %} · {{ s.duration }}{% endif %}{% if s.held_at %} · {{ s.held_at }}{% endif %}</div>
+          <div class="perf-name">{{ s.title or 'Industry Session' }}{% if s.attempt_count and s.attempt_count > 1 %} <span class="perf-badge-mini">{{ s.attempt_count }} attempts · best score</span>{% endif %}</div>
+          <div class="perf-context">{% if s.speaker %}<span>{{ s.speaker }}</span>{% endif %}{% if s.company %} · {{ s.company }}{% endif %}{% if s.duration %} · {{ s.duration }}{% endif %}{% if s.held_at %} · {{ fmt_date(s.held_at) }}{% endif %}</div>
         </div>
+        {# v12.6 — show the real submission score when present; LIVE badge only when unscored #}
+        {% if s.score is not none %}
+        <div>
+          <div class="perf-score">{{ s.score|int }}<span class="perf-score-pct">%</span></div>
+          <div class="perf-score-meta">{% if s.band %}{{ s.band }}{% elif s.grade %}Grade {{ s.grade }}{% else %}Scored{% endif %}</div>
+        </div>
+        {% else %}
         <div><div class="perf-score live">LIVE</div><div class="perf-score-meta">Attended</div></div>
+        {% endif %}
       </div>
       {% endfor %}
+      {% if industry_sessions_raw|length > 5 %}<div class="perf-more">+ {{ industry_sessions_raw|length - 5 }} more industry sessions in portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No industry sessions logged</b>Live mentor masterclasses attended via Upskillize appear here.</div>{% endif %}
+  </div>
+
+  {# ── Punctuality (v12.6 — 9th tab; score card or coming-soon) ── #}
+  <div class="itab-panel" data-tab-group="perf" data-tab-id="punctuality">
+    {% set _pct = perf_snapshot.axes | selectattr('key', 'equalto', 'punctuality') | first %}
+    {% set _pct_score = _pct.score if _pct else None %}
+    {% set _pct_band = perf_snapshot.punctuality_band or '' %}
+    <div class="punct-card">
+      {% if _pct_score and _pct_score > 0 %}
+      {# ─── Data available: score + band, then bullets ─── #}
+      <div class="punct-score-row">
+        <div class="punct-score-num">{{ _pct_score | int }}<span class="punct-score-suffix">/100</span></div>
+        {% if _pct_band %}<div class="punct-score-band">{{ _pct_band }}</div>{% endif %}
+      </div>
+      <div class="punct-heading">Your Punctuality Score reflects:</div>
+      <ul class="punct-bullets">
+        <li>Reliability in attending live sessions</li>
+        <li>Consistency in submitting work by deadlines</li>
+        <li>Timeliness in responding to session commitments</li>
+        <li>Recent behavior weighted more than older activity</li>
+      </ul>
+      {% else %}
+      {# ─── No data: same bullets with Coming Soon framing ─── #}
+      <div class="punct-coming-soon">
+        <div class="punct-cs-eyebrow">Coming Soon</div>
+        <div class="punct-cs-heading">Punctuality Score</div>
+        <p class="punct-cs-lead">Once your first month of activity is captured, your score will reflect:</p>
+        <ul class="punct-bullets">
+          <li>Reliability in attending live sessions</li>
+          <li>Consistency in submitting work by deadlines</li>
+          <li>Timeliness in responding to session commitments</li>
+          <li>Recent behavior weighted more than older activity</li>
+        </ul>
+      </div>
+      {% endif %}
+    </div>
   </div>
 
   {# ── Hackathons ── #}
   <div class="itab-panel" data-tab-group="perf" data-tab-id="hack">
     {% if hackathons_raw and hackathons_raw|length > 0 %}
     <div class="perf-card">
-      {% for h in hackathons_raw[:10] %}
+      {% for h in hackathons_raw[:5] %}
       {% set rank = h.rank or h.placement %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
@@ -1161,7 +1206,11 @@ function switchTab(group, id){
 }
 
 function goToPerf(tabId){
-  switchTab('perf', tabId);
+  // Guard: only switch if the target panel exists — switching to an unknown
+  // id would deactivate every panel and blank the whole section.
+  if (tabId && document.querySelector(`[data-tab-group="perf"][data-tab-id="${tabId}"]`)) {
+    switchTab('perf', tabId);
+  }
   document.getElementById('performance').scrollIntoView({behavior:'smooth', block:'start'});
 }
 </script>
