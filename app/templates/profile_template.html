@@ -1077,6 +1077,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         <div><span class="ach-score">{{ ac.score }}{% if ac.score_pct %}<span class="ach-score-pct">{{ ac.score_pct }}</span>{% endif %}</span></div>
         <h3 class="ach-title">{{ ac.title }}</h3>
         {% if ac.meta %}<p class="ach-meta">{{ ac.meta }}</p>{% endif %}
+        {% if ac.description %}<p class="ach-desc" style="font-size:11.5px;color:rgba(255,255,255,0.82);margin-top:8px;position:relative;line-height:1.5;">{{ ac.description|trim }}</p>{% endif %}
       </div>
       {% endfor %}
     </div>
@@ -1091,6 +1092,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         <div>
           <div class="cert-name">{{ cert.certificate_name or cert.name or 'Certificate' }}{% if (cert.completion_pct and (cert.completion_pct|int) >= 100) or cert.upskillize_verified %}<span class="verified-badge">✓ Upskillize Verified</span>{% endif %}</div>
           {% if cert.course_name %}<div class="cert-issuer">{{ cert.course_name }}{% if cert.score %} · Score {{ cert.score }}%{% endif %}</div>{% elif cert.issuer %}<div class="cert-issuer">{{ cert.issuer }}</div>{% endif %}
+          {% if cert.description %}<div class="cert-desc" style="font-size:12px;color:var(--ink-soft);margin-top:6px;line-height:1.5;">{{ cert.description|trim }}</div>{% endif %}
         </div>
         {% if cert.issued_at %}<div class="cert-year">{{ cert.issued_at }}</div>{% endif %}
       </div>
@@ -1113,7 +1115,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         <div class="psych-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
         <div>
           <div class="psych-type">{{ personality_data.personality_type if has_personality else 'Psychometric Pending' }}</div>
-          <div class="psych-def">{% if has_personality and personality_data.traits %}{{ personality_data.traits|trim }}{% else %}Complete the psychometric test on the LMS to unlock this card.{% endif %}</div>
+          <div class="psych-def">{% if personality_data.description %}{{ personality_data.description|trim }}{% elif has_personality and personality_data.traits %}{{ personality_data.traits|trim }}{% else %}Complete the psychometric test on the LMS to unlock this card.{% endif %}</div>
         </div>
       </div>
       {% if has_personality %}
@@ -1139,14 +1141,20 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         <div class="hobby-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
         <div class="hobby-title">Interests &amp; Hobbies</div>
       </div>
-      {% if has_hobbies %}
+      {% if hobby_cards and hobby_cards|length > 0 %}
       <div class="hobby-tags">
-        {% set hns = namespace(seen=[]) %}{% for h in hobbies_data %}{% set hh = (h|string|trim) %}{% if hh|length > 1 and hh|lower not in JUNK and hh|lower not in hns.seen %}{% set _ = hns.seen.append(hh|lower) %}<span class="hobby-tag">{{ hh }}</span>{% endif %}{% endfor %}
+        {% for h in hobby_cards %}{% if h.name %}<span class="hobby-tag">{{ h.name }}</span>{% endif %}{% endfor %}
       </div>
+      {% set hln = namespace(any=false) %}{% for h in hobby_cards %}{% if h.line %}{% set hln.any = true %}{% endif %}{% endfor %}
+      {% if hln.any %}
+      <div class="hobby-lines" style="margin-top:14px;display:flex;flex-direction:column;gap:9px;">
+        {% for h in hobby_cards %}{% if h.line %}<div style="font-size:12.5px;color:var(--ink-soft);line-height:1.55;"><strong style="color:var(--ink);">{{ h.name }}</strong> — {{ h.line|trim }}</div>{% endif %}{% endfor %}
+      </div>
+      {% endif %}
       {% else %}<p style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;">Add hobbies on your LMS profile.</p>{% endif %}
       <div class="hobby-aside">
         {% if languages_data and languages_data|length > 0 %}<strong>Languages:</strong> {{ languages_data | join(' · ') }}<br>{% endif %}
-        {% if personal_career_goals and (personal_career_goals|trim)|length > 5 %}<strong>Career Goals:</strong> {{ personal_career_goals|trim }}{% endif %}
+        {% if career_goal_line %}<strong>Career Goals:</strong> {{ career_goal_line|trim }}{% elif personal_career_goals and (personal_career_goals|trim)|length > 5 %}<strong>Career Goals:</strong> {{ personal_career_goals|trim }}{% endif %}
       </div>
     </div>
   </div>

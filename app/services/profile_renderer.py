@@ -687,6 +687,47 @@ class ProfileRenderer:
         achievement_cards = _compute_achievement_cards(student_data, profile_data)
         generated_date    = datetime.now(timezone.utc).strftime("%d %b %Y").upper()
 
+        # ── v13: personalized descriptions (from the AI polish call, with a
+        # deterministic fallback already applied upstream). ──
+        beyond_work = profile_data.get("beyond_work", {}) or {}
+
+        # Personality / Integrity card: attach the interview-ready line so the
+        # card NEVER shows the false "complete the psychometric test" lock when
+        # a personality type actually exists.
+        personality_data = dict(profile_data.get("personality_data", {}) or {})
+        if beyond_work.get("personality_line"):
+            personality_data["description"] = beyond_work["personality_line"]
+
+        # Hobby cards: [{name, line}]. Prefer AI/fallback cards; else derive
+        # bare title-cased chips from the raw hobbies so the section still shows.
+        hobby_cards = beyond_work.get("hobby_cards") or []
+        if not hobby_cards:
+            from app.agents.ai_polisher import _title_case_hobby
+            seen_h = set()
+            for h in _split_listfield(personal.get("hobbies", "")):
+                nm = _title_case_hobby(h)
+                if nm and nm.lower() not in seen_h:
+                    seen_h.add(nm.lower())
+                    hobby_cards.append({"name": nm, "line": ""})
+        career_goal_line = beyond_work.get("career_goal_line", "") or ""
+
+        # Certifications: attach a description line by (case-insensitive) name.
+        cert_desc = profile_data.get("cert_descriptions", {}) or {}
+        certifications_data = []
+        for c in (profile_data.get("certifications_data", []) or []):
+            c2 = dict(c)
+            key = (c.get("certificate_name") or c.get("name") or "").strip().lower()
+            if key and cert_desc.get(key):
+                c2["description"] = cert_desc[key]
+            certifications_data.append(c2)
+
+        # Achievements: attach a description line by (case-insensitive) title.
+        achv_desc = profile_data.get("achievement_descriptions", {}) or {}
+        for ac in achievement_cards:
+            key = (ac.get("title") or "").strip().lower()
+            if key and achv_desc.get(key):
+                ac["description"] = achv_desc[key]
+
         # Cohort headline (rank + percentile)
         perf = profile_data.get("performance_data", {}) or {}
         cohort_rank = perf.get("cohort_rank")
@@ -760,9 +801,11 @@ class ProfileRenderer:
             "hackathons_raw":       student_data.get("hackathons", []) or [],
 
             # Personality / Achievements
-            "personality_data":    profile_data.get("personality_data", {}) or {},
-            "certifications_data": profile_data.get("certifications_data", []) or [],
+            "personality_data":    personality_data,
+            "certifications_data": certifications_data,
             "achievement_cards":   achievement_cards,
+            "hobby_cards":         hobby_cards,
+            "career_goal_line":    career_goal_line,
 
             # Cohort + readiness
             "cohort_comparison": cohort_comparison,

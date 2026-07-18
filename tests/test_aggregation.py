@@ -597,3 +597,103 @@ def test_profile_response_includes_student_name():
     assert resp["student_name"] == "Andrew Carter"
     assert resp["visible_to_corporates"] is True
     assert resp["share_url"] is None
+
+
+# ═══════════════════════════════════════════════════════════════════
+# v13 — Personalized descriptions + 2-role hero headline (Beyond Work,
+# certifications, achievements). Locks the fixes the user requested:
+#   • hobby chips title-cased ("watching movie." → "Watching Movies")
+#   • same hobby → DIFFERENT line per student (variety seed)
+#   • Integrity card never shows the false "locked" message when a
+#     personality type exists
+#   • hero headline = exactly two roles (BFSI + real profession)
+# ═══════════════════════════════════════════════════════════════════
+
+class TestBeyondWorkDescriptions:
+    def test_hobby_title_case(self):
+        from app.agents.ai_polisher import _title_case_hobby
+        assert _title_case_hobby("watching movie.") == "Watching Movies"
+        assert _title_case_hobby("reading") == "Reading"
+        assert _title_case_hobby("  playing cricket ") == "Playing Cricket"
+        assert _title_case_hobby("") == ""
+
+    def test_same_hobby_different_line_per_student(self):
+        from app.agents.ai_polisher import _fallback_beyond_work, _variety_seed
+        a = _fallback_beyond_work("Ranjana Kumari", ["Reading"], "SDE",
+                                  "Integrity", "", _variety_seed("Ranjana Kumari", 52))
+        b = _fallback_beyond_work("Amit Sharma", ["Reading"], "Analyst",
+                                  "Adaptability", "", _variety_seed("Amit Sharma", 77))
+        assert a["hobby_cards"][0]["line"] != b["hobby_cards"][0]["line"]
+        assert a["hobby_cards"][0]["line"].strip()
+
+    def test_personality_line_present_when_type_exists(self):
+        from app.agents.ai_polisher import _fallback_beyond_work, _variety_seed
+        bw = _fallback_beyond_work("Ranjana", [], "", "Integrity", "",
+                                   _variety_seed("Ranjana", 1))
+        assert bw["personality_line"].strip()
+        # correct article
+        assert "an Integrity" in bw["personality_line"]
+
+    def test_cert_and_achievement_fallback_lines(self):
+        from app.agents.ai_polisher import _fallback_cert_line, _fallback_achv_line
+        assert "Naresh" in _fallback_cert_line("Full Stack Python", "Naresh i Technologies")
+        assert _fallback_achv_line("Top Case Study", "Distinction").strip()
+
+
+class TestTwoRoleHeadline:
+    def _orch(self):
+        from app.agents.profile_orchestrator import ProfileOrchestrator
+        return ProfileOrchestrator.__new__(ProfileOrchestrator)
+
+    def test_fresher_cs_gets_bfsi_plus_tech(self):
+        rm = [{"role_title": "Digital Banking Associate", "category": "FinTech", "match_percentage": 82},
+              {"role_title": "Full Stack Developer", "category": "Technology", "match_percentage": 70}]
+        h = self._orch()._two_role_headline(
+            rm, {"employment_type": "student", "field_of_study": "Computer Science"},
+            {"education": [{"degree": "B.Tech", "field_of_study": "CS"}]}, "")
+        parts = [p.strip() for p in h.split("|")]
+        assert len(parts) == 2
+        assert "Digital Banking Associate" in parts[0]
+        assert "Developer" in parts[1]
+
+    def test_working_professional_uses_designation(self):
+        rm = [{"role_title": "Business Analyst - BFSI", "category": "Banking", "match_percentage": 80}]
+        h = self._orch()._two_role_headline(
+            rm, {"current_designation": "Software Engineer", "employment_type": "Full-time"},
+            {"education": []}, "")
+        assert "Software Engineer" in h and "|" in h
+
+    def test_always_at_most_two_roles(self):
+        h = self._orch()._two_role_headline([], {}, {}, "A | B | C | D")
+        assert len(h.split("|")) == 2
+
+
+class TestDescriptionsRender:
+    def _render(self, profile_data, hobbies="Reading, watching movie."):
+        from app.services.profile_renderer import ProfileRenderer
+        student_data = {"personal": {"full_name": "Ranjana Kumari", "user_id": 52,
+                        "hobbies": hobbies, "field_of_study": "Computer Science"},
+                        "courses": [], "computed": {}}
+        base = {"headline": "Digital Banking Associate | Software Developer",
+                "personality_data": {"personality_type": "Integrity", "traits": ""},
+                "performance_data": {}, "projects_data": [], "education_data": []}
+        base.update(profile_data)
+        return ProfileRenderer().render(student_data, base, "t")
+
+    def test_no_false_lock_when_description_present(self):
+        html = self._render({"beyond_work": {
+            "personality_line": "Assessed as an Integrity profile — principled and self-directed.",
+            "hobby_cards": [{"name": "Reading", "line": "Reading sharpens focus."}]}})
+        assert "Complete the psychometric test" not in html
+        assert "Assessed as an Integrity profile" in html
+
+    def test_hobby_chips_titlecased_in_fallback(self):
+        # no beyond_work provided → renderer derives title-cased chips
+        html = self._render({})
+        assert 'hobby-tag">Watching Movies' in html
+
+    def test_cert_description_renders(self):
+        html = self._render({
+            "certifications_data": [{"certificate_name": "Full Stack Python", "issued_at": "2025"}],
+            "cert_descriptions": {"full stack python": "Validated Python web development training."}})
+        assert "Validated Python web development training." in html

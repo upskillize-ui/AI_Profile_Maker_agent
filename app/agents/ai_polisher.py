@@ -49,16 +49,25 @@ ALLOWED_HEADLINE_ROLES = [
     # Product / Strategy
     "Product Analyst", "Business Strategy Analyst", "Family Business Consultant",
     "Banking Professional", "Financial Services Analyst",
+    # Technology / Engineering — a learner's real profession or qualification
+    # (from experience/education) may legitimately be a tech role. v13: the
+    # headline is TWO roles — one BFSI/course-based + one profession-based —
+    # so these must be allowed rather than banned.
+    "Software Developer", "Software Engineer", "Full Stack Developer",
+    "Backend Developer", "Frontend Developer", "Web Developer",
+    "Technology Analyst", "Systems Engineer", "Application Developer",
+    "Data Engineer", "QA Engineer",
 ]
 
-# Banned phrases — if any appear in the polished headline, reject it
-# and fall back to rule-based generation in the orchestrator.
+# Banned phrases — if any appear in the polished headline, reject it and fall
+# back to rule-based generation. v13: real job titles like "Software
+# Developer" are NO LONGER banned (a student's actual profession/qualification
+# may be a tech role). We still reject bare technology/skill tokens and
+# malformed domain fragments that are not job titles.
 BANNED_HEADLINE_TERMS = [
-    "web developer", "backend developer", "frontend developer", "full stack",
-    "full-stack", "software engineer",
     "banking & payments", "fintech & ", "& payments",
-    "developer ", " developer", "engineer ", " engineer",
     "html", "css", "react developer", "node developer", "python developer",
+    "java developer",
 ]
 
 
@@ -101,6 +110,118 @@ def _clean_description_fallback(desc: str) -> str:
                 cleaned = cleaned[0].upper() + cleaned[1:]
             break
     return cleaned
+
+
+def _title_case_hobby(raw: str) -> str:
+    """'watching movie.' → 'Watching Movies', 'reading' → 'Reading'.
+    Deterministic cleanup used for the fallback path and to normalise the
+    chip label. Strips trailing punctuation, title-cases, and lightly
+    pluralises a few common singular hobby nouns so labels read naturally."""
+    if not raw or not isinstance(raw, str):
+        return ""
+    t = raw.strip().strip(".;,/|-_ ").strip()
+    if not t:
+        return ""
+    # light, safe pluralisation for common hobby nouns entered singular
+    plural = {
+        "movie": "movies", "book": "books", "game": "games", "song": "songs",
+        "novel": "novels", "puzzle": "puzzles", "sport": "sports",
+    }
+    words = t.split()
+    words = [plural.get(w.lower(), w) for w in words]
+    small = {"and", "of", "the", "to", "a", "an", "in", "on", "with"}
+    out = []
+    for i, w in enumerate(words):
+        lw = w.lower()
+        out.append(lw if (lw in small and i > 0) else (w[:1].upper() + w[1:].lower()))
+    return " ".join(out)
+
+
+def _split_hobbies(raw) -> List[str]:
+    """Split an LMS hobbies free-text field into individual hobby tokens."""
+    if not raw:
+        return []
+    if isinstance(raw, (list, tuple)):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    return [x.strip() for x in re.split(r"[,;/|\n]", str(raw)) if x.strip()]
+
+
+def _fallback_cert_line(name: str, issuer: str) -> str:
+    """Deterministic one-line certification description for the no-API path."""
+    if not name:
+        return ""
+    base = name.strip().rstrip(".")
+    if issuer:
+        return f"Industry certification in {base}, completed through {issuer.strip()} — validated, job-relevant training."
+    return f"Industry-recognised certification in {base} — validated, job-relevant training."
+
+
+def _fallback_achv_line(title: str, tag: str) -> str:
+    """Deterministic one-line achievement description for the no-API path."""
+    if not title:
+        return ""
+    base = title.strip().rstrip(".")
+    if tag:
+        return f"A {tag.strip().lower()} milestone — {base}, reflecting consistent, assessed performance."
+    return f"{base} — a validated result that reflects consistent, assessed performance."
+
+
+def _variety_seed(name: str, user_id) -> str:
+    """Short deterministic token unique per student, injected into the prompt
+    so two learners with the SAME hobby still get differently-phrased lines.
+    The model is told to use it only to vary tone/angle, never as content."""
+    import hashlib
+    basis = f"{name}|{user_id}"
+    return hashlib.md5(basis.encode("utf-8")).hexdigest()[:8]
+
+
+# Ordered angle bank — the fallback (no-API) path rotates through these by a
+# per-student offset so hobby lines differ across students without an LLM.
+_HOBBY_ANGLES = [
+    "keeps {n} curious and self-directed — a habit that carries into how they learn on the job",
+    "sharpens the focus and patience {n} brings to detailed, high-stakes work",
+    "reflects the steady discipline {n} applies to structured problem-solving",
+    "feeds the creative, big-picture thinking {n} uses when framing a problem",
+    "builds the persistence {n} relies on to see hard work through to the finish",
+]
+
+
+def _fallback_beyond_work(name: str, hobbies: List[str], career_goal: str,
+                          personality_type: str, personality_summary: str,
+                          seed: str) -> Dict[str, Any]:
+    """Deterministic Beyond Work descriptions when the API is unavailable.
+    Not templated-identical: a per-student offset (from the seed) rotates the
+    angle so different students get different phrasings for the same hobby."""
+    first = (name or "This candidate").split()[0] if name else "This candidate"
+    try:
+        offset = int(seed, 16) % len(_HOBBY_ANGLES)
+    except (ValueError, TypeError):
+        offset = 0
+
+    hobby_cards = []
+    for i, h in enumerate(hobbies):
+        clean = _title_case_hobby(h)
+        if not clean:
+            continue
+        angle = _HOBBY_ANGLES[(offset + i) % len(_HOBBY_ANGLES)]
+        hobby_cards.append({"name": clean, "line": f"{clean} " + angle.format(n=first) + "."})
+
+    goal_line = ""
+    if career_goal and len(career_goal.strip()) > 4:
+        goal_line = (f"Focused on growing into {career_goal.strip().rstrip('.')} — and building "
+                     f"the depth and range to get there.")
+
+    persona_line = ""
+    if personality_type:
+        if personality_summary and len(personality_summary.strip()) > 8:
+            persona_line = personality_summary.strip()
+        else:
+            art = "an" if personality_type.strip()[:1].lower() in "aeiou" else "a"
+            persona_line = (f"Assessed as {art} {personality_type.strip()} profile — a working style that "
+                            f"shapes how {first} approaches ownership, collaboration, and judgement.")
+
+    return {"hobby_cards": hobby_cards, "career_goal_line": goal_line,
+            "personality_line": persona_line}
 
 
 def _validate_headline(headline: str) -> bool:
@@ -202,12 +323,48 @@ class AIPolisher:
         raw_skills = [s.get("name", "") for s in tech_skills[:15] if s.get("name")]
         course_names = [c.get("course_name", "") for c in courses if c.get("course_name")]
 
-        if self.has_api and (raw_projects or raw_experience or raw_skills):
+        # ── v13: Beyond Work / Certifications / Achievements inputs ──
+        personality = merged_data.get("personality", {}) or {}
+        personality_type = personality.get("personality_type") or ""
+        personality_summary = personality.get("summary") or personality.get("traits") or ""
+        if isinstance(personality_summary, (list, tuple)):
+            personality_summary = ", ".join(str(x) for x in personality_summary if x)
+        raw_hobbies = _split_hobbies(personal.get("hobbies", ""))
+        career_goal = (personal.get("career_goals") or personal.get("preferred_role") or "").strip()
+        seed = _variety_seed(name, personal.get("user_id") or personal.get("id") or "")
+
+        certs_in = merged_data.get("certifications", []) or student_data.get("certifications", []) or []
+        raw_certs = [{
+            "name": (c.get("certificate_name") or c.get("name") or "").strip(),
+            "issuer": (c.get("course_name") or c.get("issuer") or "").strip(),
+        } for c in certs_in if (c.get("certificate_name") or c.get("name"))][:10]
+
+        achv_in = merged_data.get("achievement_cards", []) or student_data.get("achievement_cards", []) or []
+        raw_achv = [{
+            "title": (a.get("title") or "").strip(),
+            "tag": (a.get("tag") or "").strip(),
+            "score": a.get("score", ""),
+        } for a in achv_in if a.get("title")][:8]
+
+        # Deterministic fallback for Beyond Work — always computed so the card
+        # NEVER shows the false "complete the psychometric test" lock when a
+        # type exists, even if the API path is unavailable or fails.
+        fb_beyond = _fallback_beyond_work(
+            name, raw_hobbies, career_goal,
+            personality_type, personality_summary, seed,
+        )
+
+        if self.has_api and (raw_projects or raw_experience or raw_skills
+                             or raw_hobbies or career_goal or personality_type
+                             or raw_certs or raw_achv):
             result = self._ai_polish(
                 name=name, designation=designation, bio=bio,
                 edu_summary=edu_summary, raw_projects=raw_projects,
                 raw_experience=raw_experience, raw_skills=raw_skills,
-                course_names=course_names,
+                course_names=course_names, raw_hobbies=raw_hobbies,
+                career_goal=career_goal, personality_type=personality_type,
+                personality_summary=personality_summary, raw_certs=raw_certs,
+                raw_achv=raw_achv, seed=seed,
             )
             if result:
                 # Validate headline — drop it if it contains banned terms,
@@ -218,16 +375,40 @@ class AIPolisher:
                         f"{result['polished_headline']!r}"
                     )
                     result["polished_headline"] = ""
+                # Backfill any missing Beyond Work fields from the fallback so
+                # the section is never left blank.
+                bw = result.get("beyond_work") or {}
+                if not bw.get("hobby_cards"):     bw["hobby_cards"] = fb_beyond["hobby_cards"]
+                if not bw.get("career_goal_line"): bw["career_goal_line"] = fb_beyond["career_goal_line"]
+                if not bw.get("personality_line"): bw["personality_line"] = fb_beyond["personality_line"]
+                result["beyond_work"] = bw
                 return result
 
-        return self._rule_based_polish(
+        rb = self._rule_based_polish(
             raw_projects=raw_projects,
             raw_experience=raw_experience,
             raw_skills=raw_skills,
         )
+        # Attach deterministic descriptions to the rule-based path too.
+        rb["beyond_work"] = fb_beyond
+        rb["certifications"] = [
+            {"name": c["name"], "line": _fallback_cert_line(c["name"], c["issuer"])}
+            for c in raw_certs
+        ]
+        rb["achievements"] = [
+            {"title": a["title"], "line": _fallback_achv_line(a["title"], a["tag"])}
+            for a in raw_achv
+        ]
+        return rb
 
     def _ai_polish(self, name, designation, bio, edu_summary,
-                   raw_projects, raw_experience, raw_skills, course_names) -> Optional[Dict]:
+                   raw_projects, raw_experience, raw_skills, course_names,
+                   raw_hobbies=None, career_goal="", personality_type="",
+                   personality_summary="", raw_certs=None, raw_achv=None,
+                   seed="") -> Optional[Dict]:
+        raw_hobbies = raw_hobbies or []
+        raw_certs = raw_certs or []
+        raw_achv = raw_achv or []
 
         # ══════════════════════════════════════════════════════
         # System prompt — the rules.
@@ -243,13 +424,16 @@ ABSOLUTE RULES — violation = entire response rejected:
    no "reduced time by 40%", no "across 12 modules". If you don't
    see the number in the input, you do NOT write the number.
 
-2. The headline field is for JOB TITLES ONLY, not skills, technologies,
-   or domains. Allowed job titles (pick 2–3, separated by " | "):
+2. The headline field is EXACTLY TWO job titles separated by " | ".
+   - Title 1: the candidate's strongest BFSI/FinTech/course-based role.
+   - Title 2: a role reflecting their REAL profession, experience, or
+     academic qualification — this MAY be a technology/engineering role
+     (e.g. "Software Developer", "Full Stack Developer", "Data Analyst")
+     if their education or work experience supports it.
+   Choose from, or closely match, these titles:
    {', '.join(ALLOWED_HEADLINE_ROLES)}
-
-   Forbidden in the headline: "Web Developer", "Backend Developer",
-   "Software Engineer", "Banking & Payments", "FinTech Developer",
-   any technology name (React, Python, Node), any domain word.
+   The headline is JOB TITLES ONLY — never bare skills or technology
+   names (no "React", "Python", "HTML"), never a domain phrase.
 
 3. Skills go into "skills_grouped", NOT into the headline.
 
@@ -259,12 +443,17 @@ ABSOLUTE RULES — violation = entire response rejected:
 
 5. Project/experience descriptions are 1 sentence each, max 22 words.
    Lead with what was built/analyzed. End with the domain or stack.
-   Example good: "Engineered a Razorpay payment integration with
-   server-side signature verification — Node.js, Express, MySQL."
-   Example bad: "Worked on payment integration project for the LMS
-   platform using various technologies and frameworks."
 
-6. Output MUST be valid JSON, no markdown fences, no explanation.
+6. BEYOND WORK descriptions (hobbies, career goal, personality) and the
+   certification / achievement lines are INTERVIEW-READY one-liners that
+   connect the item to a genuine professional strength. Personalize each
+   to THIS candidate — their courses, goal, and personality. Two different
+   candidates with the same hobby must get DIFFERENTLY phrased lines; use
+   the VARIETY_SEED only to vary tone/angle, never as literal content.
+   Do NOT invent achievements or numbers; interpretation is fine, fabricated
+   facts are not. Each line is ONE sentence, warm but professional.
+
+7. Output MUST be valid JSON, no markdown fences, no explanation.
 """
 
         user_prompt = f"""Polish this candidate's data. Return JSON only.
@@ -274,6 +463,11 @@ DESIGNATION: {designation or 'Not specified'}
 EDUCATION: {edu_summary or 'Not specified'}
 BIO: {bio or 'Not provided'}
 COURSES (LMS-verified): {', '.join(course_names[:6]) or 'None'}
+CAREER GOAL: {career_goal or 'Not specified'}
+PERSONALITY TYPE (from psychometric test): {personality_type or 'Not taken'}
+PERSONALITY NOTES: {personality_summary or 'None'}
+HOBBIES (raw): {', '.join(raw_hobbies) if raw_hobbies else 'None'}
+VARIETY_SEED: {seed or 'none'}
 
 PROJECTS (raw):
 {json.dumps(raw_projects, indent=2) if raw_projects else '[]'}
@@ -283,22 +477,39 @@ EXPERIENCE (raw):
 
 SKILLS (raw): {', '.join(raw_skills) if raw_skills else 'None'}
 
+CERTIFICATIONS (raw):
+{json.dumps(raw_certs, indent=2) if raw_certs else '[]'}
+
+ACHIEVEMENTS (raw):
+{json.dumps(raw_achv, indent=2) if raw_achv else '[]'}
+
 Return this exact JSON shape:
 {{
-  "headline": "Job Title 1 | Job Title 2 | Job Title 3 — pick from the allowed list above, fitted to the candidate's courses + skills",
+  "headline": "BFSI/Course Role | Profession-or-Qualification Role  (EXACTLY two titles, ' | ' separated)",
   "projects": [
-    {{"title": "Clean Professional Title", "description": "One-sentence description, ≤22 words, action-verb led, only facts from input"}}
+    {{"title": "Clean Professional Title", "description": "One sentence, ≤22 words, action-verb led, only facts from input"}}
   ],
   "experience": [
-    {{"role": "role", "company": "company", "description": "One-sentence description, ≤22 words, action-verb led"}}
+    {{"role": "role", "company": "company", "description": "One sentence, ≤22 words, action-verb led"}}
   ],
   "skills_grouped": {{
-    "Languages": ["Python", "JavaScript"],
-    "Frameworks": ["Django", "React"],
-    "Databases": ["MySQL", "MongoDB"],
-    "Tools": ["Git", "Docker"]
+    "Languages": ["Python", "JavaScript"], "Frameworks": ["Django", "React"],
+    "Databases": ["MySQL", "MongoDB"], "Tools": ["Git", "Docker"]
   }},
-  "bio_enhanced": "If a bio was provided, return a 2-sentence version with the same facts. Else return empty string."
+  "bio_enhanced": "If a bio was provided, 2-sentence version with same facts. Else empty string.",
+  "beyond_work": {{
+    "personality_line": "One interview-ready sentence interpreting the personality type for this candidate. Empty string if no type.",
+    "career_goal_line": "One or two sentences articulating their career goal with grounded ambition. Empty if no goal.",
+    "hobby_cards": [
+      {{"name": "Clean Title-Cased Hobby", "line": "One personalized interview-ready sentence linking the hobby to a professional strength"}}
+    ]
+  }},
+  "certifications": [
+    {{"name": "Certificate Name (unchanged)", "line": "One sentence on what the certification demonstrates professionally"}}
+  ],
+  "achievements": [
+    {{"title": "Achievement Title (unchanged)", "line": "One sentence on why this achievement matters to a recruiter"}}
+  ]
 }}"""
 
         raw_response = self._call_claude(system, user_prompt)
@@ -313,7 +524,8 @@ Return this exact JSON shape:
             parsed = json.loads(cleaned)
             logger.info(
                 f"AI Polisher [Sonnet]: polished {len(parsed.get('projects', []))} projects, "
-                f"{len(parsed.get('experience', []))} experience entries"
+                f"{len(parsed.get('experience', []))} experience entries, "
+                f"{len(parsed.get('beyond_work', {}).get('hobby_cards', []))} hobbies"
             )
             return {
                 "polished_projects": parsed.get("projects", []),
@@ -321,6 +533,9 @@ Return this exact JSON shape:
                 "skills_grouped": parsed.get("skills_grouped", {}),
                 "polished_headline": parsed.get("headline", ""),
                 "polished_bio": parsed.get("bio_enhanced", ""),
+                "beyond_work": parsed.get("beyond_work", {}) or {},
+                "certifications": parsed.get("certifications", []) or [],
+                "achievements": parsed.get("achievements", []) or [],
                 "ai_polished": True,
             }
         except (json.JSONDecodeError, KeyError) as e:

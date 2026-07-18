@@ -244,6 +244,27 @@ class ProfileOrchestrator:
             logger.info(f"AI Polisher: {'AI-enhanced' if polished.get('ai_polished') else 'rule-based'}")
         except Exception as e:
             logger.warning(f"AI Polisher failed (non-fatal): {e}")
+            polished = {}
+
+        # ── v13: Beyond Work / cert / achievement descriptions (from the
+        # SAME polish call — no extra API cost) + grounded 2-role headline. ──
+        beyond_work = polished.get("beyond_work", {}) or {}
+        cert_descriptions = {
+            (c.get("name") or "").strip().lower(): c.get("line", "")
+            for c in (polished.get("certifications", []) or []) if c.get("name")
+        }
+        achievement_descriptions = {
+            (a.get("title") or "").strip().lower(): a.get("line", "")
+            for a in (polished.get("achievements", []) or []) if a.get("title")
+        }
+        # Hero headline: exactly two roles — one BFSI/course-based, one from
+        # the learner's real profession / qualification. Built from the
+        # already-ranked role_matches so it is grounded, not invented.
+        two_role = self._two_role_headline(
+            role_matches, personal, merged_data,
+            polished.get("polished_headline", "") if polished else "")
+        if two_role:
+            achievements["headline"] = two_role
 
         # ── Step 8: Compute per-section data hashes ──
         section_hashes = self._compute_section_hashes(merged_data)
@@ -274,6 +295,9 @@ class ProfileOrchestrator:
             "work_experience": merged_data.get("work_experience", []),
             "journey_data": self._journey(merged_data),
             "personality_data": self._personality(merged_data),
+            "beyond_work": beyond_work,
+            "cert_descriptions": cert_descriptions,
+            "achievement_descriptions": achievement_descriptions,
             "case_studies_data": self._case_studies(merged_data),
             "testgen_data": self._testgen(merged_data),
             "projects_data": merged_data.get("projects", [])[:5],
@@ -745,6 +769,81 @@ class ProfileOrchestrator:
             milestones.append({"type": "certification", "title": cert.get("certificate_name", ""), "date": str(cert.get("issued_at", ""))})
         return {"total_hours": c.get("total_hours", 0), "active_days": int(d.get("platform_activity", {}).get("active_days", 0) or 0),
                 "courses_completed": c.get("completed_courses", 0), "total_enrolled": c.get("total_courses", 0), "milestones": milestones[:15]}
+
+    def _two_role_headline(self, role_matches: list, personal: Dict,
+                           merged_data: Dict, polished_headline: str = "") -> str:
+        """Hero headline = EXACTLY two job titles:
+          1. the top BFSI/course-based role (from ranked role_matches), and
+          2. a role reflecting the learner's REAL profession / qualification —
+             their current designation, else the top technology-bucket role,
+             else a qualification-derived title.
+        Grounded in already-computed role_matches; no invented titles."""
+
+        def bucket(m):
+            cat = (m.get("category") or "").lower()
+            if cat in ("technology", "tech"):
+                return "tech"
+            if cat in ("banking", "bfsi", "fintech", "risk", "insurance"):
+                return "bfsi"
+            return "other"
+
+        matches = role_matches or []
+        bfsi = [m["role_title"] for m in matches if bucket(m) == "bfsi" and m.get("role_title")]
+        tech = [m["role_title"] for m in matches if bucket(m) == "tech" and m.get("role_title")]
+        other = [m["role_title"] for m in matches if bucket(m) == "other" and m.get("role_title")]
+
+        # Role 1 — BFSI/course-based (fall back to any ranked role).
+        role1 = bfsi[0] if bfsi else (other[0] if other else (tech[0] if tech else ""))
+
+        # Role 2 — real profession / qualification.
+        designation = (personal.get("current_designation") or "").strip()
+        emp_type = (personal.get("employment_type") or "").lower()
+        is_working = bool(designation) and "student" not in emp_type and "fresher" not in emp_type
+
+        role2 = ""
+        if is_working:
+            role2 = designation
+        elif tech:
+            role2 = tech[0]
+        else:
+            role2 = self._qualification_role(personal, merged_data)
+        # avoid duplicate titles
+        if role2 and role2.strip().lower() == (role1 or "").strip().lower():
+            role2 = ""
+        if not role2:
+            for cand in (bfsi[1:] + other):
+                if cand.strip().lower() != (role1 or "").strip().lower():
+                    role2 = cand
+                    break
+
+        roles = [r for r in (role1, role2) if r]
+        if roles:
+            return " | ".join(roles[:2])
+
+        # Last resort: a validated polished headline trimmed to 2 roles.
+        if polished_headline and "|" in polished_headline:
+            segs = [s.strip() for s in polished_headline.split("|") if s.strip()]
+            if segs:
+                return " | ".join(segs[:2])
+        return polished_headline or ""
+
+    def _qualification_role(self, personal: Dict, merged_data: Dict) -> str:
+        """Derive a real-profession title from the learner's academic
+        qualification when no work designation or tech role is available."""
+        field = (personal.get("field_of_study") or "").lower()
+        edu_blob = field + " " + " ".join(
+            f"{(e.get('degree') or '')} {(e.get('field_of_study') or '')}"
+            for e in (merged_data.get("education", []) or [])
+        ).lower()
+        if any(k in edu_blob for k in ("computer", "cs", "software", "b.tech", "bca", "mca", "information tech", "it ")):
+            return "Software Developer"
+        if any(k in edu_blob for k in ("data", "statistic", "mathematics", "analytics")):
+            return "Data Analyst"
+        if any(k in edu_blob for k in ("commerce", "b.com", "finance", "accounting", "mba", "bba")):
+            return "Financial Services Analyst"
+        if any(k in edu_blob for k in ("electronic", "mechanical", "civil", "electrical", "engineering")):
+            return "Technology Analyst"
+        return ""
 
     def _personality(self, d: Dict) -> dict:
         """v7.2 FIX: the collector outputs personality as
