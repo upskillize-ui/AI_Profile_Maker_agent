@@ -628,11 +628,17 @@ class TestBeyondWorkDescriptions:
 
     def test_personality_line_present_when_type_exists(self):
         from app.agents.ai_polisher import _fallback_beyond_work, _variety_seed
-        bw = _fallback_beyond_work("Ranjana", [], "", "Integrity", "",
-                                   _variety_seed("Ranjana", 1))
+        bw = _fallback_beyond_work("Ranjana Kumari", ["Reading"],
+                                   "Senior Software Engineer", "Integrity", "",
+                                   _variety_seed("Ranjana Kumari", 1))
+        # FIRST PERSON — never the candidate's name or third person
         assert bw["personality_line"].strip()
-        # correct article
-        assert "an Integrity" in bw["personality_line"]
+        assert "Ranjana" not in bw["personality_line"]
+        assert " her " not in bw["personality_line"] and " she " not in bw["personality_line"].lower()
+        assert "my" in bw["personality_line"].lower() or "i " in bw["personality_line"].lower()
+        # hobby + goal lines also first person, no name
+        assert "Ranjana" not in bw["hobby_cards"][0]["line"]
+        assert "Ranjana" not in bw["career_goal_line"]
 
     def test_cert_and_achievement_fallback_lines(self):
         from app.agents.ai_polisher import _fallback_cert_line, _fallback_achv_line

@@ -147,23 +147,21 @@ def _split_hobbies(raw) -> List[str]:
 
 
 def _fallback_cert_line(name: str, issuer: str) -> str:
-    """Deterministic one-line certification description for the no-API path."""
+    """Deterministic one-line certification description (first person, short)."""
     if not name:
         return ""
-    base = name.strip().rstrip(".")
     if issuer:
-        return f"Industry certification in {base}, completed through {issuer.strip()} — validated, job-relevant training."
-    return f"Industry-recognised certification in {base} — validated, job-relevant training."
+        return f"Completed through {issuer.strip()} — validated, job-relevant training."
+    return "Industry-recognised, validated training I completed."
 
 
 def _fallback_achv_line(title: str, tag: str) -> str:
-    """Deterministic one-line achievement description for the no-API path."""
+    """Deterministic one-line achievement description (first person, short)."""
     if not title:
         return ""
-    base = title.strip().rstrip(".")
     if tag:
-        return f"A {tag.strip().lower()} milestone — {base}, reflecting consistent, assessed performance."
-    return f"{base} — a validated result that reflects consistent, assessed performance."
+        return f"A {tag.strip().lower()} that reflects my consistent, assessed performance."
+    return "A validated result that reflects my consistent, assessed performance."
 
 
 def _variety_seed(name: str, user_id) -> str:
@@ -175,14 +173,14 @@ def _variety_seed(name: str, user_id) -> str:
     return hashlib.md5(basis.encode("utf-8")).hexdigest()[:8]
 
 
-# Ordered angle bank — the fallback (no-API) path rotates through these by a
-# per-student offset so hobby lines differ across students without an LLM.
+# Ordered angle bank — first person, short. The fallback (no-API) path rotates
+# through these by a per-student offset so hobby lines differ across students.
 _HOBBY_ANGLES = [
-    "keeps {n} curious and self-directed — a habit that carries into how they learn on the job",
-    "sharpens the focus and patience {n} brings to detailed, high-stakes work",
-    "reflects the steady discipline {n} applies to structured problem-solving",
-    "feeds the creative, big-picture thinking {n} uses when framing a problem",
-    "builds the persistence {n} relies on to see hard work through to the finish",
+    "Keeps me curious and self-directed.",
+    "Sharpens the focus I bring to detailed work.",
+    "Builds the discipline I apply to problem-solving.",
+    "Feeds the big-picture thinking I use to frame problems.",
+    "Builds the persistence I rely on to finish hard work.",
 ]
 
 
@@ -190,9 +188,8 @@ def _fallback_beyond_work(name: str, hobbies: List[str], career_goal: str,
                           personality_type: str, personality_summary: str,
                           seed: str) -> Dict[str, Any]:
     """Deterministic Beyond Work descriptions when the API is unavailable.
-    Not templated-identical: a per-student offset (from the seed) rotates the
-    angle so different students get different phrasings for the same hobby."""
-    first = (name or "This candidate").split()[0] if name else "This candidate"
+    First person, short, point-wise. A per-student offset (from the seed)
+    rotates the angle so students get different phrasings for the same hobby."""
     try:
         offset = int(seed, 16) % len(_HOBBY_ANGLES)
     except (ValueError, TypeError):
@@ -203,13 +200,12 @@ def _fallback_beyond_work(name: str, hobbies: List[str], career_goal: str,
         clean = _title_case_hobby(h)
         if not clean:
             continue
-        angle = _HOBBY_ANGLES[(offset + i) % len(_HOBBY_ANGLES)]
-        hobby_cards.append({"name": clean, "line": f"{clean} " + angle.format(n=first) + "."})
+        # line is the descriptive part only — the template prefixes the name.
+        hobby_cards.append({"name": clean, "line": _HOBBY_ANGLES[(offset + i) % len(_HOBBY_ANGLES)]})
 
     goal_line = ""
     if career_goal and len(career_goal.strip()) > 4:
-        goal_line = (f"Focused on growing into {career_goal.strip().rstrip('.')} — and building "
-                     f"the depth and range to get there.")
+        goal_line = f"Working toward {career_goal.strip().rstrip('.')}, and building the depth to get there."
 
     persona_line = ""
     if personality_type:
@@ -217,8 +213,8 @@ def _fallback_beyond_work(name: str, hobbies: List[str], career_goal: str,
             persona_line = personality_summary.strip()
         else:
             art = "an" if personality_type.strip()[:1].lower() in "aeiou" else "a"
-            persona_line = (f"Assessed as {art} {personality_type.strip()} profile — a working style that "
-                            f"shapes how {first} approaches ownership, collaboration, and judgement.")
+            persona_line = (f"My {personality_type.strip()} profile shapes how I approach "
+                            f"ownership, collaboration, and judgement.")
 
     return {"hobby_cards": hobby_cards, "career_goal_line": goal_line,
             "personality_line": persona_line}
@@ -445,13 +441,21 @@ ABSOLUTE RULES — violation = entire response rejected:
    Lead with what was built/analyzed. End with the domain or stack.
 
 6. BEYOND WORK descriptions (hobbies, career goal, personality) and the
-   certification / achievement lines are INTERVIEW-READY one-liners that
-   connect the item to a genuine professional strength. Personalize each
-   to THIS candidate — their courses, goal, and personality. Two different
-   candidates with the same hobby must get DIFFERENTLY phrased lines; use
-   the VARIETY_SEED only to vary tone/angle, never as literal content.
+   certification / achievement lines are written in the FIRST PERSON, as the
+   CANDIDATE speaking about themselves. Use "I", "my", "me". NEVER use the
+   candidate's name and NEVER third person ("she", "her", "he", "they",
+   "Ranjana"). It must read as if the candidate wrote it themselves.
+   Keep every line SHORT and point-wise — ONE crisp sentence, max ~18 words,
+   no filler, no "a habit of", no throat-clearing. Connect the item to a
+   genuine professional strength. Personalize to THIS candidate (courses,
+   goal, personality). Two candidates with the same hobby must get DIFFERENT
+   lines; use VARIETY_SEED only to vary tone/angle, never as literal content.
    Do NOT invent achievements or numbers; interpretation is fine, fabricated
-   facts are not. Each line is ONE sentence, warm but professional.
+   facts are not.
+   Examples (voice + length):
+     hobby "Reading" → "Sharpens my ability to absorb complex material fast."
+     personality "Integrity" → "My integrity-driven approach means teams can
+       trust me with sensitive financial data."
 
 7. Output MUST be valid JSON, no markdown fences, no explanation.
 """
@@ -498,17 +502,17 @@ Return this exact JSON shape:
   }},
   "bio_enhanced": "If a bio was provided, 2-sentence version with same facts. Else empty string.",
   "beyond_work": {{
-    "personality_line": "One interview-ready sentence interpreting the personality type for this candidate. Empty string if no type.",
-    "career_goal_line": "One or two sentences articulating their career goal with grounded ambition. Empty if no goal.",
+    "personality_line": "FIRST PERSON ('I'/'my'), ONE short sentence interpreting my personality type. Empty string if no type.",
+    "career_goal_line": "FIRST PERSON, ONE short sentence on my career goal with grounded ambition. Empty if no goal.",
     "hobby_cards": [
-      {{"name": "Clean Title-Cased Hobby", "line": "One personalized interview-ready sentence linking the hobby to a professional strength"}}
+      {{"name": "Clean Title-Cased Hobby", "line": "FIRST PERSON, ONE short sentence (max ~18 words) linking the hobby to a strength — do NOT repeat the hobby name at the start"}}
     ]
   }},
   "certifications": [
-    {{"name": "Certificate Name (unchanged)", "line": "One sentence on what the certification demonstrates professionally"}}
+    {{"name": "Certificate Name (unchanged)", "line": "FIRST PERSON, ONE short sentence on what this certification gives me professionally"}}
   ],
   "achievements": [
-    {{"title": "Achievement Title (unchanged)", "line": "One sentence on why this achievement matters to a recruiter"}}
+    {{"title": "Achievement Title (unchanged)", "line": "FIRST PERSON, ONE short sentence on why this achievement matters"}}
   ]
 }}"""
 
