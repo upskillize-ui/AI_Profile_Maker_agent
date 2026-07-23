@@ -84,6 +84,12 @@ from app.services.cache_service import CacheService
 from app.config import get_settings
 
 router  = APIRouter(prefix="/api/v1", tags=["Profile & Rubric"])
+
+# v5.4.2 — CLEAN SHARE URLS: profiles are shared as {AGENT_BASE}/p/{token}
+# instead of the API-looking /api/v1/profile/share/{token}. This prefix-less
+# router carries the pretty routes; main.py includes it alongside `router`.
+# Old /api/v1/... links keep working forever (both routes hit the same handler).
+pretty_router = APIRouter(tags=["Share"])
 settings = get_settings()
 logger   = logging.getLogger(__name__)
 
@@ -440,8 +446,10 @@ def _log_view(db, profile_id, request, viewer_type="public"):
 
 
 def _share_url(token: str) -> str:
-    """Build the shareable URL from a token."""
-    return f"{AGENT_BASE}/api/v1/profile/share/{token}"
+    """Build the shareable URL from a token.
+    v5.4.2 — clean /p/{token} form (old /api/v1/profile/share/{token}
+    links remain valid; both routes serve the same page)."""
+    return f"{AGENT_BASE}/p/{token}"
 
 
 def _corporate_url(student_id: int) -> str:
@@ -1081,6 +1089,7 @@ async def revoke_share_link(
 
 
 @router.get("/profile/share/{token}")
+@pretty_router.get("/p/{token}")
 async def get_profile_by_share_token(
     token: str,
     request: Request,

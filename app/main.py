@@ -88,6 +88,9 @@ app.add_middleware(
 # NOTE: No prefix here — router already declares prefix="/api/v1" internally.
 # Adding a prefix here would double it → /api/v1/api/v1/... (broken).
 app.include_router(router)
+# v5.4.2 — clean share URLs (/p/{token}); see routes.pretty_router
+from app.api.routes import pretty_router
+app.include_router(pretty_router)
 
 
 @app.get("/health")

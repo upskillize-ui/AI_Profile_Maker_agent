@@ -51,6 +51,11 @@ BANNED_PHRASES = [
     "leveraging", "synergy", "synergistic",
     "holistic", "comprehensive understanding",
     "verified",   # 23 Jul: the word "verified" must never appear anywhere on the profile
+    # 23 Jul: "interning" is casual filler — the professional form is the noun
+    # ("Software Development Intern at X"). Longer phrases first so the strip
+    # removes the whole construction cleanly.
+    "currently interning as", "currently interning at", "interning as",
+    "interning at", "interning",
 ]
 
 
@@ -389,7 +394,10 @@ Structure the bullets on the 4-beat recruiter formula (a recruiter scans this in
 - Never quote the raw goal text verbatim. Rephrase aspirations professionally: "To be a Senior
   Software Engineer in 3 to 5 years" becomes "targeting software engineering roles".
 - NEVER lead with enrollment. Being enrolled is not an achievement — mention a course only when
-  there is completed work or a score behind it.""")
+  there is completed work or a score behind it.
+- PROFESSIONAL REGISTER ONLY: never use casual verb forms like "interning", "working as an intern",
+  or "doing an internship". Use the noun title: "Software Development Intern at {company}, building
+  {what}". The job title carries the status — no extra verbs about it.""")
 
         # Banned phrases
         banned_sample = ", ".join(f'"{p}"' for p in BANNED_PHRASES[:12])
