@@ -937,6 +937,52 @@ async def get_my_profile_view(
 # PROFILE — SHARE TOKEN (public, holder-of-URL access)
 # =========================================================================
 
+# v5.4.1 — profiles with a healing task already running (avoid stacking a
+# fresh 20-30s collection for every concurrent view of the same stale page).
+_healing_in_flight: set = set()
+
+
+def _heal_in_background(profile_id: int) -> None:
+    """
+    v5.4.1 FIX (found live, 23 Jul): healing used to run INLINE on the share
+    request — a full LMS collection takes 20-30s from the Space to the remote
+    DB, impatient clients disconnect, uvicorn cancels the request coroutine,
+    and the healed HTML never commits — so EVERY view re-ran the whole
+    healing. Now: the stale stored HTML is served IMMEDIATELY and healing
+    runs as a fire-and-forget background task with its OWN DB session (the
+    request session dies with the request). The next view gets the healed
+    version instantly.
+    """
+    if profile_id in _healing_in_flight:
+        return
+    _healing_in_flight.add(profile_id)
+
+    async def _job():
+        from app.api.deps import SessionLocal
+        db = SessionLocal()
+        try:
+            profile = db.query(StudentProfile).filter_by(id=profile_id).first()
+            if profile is None:
+                return
+            stored_tpl, stored_fp = _parse_marker(profile.rendered_html or "")
+            if stored_tpl == _template_version():
+                return  # another worker healed it meanwhile
+            await _heal_stale_html(db, profile, stored_fp)
+        except Exception:
+            logger.exception("Background healing failed for profile %s", profile_id)
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+            _healing_in_flight.discard(profile_id)
+
+    try:
+        asyncio.get_running_loop().create_task(_job())
+    except RuntimeError:
+        _healing_in_flight.discard(profile_id)
+
+
 async def _heal_stale_html(db: Session, profile: StudentProfile, old_fp) -> str:
     """
     v5.3 RENDER-ON-READ HEALING: the stored HTML was produced by an older
@@ -1069,13 +1115,13 @@ async def get_profile_by_share_token(
     if not profile or not profile.rendered_html:
         raise HTTPException(404, _ERR_NOT_FOUND)
 
-    # v5.3 TEMPLATE FRESHNESS: stale stored HTML heals itself on read
-    # (no AI — stored sections + fresh LMS data + current template).
-    # On any healing failure the stored HTML is served unchanged.
+    # v5.4.1 TEMPLATE FRESHNESS: stale stored HTML is served IMMEDIATELY
+    # and heals in the background — never blocks or slows a share view.
+    # The next view gets the current-template version.
     html = profile.rendered_html
-    stored_tpl, stored_fp = _parse_marker(html)
+    stored_tpl, _stored_fp = _parse_marker(html)
     if stored_tpl != _template_version():
-        html = await _heal_stale_html(db, profile, stored_fp)
+        _heal_in_background(profile.id)
 
     _log_view(db, profile.id, request, viewer_type="share")
     profile.total_views = (profile.total_views or 0) + 1
@@ -1316,11 +1362,12 @@ async def get_profile_for_corporate(
         # 404 not 403: don't leak "this student exists but hid from corporates"
         raise HTTPException(404, _ERR_NOT_FOUND)
 
-    # v5.3 TEMPLATE FRESHNESS: same render-on-read healing as share views.
+    # v5.4.1 TEMPLATE FRESHNESS: serve stored immediately, heal in
+    # background (same fix as share views).
     html = profile.rendered_html
-    stored_tpl, stored_fp = _parse_marker(html)
+    stored_tpl, _stored_fp = _parse_marker(html)
     if stored_tpl != _template_version():
-        html = await _heal_stale_html(db, profile, stored_fp)
+        _heal_in_background(profile.id)
 
     _log_view(db, profile.id, request, viewer_type="corporate")
     profile.total_views = (profile.total_views or 0) + 1
