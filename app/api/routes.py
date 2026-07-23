@@ -363,6 +363,98 @@ def _ats_from_student_data(student_data: dict) -> dict:
     return RoleMatcher().calculate_ats_score(merged)
 
 
+def _profile_readiness(student_data: dict) -> dict:
+    """v5.5 — FREE pre-generation readiness check. NO AI, NO credit cost:
+    reads the already-collected LMS/resume/LinkedIn data and tells the
+    student what's missing or weak BEFORE they spend a credit generating.
+    The student fixes the data in the LMS tabs (free), then generates once,
+    clean. Each gap names the LMS tab to fix it on.
+
+    Runs entirely on dicts (pure CPU) — call via asyncio.to_thread with
+    collection. Never raises; on trouble returns a permissive 'ready'.
+    """
+    from app.services.data_merger import DataMerger
+    try:
+        m = DataMerger().merge(
+            lms_data      = student_data,
+            resume_data   = student_data.get("resume_data"),
+            github_data   = student_data.get("github_data"),
+            linkedin_data = student_data.get("linkedin_data"),
+        )
+    except Exception:
+        m = student_data
+    p = (m.get("personal") or {})
+
+    def _has(*vals):
+        return any(str(v).strip() for v in vals if v is not None)
+
+    skills = 0
+    allsk = m.get("all_skills") or {}
+    if isinstance(allsk, dict):
+        skills = sum(len(v or []) for v in allsk.values())
+    work = m.get("work_experience") or []
+    edu = m.get("education") or []
+    projects = m.get("projects") or []
+    courses = student_data.get("courses") or []
+
+    # Each check: (ok, severity, label, where-to-fix, why-it-matters)
+    checks = [
+        (_has(p.get("full_name")), "required", "Full name",
+         "Personal", "Your name headlines the whole profile."),
+        (_has(p.get("email")), "required", "Email",
+         "Personal", "Recruiters need a way to reach you."),
+        (_has(p.get("phone")), "recommended", "Phone number",
+         "Personal", "A second contact channel raises response rates."),
+        (bool(edu) and _has((edu[0] or {}).get("degree")), "required", "Education (degree + year)",
+         "Additional Info", "Freshers are shortlisted on qualifications first."),
+        (_has(p.get("institution")) or (bool(edu) and _has((edu[0] or {}).get("institution"))),
+         "recommended", "College / institution",
+         "Personal", "Names your academic background for recruiters."),
+        (skills >= 8, "important", "At least 8 skills",
+         "Additional Info / Resume", "Skills are the first filter recruiters search by."),
+        (bool(work) or bool(courses), "important", "Work experience or enrolled courses",
+         "Resume / LMS", "Something to show — a role, an internship, or coursework."),
+        (bool(projects) or _has(p.get("github_url")), "recommended", "A project or GitHub link",
+         "Resume", "Projects prove you can build, not just study."),
+        (_has(p.get("preferred_role")), "important", "Target role",
+         "Job Preferences", "Sets the direction the whole profile is written toward."),
+        (_has(p.get("preferred_location")), "recommended", "Preferred location",
+         "Job Preferences", "Lets recruiters filter you for the right city."),
+        (_has(p.get("resume_url")) or _has(p.get("linkedin_url")), "recommended",
+         "Resume upload or LinkedIn link",
+         "Resume", "External sources make the generated profile far richer."),
+    ]
+
+    missing = [
+        {"item": label, "severity": sev, "fix_on": where, "why": why}
+        for ok, sev, label, where, why in checks if not ok
+    ]
+    total = len(checks)
+    complete = total - len(missing)
+    pct = round(complete / total * 100) if total else 100
+    blocking = [x for x in missing if x["severity"] == "required"]
+
+    return {
+        "ready_to_generate": len(blocking) == 0,
+        "completeness_pct": pct,
+        "completed": complete,
+        "total_checks": total,
+        "blocking": blocking,            # must fix before generating
+        "missing": missing,              # all gaps, ranked by severity
+        "message": (
+            "Your profile data looks ready — generate when you like."
+            if not missing else
+            (f"Add {len(blocking)} required item(s) before generating."
+             if blocking else
+             f"You can generate now, but filling {len(missing)} more item(s) "
+             "first will produce a stronger profile — and save you a regeneration.")
+        ),
+        "cost_note": "This check is free. Editing your data is free. Only generating "
+                     "the AI profile uses a credit — so fix everything here first, then "
+                     "generate once.",
+    }
+
+
 # =========================================================================
 # HELPERS
 # =========================================================================
@@ -834,6 +926,38 @@ async def _safe_regenerate(
 # =========================================================================
 # PROFILE — OWNER READ
 # =========================================================================
+
+@router.get("/profile/me/readiness")
+async def get_profile_readiness(
+    student=Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    v5.5 — FREE pre-generation readiness check (NO AI, NO credit).
+    The LMS shows this as a checklist BEFORE the Generate button so the
+    student fixes missing/weak data first (free, in the LMS tabs) and then
+    generates once — instead of burning a credit, seeing gaps, and
+    regenerating. Reads straight from the database; costs nothing.
+    """
+    if student is None:
+        raise HTTPException(401, "Authentication required. Please log in and try again.")
+    try:
+        student_data = await asyncio.to_thread(_collect_all_sync, db, student.id)
+        readiness = await asyncio.to_thread(_profile_readiness, student_data)
+        METRICS["readiness_checks"] += 1
+        return readiness
+    except Exception:
+        logger.exception("Readiness check failed for student %s", student.id)
+        # Permissive fallback — never block a student from generating.
+        return {
+            "ready_to_generate": True,
+            "completeness_pct": None,
+            "missing": [],
+            "blocking": [],
+            "message": "Could not run the readiness check — you can still generate.",
+            "cost_note": "This check is free; only generating uses a credit.",
+        }
+
 
 @router.get("/profile/me")
 async def get_my_profile(
