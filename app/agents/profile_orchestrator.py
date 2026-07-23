@@ -175,14 +175,24 @@ class ProfileOrchestrator:
         # ── Step 3: Merge all data sources ──
         merged_data = self.data_merger.merge(student_data, resume_data, github_data, linkedin_data)
 
-        # ── Step 4: validated summary + rule-based skills (parallel) ──
+        # ── Step 4: validated summary + rule-based skills + AI polish (parallel) ──
         # v7.1 FIX: the enhancer summary (grounding gate, layered fallback,
         # hash cache) was previously computed and then immediately
         # OVERWRITTEN by a second raw summary_agent call — double LLM cost
         # per profile and the whole validation layer was thrown away.
-        summary, skills = await asyncio.gather(
+        # v7.3: the AI polisher joined this gather. Its inputs are only
+        # student_data + merged_data (projects, experience, skills, certs,
+        # personality) — it never reads the summary text — so it runs
+        # CONCURRENTLY with summary+skills instead of serially after them.
+        # polish_all uses a SYNCHRONOUS httpx client (up to 45s per call,
+        # v7.1 fix), so it stays wrapped in to_thread to keep the loop free.
+        # All polish post-processing (headline gate, project/experience
+        # patching, _two_role_headline) still happens AFTER all results are
+        # in — behavior identical apart from latency.
+        summary, skills, polished = await asyncio.gather(
             self.ai_enhancer.generate_summary(student_data, merged_data),
             self.skills_agent.generate(merged_data),
+            asyncio.to_thread(self.ai_polisher.polish_all, student_data, merged_data),
             return_exceptions=True,
         )
 
@@ -193,6 +203,9 @@ class ProfileOrchestrator:
             logger.error(f"Skills agent failed: {skills}")
             skills = {"technical_skills": [], "tools": [], "soft_skills": [],
                        "domain_knowledge": [], "ats_keywords": []}
+        if isinstance(polished, Exception):
+            logger.warning(f"AI Polisher failed (non-fatal): {polished}")
+            polished = {}
 
         # ── Step 5: Merge AI skills with multi-source skills ──
         all_skills = merged_data.get("all_skills", {})
@@ -217,14 +230,11 @@ class ProfileOrchestrator:
         # ── Step 7: Achievement engine ──
         achievements = self.achievement_engine.generate_all(merged_data, role_matches)
 
-        # ── Step 9: AI Polish — enhance projects, experience, headline ──
-        # v7.1 FIX: polish_all uses a SYNCHRONOUS httpx client (up to 45s
-        # per call). Called inline it froze the event loop — every other
-        # request on the Space stalled during each polish. to_thread keeps
-        # the loop free.
+        # ── Step 9: apply AI Polish results (computed concurrently in Step 4)
+        # — enhance projects, experience, headline. Applied only now, after
+        # the gather, so merged_data is never mutated while other agents read
+        # it, and the ordering (patch → v13 extraction → hashes) is unchanged.
         try:
-            polished = await asyncio.to_thread(
-                self.ai_polisher.polish_all, student_data, merged_data)
             if polished.get("polished_projects"):
                 projects_list = merged_data.get("projects", [])[:5]
                 for i, pp in enumerate(polished["polished_projects"]):
@@ -243,7 +253,7 @@ class ProfileOrchestrator:
                 achievements["headline"] = polished["polished_headline"]
             logger.info(f"AI Polisher: {'AI-enhanced' if polished.get('ai_polished') else 'rule-based'}")
         except Exception as e:
-            logger.warning(f"AI Polisher failed (non-fatal): {e}")
+            logger.warning(f"AI Polisher apply failed (non-fatal): {e}")
             polished = {}
 
         # ── v13: Beyond Work / cert / achievement descriptions (from the

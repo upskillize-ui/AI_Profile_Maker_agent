@@ -13,9 +13,27 @@ NEW in v5:
 """
 
 import logging
-from typing import Dict, Any, List
+import re
+from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# Legal suffixes stripped when normalizing company names for matching.
+_LEGAL_SUFFIXES = {
+    "pvt", "private", "ltd", "limited", "llp", "inc", "incorporated",
+    "corp", "corporation", "co", "company", "plc", "gmbh", "sa", "llc",
+}
+
+# Bare status words that must never win over a fuller title.
+_BARE_STATUS_TITLES = {"intern", "fresher", "trainee", "student", "employee"}
+
+_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+# Far-future sentinel for "Present"/"Current" end dates (year*12 + month form).
+_PRESENT = 10 ** 9
 
 
 class DataMerger:
@@ -95,27 +113,22 @@ class DataMerger:
         merged["education"] = education
 
         # ══════════════════════════════════════════════════
-        # WORK EXPERIENCE — cascading: Resume > LinkedIn > LMS fields
+        # WORK EXPERIENCE — true merge: Resume + LinkedIn + LMS fields
+        # Same position across sources (matched by normalized company +
+        # overlapping duration) is collapsed into ONE entry keeping the
+        # most recent / fullest information. Positions present in only
+        # one source always survive.
         # ══════════════════════════════════════════════════
-        work_experience = resume_data.get("work_experience", [])
-
-        # If resume had no work experience, try LinkedIn
-        if not work_experience and linkedin_data.get("experience"):
-            work_experience = []
-            for exp in linkedin_data["experience"]:
-                work_experience.append({
-                    "title": exp.get("title", ""),
-                    "company": exp.get("company", ""),
-                    "duration": exp.get("duration", ""),
-                    "description": exp.get("description", ""),
-                    "source": "linkedin",
-                })
-
-        # If still no work experience, use LMS profile fields
-        if not work_experience:
-            work_experience = lms_data.get("lms_work_experience", [])
-
+        work_experience = self._merge_work_experience(
+            resume_list=resume_data.get("work_experience", []),
+            linkedin_list=linkedin_data.get("experience", []),
+            lms_list=lms_data.get("lms_work_experience", []),
+        )
         merged["work_experience"] = work_experience
+
+        # ── Derived current designation — from the merged current role ──
+        # (LMS current_designation field becomes fallback only.)
+        self._derive_current_designation(personal, work_experience)
 
         # ── Projects (merge LMS + resume + GitHub) ──
         projects = list(merged.get("projects", []))
@@ -197,6 +210,209 @@ class DataMerger:
         merged["data_sources"] = sources
 
         return merged
+
+    # ══════════════════════════════════════════════════════════════════
+    # WORK EXPERIENCE MERGE HELPERS
+    # ══════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _norm_company(name: str) -> str:
+        """Normalize company name for matching: casefold, strip punctuation
+        and trailing legal suffixes (Pvt Ltd, Inc, LLP, ...)."""
+        s = re.sub(r"[^\w\s]", " ", (name or "").casefold())
+        tokens = [t for t in s.split() if t]
+        while tokens and tokens[-1] in _LEGAL_SUFFIXES:
+            tokens.pop()
+        return " ".join(tokens)
+
+    @staticmethod
+    def _is_current_duration(duration: str) -> bool:
+        d = (duration or "").casefold()
+        return "present" in d or "current" in d or "till date" in d or "ongoing" in d
+
+    @classmethod
+    def _duration_bounds(cls, duration: str) -> Tuple[Optional[int], Optional[int]]:
+        """Parse duration text into (start, end) as year*12+month ints.
+        'Present'/'Current' end → far-future sentinel. Unparseable → None."""
+        d = (duration or "").casefold()
+        points = []
+        for mon, yr in re.findall(r"(?:([a-z]{3,9})[.\s]*)?((?:19|20)\d{2})", d):
+            month = _MONTHS.get(mon[:3], 6) if mon else 6
+            points.append(int(yr) * 12 + month)
+        start = min(points) if points else None
+        if cls._is_current_duration(duration):
+            end = _PRESENT
+        else:
+            end = max(points) if points else None
+        return start, end
+
+    @classmethod
+    def _durations_match(cls, d1: str, d2: str) -> bool:
+        """True when two duration texts are equal or their date ranges overlap."""
+        n1 = re.sub(r"[^\w]", "", (d1 or "").casefold())
+        n2 = re.sub(r"[^\w]", "", (d2 or "").casefold())
+        if n1 and n1 == n2:
+            return True
+        if cls._is_current_duration(d1) and cls._is_current_duration(d2):
+            return True
+        s1, e1 = cls._duration_bounds(d1)
+        s2, e2 = cls._duration_bounds(d2)
+        if None in (s1, e1, s2, e2):
+            # No comparable dates on one side — only exact-text equality counts.
+            return False
+        return s1 <= e2 and s2 <= e1
+
+    @staticmethod
+    def _title_rank(title: str) -> tuple:
+        """Rank a title: bare status words lowest, senior titles higher,
+        longer/fuller titles win ties."""
+        t = (title or "").strip()
+        if not t:
+            return (0, 0, 0, 0)
+        words = t.casefold().split()
+        bare_status = 0 if (len(words) == 1 and words[0] in _BARE_STATUS_TITLES) else 1
+        tl = t.casefold()
+        if any(k in tl for k in ("senior", "lead", "head", "manager", "principal", "director")):
+            seniority = 3
+        elif any(k in tl for k in ("intern", "trainee", "apprentice")):
+            seniority = 1
+        else:
+            seniority = 2
+        return (1, bare_status, seniority, len(t))
+
+    @staticmethod
+    def _normalize_work_entry(raw: Dict, source: str) -> Optional[Dict]:
+        """Normalize any source's work entry to a common shape."""
+        if not isinstance(raw, dict):
+            return None
+        title = (raw.get("title") or raw.get("role") or raw.get("designation") or "").strip()
+        company = (raw.get("company") or raw.get("employer") or raw.get("organization") or "").strip()
+        if not title and not company:
+            return None
+        entry = {
+            "title": title,
+            "company": company,
+            "duration": (raw.get("duration") or raw.get("dates") or "").strip(),
+            "description": (raw.get("description") or "").strip(),
+            "source": source,
+            "sources": [source],
+        }
+        emp_type = (raw.get("employment_type") or raw.get("type") or "").strip()
+        if emp_type:
+            entry["employment_type"] = emp_type
+        return entry
+
+    @classmethod
+    def _same_position(cls, a: Dict, b: Dict) -> bool:
+        """Same position = same normalized company + overlapping/equal duration.
+        When both companies are missing, fall back to same title + duration."""
+        ca, cb = cls._norm_company(a.get("company", "")), cls._norm_company(b.get("company", ""))
+        if ca and cb:
+            if ca != cb:
+                return False
+        elif ca or cb:
+            return False
+        else:
+            # Neither has a company — require matching titles too.
+            if (a.get("title") or "").casefold().strip() != (b.get("title") or "").casefold().strip():
+                return False
+        return cls._durations_match(a.get("duration", ""), b.get("duration", ""))
+
+    @classmethod
+    def _merge_entry_into(cls, base: Dict, other: Dict) -> None:
+        """Fold `other` (same position, different source) into `base`,
+        keeping the most recent / fullest information."""
+        is_current = cls._is_current_duration(base.get("duration", "")) or \
+                     cls._is_current_duration(other.get("duration", ""))
+
+        # Title: for a CURRENT role conflict LinkedIn wins over the resume
+        # snapshot (resume = stale, LinkedIn = live); otherwise keep the
+        # fuller / more senior title.
+        if other.get("title"):
+            other_wins = cls._title_rank(other["title"]) > cls._title_rank(base.get("title", ""))
+            if is_current and other["source"] == "linkedin":
+                other_wins = True
+            elif is_current and base.get("source") == "linkedin" and base.get("title"):
+                other_wins = False
+            if other_wins:
+                base["title"] = other["title"]
+                if other.get("company"):
+                    base["company"] = other["company"]
+                if other.get("employment_type"):
+                    base["employment_type"] = other["employment_type"]
+                base["source"] = other["source"]
+
+        # Description: keep the longer one.
+        if len(other.get("description", "")) > len(base.get("description", "")):
+            base["description"] = other["description"]
+
+        # Duration: prefer the one with parseable dates, else the longer text.
+        bs, be = cls._duration_bounds(base.get("duration", ""))
+        os_, oe = cls._duration_bounds(other.get("duration", ""))
+        if (bs is None or be is None) and (os_ is not None and oe is not None):
+            base["duration"] = other["duration"]
+        elif len(other.get("duration", "")) > len(base.get("duration", "")) and os_ is not None:
+            base["duration"] = other["duration"]
+
+        if not base.get("employment_type") and other.get("employment_type"):
+            base["employment_type"] = other["employment_type"]
+        if other["sources"][0] not in base["sources"]:
+            base["sources"].append(other["sources"][0])
+
+    def _merge_work_experience(
+        self,
+        resume_list: List[Dict],
+        linkedin_list: List[Dict],
+        lms_list: List[Dict],
+    ) -> List[Dict]:
+        """True cross-source merge of work experience. Never drops a position
+        present in only one source. Result ordered current/most-recent first."""
+        merged: List[Dict] = []
+        for source, entries in (("resume", resume_list or []),
+                                ("linkedin", linkedin_list or []),
+                                ("lms", lms_list or [])):
+            for raw in entries:
+                entry = self._normalize_work_entry(raw, source)
+                if not entry:
+                    continue
+                for existing in merged:
+                    if self._same_position(existing, entry):
+                        self._merge_entry_into(existing, entry)
+                        break
+                else:
+                    merged.append(entry)
+
+        def sort_key(e):
+            start, end = self._duration_bounds(e.get("duration", ""))
+            current = 1 if self._is_current_duration(e.get("duration", "")) else 0
+            return (current, end if end is not None else -1, start if start is not None else -1)
+
+        merged.sort(key=sort_key, reverse=True)
+        return merged
+
+    def _derive_current_designation(self, personal: Dict, work_experience: List[Dict]) -> None:
+        """Overwrite personal.current_designation / current_employer with the
+        merged current (or most recent) role's full title and company. The LMS
+        designation field is only a fallback — but a bare status word never
+        replaces a fuller existing designation."""
+        if not work_experience:
+            return
+        current = next(
+            (w for w in work_experience if self._is_current_duration(w.get("duration", ""))),
+            work_experience[0],  # list is sorted most-recent first
+        )
+        title = (current.get("title") or "").strip()
+        if title:
+            existing = (personal.get("current_designation") or "").strip()
+            title_is_bare = title.casefold() in _BARE_STATUS_TITLES
+            existing_is_fuller = existing and existing.casefold() not in _BARE_STATUS_TITLES \
+                and len(existing) > len(title)
+            if not (title_is_bare and existing_is_fuller):
+                personal["current_designation"] = title
+        if (current.get("company") or "").strip():
+            personal["current_employer"] = current["company"].strip()
+        if current.get("employment_type"):
+            personal["employment_type"] = current["employment_type"]
 
     def _merge_skills(
         self,

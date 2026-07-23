@@ -466,7 +466,7 @@ NAME: {name}
 DESIGNATION: {designation or 'Not specified'}
 EDUCATION: {edu_summary or 'Not specified'}
 BIO: {bio or 'Not provided'}
-COURSES (LMS-verified): {', '.join(course_names[:6]) or 'None'}
+COURSES (LMS-recorded): {', '.join(course_names[:6]) or 'None'}
 CAREER GOAL: {career_goal or 'Not specified'}
 PERSONALITY TYPE (from psychometric test): {personality_type or 'Not taken'}
 PERSONALITY NOTES: {personality_summary or 'None'}

@@ -79,9 +79,10 @@ class DataCollector:
             students_id = self._resolve_students_id(user_id)
             sid = students_id if students_id is not None else user_id
 
-            # 11 concurrent reads
+            # 12 concurrent reads
             results = await asyncio.gather(
-                self._get_courses(user_id),             # 0  (resolves students.id itself)
+                # students.id pre-resolved once above — no per-method re-lookup
+                self._get_courses(user_id, students_id),  # 0  students.id
                 self._get_case_studies(sid),            # 1  students.id
                 self._get_assignments(sid),             # 2  students.id
                 self._get_capstones(user_id),           # 3  users.id
@@ -164,31 +165,104 @@ class DataCollector:
     # PERSONAL / IDENTITY (users table)
     # =====================================================================
 
+    # Identity columns _get_personal reads when present (verified names).
+    _PERSONAL_BASE_COLS = [
+        "id", "full_name", "email", "phone",
+        "profile_photo", "bio", "gender", "city", "state", "country",
+        "current_designation", "current_employer",
+        "work_experience_years",
+        "education_level", "edu_institution", "institution",
+        "field_of_study", "graduation_year", "edu_year",
+        "key_skills", "career_goals",
+        "preferred_salary_min", "preferred_salary_max",
+        "linkedin", "github", "portfolio", "twitter", "website",
+        "resume_url", "resume_name",
+        "languages_known", "hobbies", "industries",
+    ]
+
+    # "Open To" card fields — LMS deployments name these columns
+    # differently, so each clean output key maps to its candidate column
+    # names in preference order. Only columns that actually exist in
+    # `users` (per SHOW COLUMNS) ever reach the SELECT.
+    _OPEN_TO_CANDIDATES = {
+        "preferred_role":     ["preferred_role", "desired_role", "target_role"],
+        "expected_ctc":       ["expected_ctc", "ctc_expectation",
+                               "expected_salary", "desired_ctc"],
+        "current_ctc":        ["current_ctc"],
+        "notice_period":      ["notice_period"],
+        "employment_type":    ["employment_type"],
+        "work_mode":          ["work_mode", "preferred_mode", "job_mode"],
+        "preferred_location": ["preferred_location"],
+        "open_to_relocation": ["open_to_relocation"],
+    }
+
+    # Process-lifetime cache for SHOW COLUMNS FROM users.
+    _users_cols_cache: Optional[set] = None
+
+    @classmethod
+    def _users_columns(cls, db) -> set:
+        """Actual column names of `users`, lowercased. Cached at class
+        level after the first successful introspection; returns an empty
+        set (and retries next call) if the query fails."""
+        if cls._users_cols_cache is not None:
+            return cls._users_cols_cache
+        try:
+            rows = db.execute(text("SHOW COLUMNS FROM users")).all()
+            cols = {str(r[0]).lower() for r in rows}
+            if cols:
+                cls._users_cols_cache = cols
+            return cols
+        except Exception as e:
+            logger.warning(f"_users_columns introspection failed: {e}")
+            return set()
+
     async def _get_personal(self, user_id: int) -> Dict[str, Any]:
         try:
-            row = self.db.execute(text("""
-                SELECT
-                    id, full_name, email, phone,
-                    profile_photo, bio, gender, city, state, country,
-                    current_designation, current_employer,
-                    work_experience_years, employment_type,
-                    education_level, edu_institution, institution,
-                    field_of_study, graduation_year, edu_year,
-                    key_skills, career_goals, preferred_role,
-                    preferred_location, notice_period, open_to_relocation,
-                    preferred_salary_min, preferred_salary_max, work_mode,
-                    linkedin, github, portfolio, twitter, website,
-                    resume_url, resume_name,
-                    languages_known, hobbies, industries
-                FROM users
-                WHERE id = :uid
-                LIMIT 1
-            """), {"uid": user_id}).mappings().first()
+            # v6.5 "Open To" fix: build the SELECT from columns that
+            # actually exist, so a deployment naming the role/CTC/notice
+            # columns differently no longer 500s the whole query (which is
+            # why the card showed "—" despite the student filling it in).
+            cols = self._users_columns(self.db)
+            if cols:
+                select_cols = [c for c in self._PERSONAL_BASE_COLS if c in cols]
+                for candidates in self._OPEN_TO_CANDIDATES.values():
+                    select_cols.extend(c for c in candidates if c in cols)
+                if "id" not in select_cols:
+                    select_cols.insert(0, "id")
+            else:
+                # Introspection unavailable — fall back to the verified
+                # v6.3 static list (previous behavior).
+                select_cols = self._PERSONAL_BASE_COLS + [
+                    "employment_type", "preferred_role", "preferred_location",
+                    "notice_period", "open_to_relocation", "work_mode",
+                ]
+            # select_cols is a fixed whitelist intersected with SHOW COLUMNS
+            # output — identifiers only, never user input. The :uid value
+            # stays parameterized as always.
+            sql = ("SELECT " + ", ".join(select_cols) +
+                   " FROM users WHERE id = :uid LIMIT 1")
+            row = self.db.execute(text(sql), {"uid": user_id}).mappings().first()
 
             if not row:
                 return self._empty_personal(user_id)
 
             r = dict(row)
+
+            def _first(candidates: List[str]) -> str:
+                """First non-empty value among the candidate columns."""
+                for c in candidates:
+                    v = r.get(c)
+                    if v not in (None, ""):
+                        return str(v) if not isinstance(v, str) else v
+                return ""
+
+            # Each "Open To" field lands in its OWN normalized key —
+            # downstream never has to guess which slot holds what (this is
+            # what fixes the notice-period-under-CTC caption cross-wiring).
+            open_to = {
+                key: _first(candidates)
+                for key, candidates in self._OPEN_TO_CANDIDATES.items()
+            }
             return {
                 "user_id":               r["id"],
                 "full_name":             r.get("full_name") or "",
@@ -205,20 +279,24 @@ class DataCollector:
                 "current_designation":   r.get("current_designation") or "",
                 "current_employer":      r.get("current_employer") or "",
                 "work_experience_years": r.get("work_experience_years") or "",
-                "employment_type":       r.get("employment_type") or "",
+                "employment_type":       open_to["employment_type"],
                 "education_level":       r.get("education_level") or "",
                 "institution":           r.get("edu_institution") or r.get("institution") or "",
                 "field_of_study":        r.get("field_of_study") or "",
                 "graduation_year":       r.get("graduation_year") or r.get("edu_year") or "",
                 "key_skills":            r.get("key_skills") or "",
                 "career_goals":          r.get("career_goals") or "",
-                "preferred_role":        r.get("preferred_role") or "",
-                "preferred_location":    r.get("preferred_location") or "",
-                "notice_period":         r.get("notice_period") or "",
-                "open_to_relocation":    r.get("open_to_relocation") or "",
+                # Normalized "Open To" keys — one dedicated key per field,
+                # resolved from whichever candidate column this LMS uses.
+                "preferred_role":        open_to["preferred_role"],
+                "preferred_location":    open_to["preferred_location"],
+                "notice_period":         open_to["notice_period"],
+                "open_to_relocation":    open_to["open_to_relocation"],
+                "expected_ctc":          open_to["expected_ctc"],
+                "current_ctc":           open_to["current_ctc"],
                 "preferred_salary_min":  r.get("preferred_salary_min") or "",
                 "preferred_salary_max":  r.get("preferred_salary_max") or "",
-                "work_mode":             r.get("work_mode") or "",
+                "work_mode":             open_to["work_mode"],
                 "linkedin_url":          r.get("linkedin") or "",
                 "github_url":            r.get("github") or "",
                 "portfolio_url":         r.get("portfolio") or "",
@@ -238,7 +316,8 @@ class DataCollector:
     # ENROLLED COURSES
     # =====================================================================
 
-    async def _get_courses(self, user_id: int) -> List[Dict[str, Any]]:
+    async def _get_courses(self, user_id: int,
+                           students_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         enrollments columns (verified via DESCRIBE):
           id, student_id, course_id, completion_status, payment_status,
@@ -257,7 +336,9 @@ class DataCollector:
         enrollments, which is worse than returning nothing.
         """
         try:
-            sid = self._resolve_students_id(user_id)
+            # v6.5 fix: use the students.id collect_all resolved once up
+            # front; only resolve here when called standalone.
+            sid = students_id if students_id is not None else self._resolve_students_id(user_id)
             if sid is None:
                 logger.warning(
                     f"_get_courses: no students-table row for user_id={user_id}; "
@@ -1134,6 +1215,7 @@ class DataCollector:
             "field_of_study": "", "graduation_year": "",
             "key_skills": "", "career_goals": "", "preferred_role": "",
             "preferred_location": "", "notice_period": "", "open_to_relocation": "",
+            "expected_ctc": "", "current_ctc": "",
             "preferred_salary_min": "", "preferred_salary_max": "", "work_mode": "",
             "linkedin_url": "", "github_url": "", "portfolio_url": "",
             "website_url": "", "twitter_url": "",
@@ -1186,3 +1268,85 @@ class DataCollector:
     def _safe_default(self, exc, default):
         logger.warning(f"Collector task failed: {exc}")
         return default
+
+
+# =========================================================================
+# SCHEMA CONTRACT VALIDATION — called once at app startup
+# =========================================================================
+
+# Every table + key column the SQL in this file depends on. Derived from
+# the queries above — keep in sync when a query changes.
+# NOTE: punctuality_scores is known-optional (the collector already
+# degrades to status="table_missing"); a warning for it is informational.
+_SCHEMA_CONTRACT: Dict[str, List[str]] = {
+    "users":                        ["id", "full_name", "email",
+                                     "certifications", "psycho_result"],
+    "students":                     ["id", "user_id"],
+    "courses":                      ["id", "course_name", "category"],
+    "enrollments":                  ["id", "student_id", "course_id",
+                                     "completion_status",
+                                     "progress_percentage", "created_at"],
+    "case_studies":                 ["id", "title", "course_id"],
+    "case_study_submissions":       ["id", "student_id", "case_study_id",
+                                     "grade", "status", "submitted_at"],
+    "assignments":                  ["id", "title", "course_id"],
+    "assignment_submissions":       ["id", "student_id", "assignment_id",
+                                     "grade", "submitted_at"],
+    "capstones":                    ["id", "student_id", "title", "grade",
+                                     "total_marks", "submitted_at"],
+    "industry_sessions":            ["id", "title", "speaker"],
+    "industry_session_submissions": ["id", "student_id", "session_id",
+                                     "score", "submitted_at"],
+    "test_history":                 ["id", "student_id", "score_percentage",
+                                     "created_at"],
+    "vyom_sessions":                ["id", "user_id", "mode",
+                                     "started_at", "deleted_at"],
+    "vyom_answer_ratings":          ["session_id", "rating"],
+    "student_attendance":           ["user_id", "status",
+                                     "session_date", "lesson_id"],
+    "punctuality_scores":           ["student_id", "score", "band",
+                                     "computed_at"],
+    "quizzes":                      ["id", "title", "course_id"],
+    "quiz_attempts":                ["id", "student_id", "quiz_id",
+                                     "score", "total_marks", "submitted_at"],
+}
+
+
+def validate_lms_schema(db) -> List[str]:
+    """
+    Check that every table/column this collector's SQL depends on exists
+    in the connected LMS database. Returns human-readable warning strings
+    (empty list = healthy). NEVER raises — on any error it returns a
+    single "could not run" warning so startup is never blocked.
+    """
+    try:
+        rows = db.execute(text("""
+            SELECT TABLE_NAME, COLUMN_NAME
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+        """)).all()
+
+        live: Dict[str, set] = {}
+        for r in rows:
+            live.setdefault(str(r[0]).lower(), set()).add(str(r[1]).lower())
+
+        warnings: List[str] = []
+        if not live:
+            return ["schema validation could not run: information_schema "
+                    "returned no columns for the current database"]
+
+        for table, needed in _SCHEMA_CONTRACT.items():
+            live_cols = live.get(table)
+            if live_cols is None:
+                warnings.append(
+                    f"missing table `{table}` — its profile section will "
+                    f"render empty")
+                continue
+            missing = [c for c in needed if c.lower() not in live_cols]
+            if missing:
+                warnings.append(
+                    f"table `{table}` is missing column(s): "
+                    f"{', '.join(missing)} — queries against it may fail")
+        return warnings
+    except Exception as e:
+        return [f"schema validation could not run: {e}"]

@@ -361,8 +361,22 @@ def _invented_proper_nouns(output: str, source_vocab: set) -> List[str]:
             wl = w.lower().strip(".&'-")
             if wl in _SAFE_PROPER_NOUNS or wl in _GROUND_STOPWORDS:
                 continue
-            if wl not in source_vocab:
-                bad.append(w)
+            if wl in source_vocab:
+                continue
+            # v1.4 FIX: dotted/compound tokens — "B.Tech", "Node.js", "M.Sc".
+            # The vocab regex ([a-zA-Z][a-zA-Z0-9-]+) can never emit a token
+            # containing a dot, so "b.tech" was ALWAYS "invented" even when
+            # the degree sat in the source — this alone could reject every
+            # tier for a rich-data student and ship the minimal fallback.
+            undotted = wl.replace(".", "")
+            dot_parts_ok = all(
+                (p in source_vocab or p in _GROUND_STOPWORDS
+                 or p in _SAFE_PROPER_NOUNS or len(p) <= 2)
+                for p in wl.split(".") if p
+            )
+            if undotted in source_vocab or ("." in wl and dot_parts_ok):
+                continue
+            bad.append(w)
     return bad
 
 
@@ -682,18 +696,62 @@ class AIEnhancer:
         return summary.strip()
 
     def _minimal_fallback(self, source_data: Dict) -> str:
-        """Absolute last resort — a factual single line, never empty."""
-        personal = source_data.get("personal", {}) or {}
-        courses = source_data.get("courses", []) or []
-        course_names = [c.get("course_name", "") for c in courses if c.get("course_name")][:2]
+        """Absolute last resort — factual lines built from the STRONGEST
+        available data, never the weakest.
 
+        v1.4 FIX (prod 23 Jul 2026): a student with a current internship,
+        2 prior roles, education, and skills shipped with the bare
+        'Enrolled in … Career direction: …' line because this fallback
+        only ever looked at courses + raw goal. Now: work → education →
+        skills → courses (courses only if nothing stronger exists), and
+        the goal is normalized, never quoted verbatim."""
+        personal = source_data.get("personal", {}) or {}
         parts = []
-        if course_names:
-            parts.append(f"Enrolled in {' and '.join(course_names)} at Upskillize.")
-        goal = (personal.get("career_goals") or personal.get("preferred_role") or "")
-        goal = goal.strip().rstrip(".")   # avoid "years.." double-period
+
+        # 1. Strongest identity fact: current role → most recent work
+        cd = (personal.get("current_designation") or "").strip()
+        ce = (personal.get("current_employer") or "").strip()
+        work = source_data.get("work_experience", []) or []
+        if cd and ce:
+            parts.append(f"{cd} at {ce}.")
+        elif work and isinstance(work[0], dict) and work[0].get("title"):
+            w = work[0]
+            company = f" at {w['company']}" if w.get("company") else ""
+            parts.append(f"{w['title']}{company}.")
+
+        # 2. Education
+        edu = source_data.get("education", []) or []
+        if edu and isinstance(edu[0], dict) and edu[0].get("degree"):
+            e = edu[0]
+            year = f" ({e['year']})" if e.get("year") else ""
+            parts.append(f"{e['degree']}{year}.")
+
+        # 3. Top skills
+        allsk = source_data.get("all_skills", {}) or {}
+        skills = [s.get("name") if isinstance(s, dict) else str(s)
+                  for s in (allsk.get("technical_skills") or [])[:3]]
+        skills = [s for s in skills if s]
+        if skills:
+            parts.append(f"Skills include {', '.join(skills)}.")
+
+        # 4. Courses ONLY when nothing stronger exists — enrollment is
+        # never the lead for a student who has real experience.
+        if not parts:
+            courses = source_data.get("courses", []) or []
+            course_names = [c.get("course_name", "") for c in courses
+                            if c.get("course_name")][:2]
+            if course_names:
+                parts.append(f"Enrolled in {' and '.join(course_names)} at Upskillize.")
+
+        # 5. One normalized direction — never the raw aspiration quote.
+        goal = (personal.get("preferred_role") or personal.get("career_goals") or "").strip().rstrip(".")
+        goal = re.sub(r"^(?:to\s+be(?:come)?\s+(?:an?\s+)?|i\s+want\s+to\s+(?:be(?:come)?\s+)?(?:an?\s+)?)",
+                      "", goal, flags=re.IGNORECASE)
+        goal = re.sub(r"\s+in\s+\d+\s*(?:to|-|–)\s*\d+\s*years?$", "", goal,
+                      flags=re.IGNORECASE).strip()
         if goal:
-            parts.append(f"Career direction: {goal}.")
+            suffix = "" if goal.lower().rstrip("s").endswith("role") else " roles"
+            parts.append(f"Targeting {goal}{suffix}.")
 
         if not parts:
             return "Upskillize learner building career readiness through structured coursework."

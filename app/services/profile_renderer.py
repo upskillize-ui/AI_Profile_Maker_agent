@@ -24,6 +24,10 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 logger = logging.getLogger(__name__)
 
+# v12.9 — exported template version; stamped into the rendered HTML head as
+# <!-- piq:tpl=... --> so ops can tell which template produced a stored page.
+TEMPLATE_VERSION = "12.9.0"
+
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 
 _env = Environment(
@@ -408,6 +412,9 @@ def _combine_assessments(student_data: Dict) -> List[Dict]:
             "max_score":   max_score,
             "grade":       t.get("grade") or "",
             "kind":        "exam",
+            # v12.9 — carry attempt metadata through normalization so the
+            # template can append " · Attempt {n}" to the context line.
+            "attempt":     t.get("attempt") or t.get("attempt_number") or t.get("attempts"),
         })
 
     for q in (student_data.get("quiz_scores", []) or []):
@@ -430,6 +437,8 @@ def _combine_assessments(student_data: Dict) -> List[Dict]:
             "max_score":   max_score,
             "grade":       "Pass" if q.get("passed") else ("Fail" if q.get("passed") is False else ""),
             "kind":        "quiz",
+            # v12.9 — carry attempt metadata through normalization (see above)
+            "attempt":     q.get("attempt") or q.get("attempt_number") or q.get("attempts"),
         })
 
     # Best attempt per quiz/exam (locked rule) — retakes collapse into one
@@ -628,6 +637,9 @@ class ProfileRenderer:
         profile_data: Dict[str, Any],
         slug: str,
         visibility: str = "public",
+        show_ats: bool = False,
+        source_fingerprint: str | None = None,
+        og_card_url: str | None = None,
     ) -> str:
         personal = student_data.get("personal", {})
         agent_base = os.environ.get("BASE_URL", "https://upskill25-ai-enhancer.hf.space")
@@ -685,7 +697,11 @@ class ProfileRenderer:
         cohort_comparison = _compute_cohort_comparison(perf_snapshot, profile_data.get("performance_data", {}) or {})
         mock_domains      = _compute_mock_domains(student_data, profile_data, perf_snapshot)
         achievement_cards = _compute_achievement_cards(student_data, profile_data)
-        generated_date    = datetime.now(timezone.utc).strftime("%d %b %Y").upper()
+        _generated_at     = datetime.now(timezone.utc)
+        generated_date    = _generated_at.strftime("%d %b %Y").upper()
+        # v12.7 — full ISO timestamp so the template can render "Generated" in the
+        # viewer's local timezone client-side (server text remains the fallback).
+        generated_at_iso  = _generated_at.isoformat()
 
         # ── v13: personalized descriptions (from the AI polish call, with a
         # deterministic fallback already applied upstream). ──
@@ -739,6 +755,17 @@ class ProfileRenderer:
                 cohort_label = f"Top {int(cohort_percentile)}%"
             except (TypeError, ValueError):
                 cohort_label = str(cohort_percentile)
+
+        # ── v12.9 ATS — normalize the payload for the owner-only readiness UI.
+        # role_matcher.calculate_ats_score emits "total_score"; older stored
+        # profiles carry only the legacy "score" key. Normalize once here so
+        # the template can always read ats.total_score. The whole dict passes
+        # through untouched otherwise (components/band/tips render when present).
+        _ats_raw = profile_data.get("ats_data", {}) or {}
+        ats = None
+        if _ats_raw:
+            ats = dict(_ats_raw)
+            ats["total_score"] = _ats_raw.get("total_score", _ats_raw.get("score", 0))
 
         # Interview readiness KPIs
         mock_int_avg   = perf_snapshot["axes"][4]["score"] if len(perf_snapshot["axes"]) > 4 else 0
@@ -794,7 +821,9 @@ class ProfileRenderer:
             "capstone_projects":    ranked["capstones"],
             "case_studies_raw":     ranked["case_studies"],
             "assignments_raw":      ranked["assignments"],
-            "test_scores_raw":      combined_assessments,
+            # v12.9 FIX — was `combined_assessments` (the PRE-floor list), so the
+            # Assessments tab ignored the >=60 curation floor every other tab got.
+            "test_scores_raw":      ranked["assessments"],
             "mock_interviews_raw":  ranked["mock_interviews"],
             "mock_tests_raw":       ranked["mock_tests"],
             "industry_sessions_raw": ranked["industry"],
@@ -820,11 +849,21 @@ class ProfileRenderer:
             },
             "mock_domains": mock_domains,
 
+            # v12.9 ATS — owner-only readiness UI. show_ats defaults False so
+            # recruiter/public renders contain zero ATS markup; `ats` is the
+            # normalized ats_data dict (total_score guaranteed) or None.
+            "show_ats":           bool(show_ats),
+            "ats":                ats,
+            "template_version":   TEMPLATE_VERSION,
+            "source_fingerprint": source_fingerprint,
+            "og_card_url":        og_card_url,
+
             # Meta
             "computed":         computed,
             "perf_snapshot":    perf_snapshot,
             "activity_counts":  activity_counts,
             "generated_date":   generated_date,
+            "generated_at_iso": generated_at_iso,
             "data_sources":     profile_data.get("data_sources", []) or [],
             "slug":             slug,
             "visibility":       visibility,
@@ -848,7 +887,9 @@ class ProfileRenderer:
             "avg_test_score":    computed.get("avg_test_score", 0),
             "improvement_pct":   computed.get("improvement_pct", 0),
             "consistency_score": computed.get("consistency_score", 0),
-            "ats_score":         (profile_data.get("ats_data", {}) or {}).get("score", 0),
+            # v12.9 FIX — role_matcher emits "total_score"; the old "score" read
+            # returned 0 for every freshly generated profile.
+            "ats_score":         (ats or {}).get("total_score", 0),
             "top_role":          (profile_data.get("role_matches", [{}]) or [{}])[0],
         }
 

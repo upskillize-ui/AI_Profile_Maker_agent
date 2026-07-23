@@ -18,8 +18,6 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "mysql+pymysql://root:password@localhost:3306/upskillize_lms"
 
     REDIS_URL: str = "redis://localhost:6379/0"
-    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
     # AI — only used for professional summary (Haiku = cheapest)
     ANTHROPIC_API_KEY: str = ""

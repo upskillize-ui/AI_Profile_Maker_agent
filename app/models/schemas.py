@@ -12,6 +12,10 @@ from typing import Optional, List, Dict, Any
 
 class CorporateToggleRequest(BaseModel):
     visible: bool
+    # v5.4 — publish gate: when the student's ATS Readiness is below 60,
+    # publishing asks them to improve first. Passing confirm_low_score=true
+    # publishes anyway (student's choice is always respected).
+    confirm_low_score: bool = False
 
 class ProfileGenerateRequest(BaseModel):
     student_id: Optional[int] = None

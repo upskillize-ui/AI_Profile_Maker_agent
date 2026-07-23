@@ -1,12 +1,65 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from app.api.routes import router
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup checks — best-effort only. Nothing here may block or
+    prevent the app from serving traffic."""
+
+    # (a) LMS schema validation — warns loudly if expected tables/columns
+    # are missing so integration drift is visible at boot, not at first
+    # student request. Defensive: validate_lms_schema is landing in a
+    # parallel change to data_collector, so both the import and the call
+    # are guarded.
+    try:
+        from app.services import data_collector as _dc
+        validate = getattr(_dc, "validate_lms_schema", None)
+        if validate is None:
+            logger.info("validate_lms_schema not available — skipping LMS schema check")
+        else:
+            db = None
+            try:
+                from app.api.deps import SessionLocal  # built from app.models.db_models factory
+                db = SessionLocal()
+                warnings = validate(db)
+                for w in (warnings or []):
+                    logger.warning("LMS schema check: %s", w)
+                if not warnings:
+                    logger.info("LMS schema check passed")
+            finally:
+                if db is not None:
+                    try:
+                        db.close()
+                    except Exception:
+                        pass
+    except Exception as e:
+        logger.warning("LMS schema check skipped (non-fatal): %s", e)
+
+    # (b) Template version — helps correlate rendered profiles with the
+    # template that produced them.
+    try:
+        from app.services import profile_renderer as _pr
+        tv = getattr(_pr, "TEMPLATE_VERSION", None)
+        if tv is not None:
+            logger.info("template version: %s", tv)
+    except Exception as e:
+        logger.warning("Could not read template version: %s", e)
+
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="AI Profile Builder & Rubric Grading Engine for Upskillize",

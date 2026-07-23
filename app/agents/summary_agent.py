@@ -23,6 +23,7 @@ v11 fixes from v10:
 """
 
 import os
+import re
 import hashlib
 import logging
 import httpx
@@ -49,6 +50,7 @@ BANNED_PHRASES = [
     "cutting-edge", "state-of-the-art", "next-generation",
     "leveraging", "synergy", "synergistic",
     "holistic", "comprehensive understanding",
+    "verified",   # 23 Jul: the word "verified" must never appear anywhere on the profile
 ]
 
 
@@ -351,6 +353,15 @@ class SummaryAgent:
 
         sections.append(f"""Write the Summary section for a candidate profile on Upskillize. Read all the data below. Write 3 to 5 bullet points — honest, specific, grounded in facts.
 
+Structure the bullets on the 4-beat recruiter formula (a recruiter scans this in 7 seconds):
+  Beat 1 — WHO NOW: current or most recent role + core stack/strength.
+  Beat 2 — DISTINCTIVE INTERSECTION: the single thread connecting their skills, training, and
+    experience (e.g. software skills + banking/payments coursework = an engineer who understands
+    payments). State it factually from the data — no hype adjectives.
+  Beat 3 — BEST PROOF: the 2-3 strongest proven facts only (best score with its name, shipped
+    project, certification). Curate ruthlessly — weak or average numbers are omitted, never explained.
+  Beat 4 — ONE DIRECTION: the single target role/domain the evidence supports.
+
 {lead_instructions.get(lead, lead_instructions['education'])}""")
 
         # Rules (always included, compact)
@@ -371,7 +382,14 @@ class SummaryAgent:
 - Course scores are course scores. Skills = "trained in" or "skills include"; only "working with" if
   currently employed using them. Completing courses is completing courses — no "deep specialisation".
 - If someone is an intern (real internship at a real company), say intern. If fresher, don't pretend
-  they're experienced. The summary must survive the interview — nothing exaggerated.""")
+  they're experienced. The summary must survive the interview — nothing exaggerated.
+- ONE COHERENT DIRECTION ONLY: if the career goal, target role, and LinkedIn headline disagree,
+  pick the single direction the evidence best supports and state only that one. Never let the
+  summary point at two different careers.
+- Never quote the raw goal text verbatim. Rephrase aspirations professionally: "To be a Senior
+  Software Engineer in 3 to 5 years" becomes "targeting software engineering roles".
+- NEVER lead with enrollment. Being enrolled is not an achievement — mention a course only when
+  there is completed work or a score behind it.""")
 
         # Banned phrases
         banned_sample = ", ".join(f'"{p}"' for p in BANNED_PHRASES[:12])
@@ -432,11 +450,11 @@ Example B (working professional, fewer scores):
 • Completed Banking Foundation on Upskillize; scored 68% on the NPCI case study.
 • Adaptability-type psychometric profile — flexible, collaborative in team settings.
 
-Example B (fresher with multiple short roles):
+Example B (fresher with multiple short roles — note the intersection bullet):
 • Worked as Web Development Intern at Aagaz Training Center (3 months), then Operations Support at Startek (5 months).
-• B.Tech in CSE from VIT (2024), trained in JavaScript, React, and Node.js.
+• B.Tech in CSE from VIT (2024) — combines JavaScript, React, and Node.js skills with banking and payments coursework.
 • Course scores: 74% best assessment, 65% on UPI Fraud Detection case study.
-• Career direction: Software Developer in a bank."""
+• Targeting software developer roles in banking technology."""
 
         elif archetype == "new_student":
             return """Example A (very sparse — just enrolled):
@@ -584,8 +602,10 @@ Example B (active learner with personality data):
             return self._courses_bullet(ctx, seed)
 
         if lead == "goals":
-            goal = ctx["preferred_role"] or ctx["career_goals"]
-            return f"• Targeting: {goal[:100]}."
+            goal = self._normalize_goal(ctx["preferred_role"] or ctx["career_goals"])
+            if goal:
+                suffix = "" if goal.lower().rstrip("s").endswith("role") else " roles"
+                return f"• Targeting {goal[:100]}{suffix}."
 
         # education (default)
         if ctx["edu_str"]:
@@ -659,13 +679,14 @@ Example B (active learner with personality data):
         return ""
 
     def _trajectory_bullet(self, ctx: Dict, seed: int) -> str:
-        goal = ctx["preferred_role"] or ctx["career_goals"]
+        goal = self._normalize_goal(ctx["preferred_role"] or ctx["career_goals"])
         if goal:
             g = goal[:100]
+            suffix = "" if g.lower().rstrip("s").endswith("role") else " roles"
             return self._pick([
-                f"• Targeting: {g}.",
+                f"• Targeting {g}{suffix}.",
                 f"• Career direction: {g}.",
-                f"• Goal: {g.lower()}.",
+                f"• Working toward {g}{suffix}.",
             ], seed + 8)
         # v11.1: dropped the improvement% / consistency% fallbacks — no weak
         # aggregate percentages in the summary.
@@ -674,6 +695,16 @@ Example B (active learner with personality data):
     # ═══════════════════════════════════════════════════════════
     #  UTILITIES
     # ═══════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _normalize_goal(goal: str) -> str:
+        """v12 — never surface a raw aspiration quote. 'To be a Senior
+        Software Engineer in 3 to 5 years' → 'Senior Software Engineer'."""
+        g = (goal or "").strip().rstrip(".")
+        g = re.sub(r"^(?:to\s+be(?:come)?\s+(?:an?\s+)?|i\s+want\s+to\s+(?:be(?:come)?\s+)?(?:an?\s+)?)",
+                   "", g, flags=re.IGNORECASE)
+        g = re.sub(r"\s+in\s+\d+\s*(?:to|-|–)\s*\d+\s*years?$", "", g, flags=re.IGNORECASE)
+        return g.strip()
 
     @staticmethod
     def _clean_bullets(text: str, max_bullets: int = 5) -> str:

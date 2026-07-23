@@ -1,9 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- piq:tpl={{ template_version }} fp={{ source_fingerprint or '' }} -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ student_name or 'Upskillize' }} — Upskillize AI Profile</title>
+{# ── v12.8 Link-preview (Open Graph + Twitter) tags — when this profile is
+     shared in WhatsApp / LinkedIn / Teams, the link unfurls as a card with
+     the student's name, headline, and a short description instead of a
+     bare URL. Static tags: no JS needed, crawlers read them directly. ── #}
+{% set _og_desc = (student_name or 'Upskillize learner') ~ "'s official learner profile on the Upskillize LMS — skills, certifications, and validated performance in one place." %}
+<meta property="og:type" content="profile">
+<meta property="og:site_name" content="Upskillize">
+<meta property="og:title" content="{{ student_name or 'Upskillize Learner' }}{% if headline %} — {{ headline }}{% endif %} | Upskillize Profile">
+<meta property="og:description" content="{{ _og_desc }}">
+{# v12.9 — prefer the pre-rendered OG card image when the caller provides one #}
+{% if og_card_url %}<meta property="og:image" content="{{ og_card_url }}">{% elif student_photo_url and student_photo_url.startswith('http') %}<meta property="og:image" content="{{ student_photo_url }}">{% endif %}
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{ student_name or 'Upskillize Learner' }}{% if headline %} — {{ headline }}{% endif %} | Upskillize Profile">
+<meta name="twitter:description" content="{{ _og_desc }}">
+{% if og_card_url %}<meta name="twitter:image" content="{{ og_card_url }}">{% elif student_photo_url and student_photo_url.startswith('http') %}<meta name="twitter:image" content="{{ student_photo_url }}">{% endif %}
+<meta name="description" content="{{ _og_desc }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -90,10 +107,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 main{max-width:1200px;margin:0 auto;padding:0 32px;}
 section{padding:56px 0;border-bottom:1px solid var(--hairline);scroll-margin-top:130px;}
 section:last-of-type{border-bottom:none;}
-.section-head{display:flex;align-items:baseline;justify-content:space-between;gap:24px;margin-bottom:24px;}
-.section-num{font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);letter-spacing:0.16em;font-weight:500;margin-bottom:6px;display:block;}
+.section-head{display:flex;align-items:baseline;gap:24px;margin-bottom:24px;}
 .section-title{font-family:'Playfair Display',serif;font-size:32px;font-weight:700;color:var(--navy);letter-spacing:-0.02em;line-height:1.1;}
-.section-sub{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-soft);align-self:end;}
 .section-rule{height:1px;background:var(--ink);margin-bottom:24px;opacity:0.15;}
 
 /* SUMMARY */
@@ -293,7 +308,7 @@ section:last-of-type{border-bottom:none;}
 .cert-name{font-family:'Playfair Display',serif;font-size:14px;font-weight:600;color:var(--navy);line-height:1.3;}
 .cert-issuer{font-size:11px;color:var(--ink-soft);margin-top:3px;}
 .cert-year{font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);font-weight:500;}
-.verified-badge{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#C8992A,#F5B800);color:var(--navy-deep);font-family:'DM Mono',monospace;font-size:8px;font-weight:700;padding:2px 7px;border-radius:100px;letter-spacing:0.1em;text-transform:uppercase;margin-left:6px;vertical-align:middle;}
+.cred-badge{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,#C8992A,#F5B800);color:var(--navy-deep);font-family:'DM Mono',monospace;font-size:8px;font-weight:700;padding:2px 7px;border-radius:100px;letter-spacing:0.1em;text-transform:uppercase;margin-left:6px;vertical-align:middle;}
 
 /* BEYOND WORK */
 .beyond-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:32px;align-items:start;}
@@ -325,9 +340,53 @@ section:last-of-type{border-bottom:none;}
 .hobby-aside{font-size:12px;color:var(--ink-soft);line-height:1.65;padding-top:14px;border-top:1px solid var(--hairline);}
 .hobby-aside strong{color:var(--navy);font-weight:600;}
 
+{% if show_ats %}
+/* v12.9 ATS — owner-only readiness UI. This whole block is Jinja-gated on
+   show_ats so recruiter/public HTML ships with ZERO ATS markup or styles. */
+.ats-hero-chip{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:6px 14px;border-radius:100px;background:rgba(200,153,42,0.12);border:1px solid rgba(200,153,42,0.35);color:rgba(255,255,255,0.85);font-size:12px;font-weight:500;transition:all 200ms ease;position:relative;}
+.ats-hero-chip:hover{background:rgba(200,153,42,0.2);border-color:var(--gold-bright);}
+.ats-hero-chip .ats-chip-num{font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--gold-bright);line-height:1;}
+.ats-dna-tile{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;padding:8px 14px;border-radius:10px;background:rgba(200,153,42,0.08);border:1px solid rgba(200,153,42,0.25);position:relative;transition:all 200ms ease;}
+.ats-dna-tile:hover{background:rgba(200,153,42,0.15);border-color:var(--gold-bright);}
+.ats-dna-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.6);}
+.ats-dna-num{font-family:'DM Mono',monospace;font-size:16px;font-weight:600;color:var(--gold-bright);line-height:1;}
+/* v12.9.1 ATS — sub-60 coaching note */
+.ats-improve-note{background:rgba(232,82,26,0.07);border:1px solid rgba(232,82,26,0.25);border-radius:10px;padding:12px 16px;font-size:12.5px;line-height:1.6;color:var(--ink-soft);margin:4px 0 14px;}
+.ats-improve-note b{color:var(--orange);font-weight:600;}
+.ats-card{background:var(--paper);border:1px solid var(--hairline);border-left:3px solid var(--gold);border-radius:14px;padding:28px 32px;margin-bottom:28px;}
+.ats-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:18px;}
+.ats-card-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:600;color:var(--navy);}
+.ats-card-sub{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-soft);}
+.ats-score-row{display:flex;align-items:baseline;gap:18px;padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid var(--hairline);}
+.ats-score-big{font-family:'DM Mono',monospace;font-size:52px;font-weight:500;color:var(--gold);line-height:1;}
+.ats-score-suffix{font-size:18px;color:var(--ink-soft);font-weight:400;margin-left:4px;}
+.ats-band{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#8A6A1D;font-weight:500;padding:6px 12px;background:rgba(200,153,42,0.12);border-radius:999px;}
+.ats-bars{display:flex;flex-direction:column;gap:14px;margin-bottom:20px;}
+.ats-bar-row{display:grid;grid-template-columns:170px 1fr auto;gap:14px;align-items:center;}
+.ats-bar-label{font-size:12px;font-weight:500;color:var(--navy);}
+.ats-bar-track{height:8px;background:rgba(26,39,68,0.06);border-radius:100px;overflow:hidden;}
+.ats-bar-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold-bright));border-radius:100px;}
+.ats-bar-val{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-soft);white-space:nowrap;}
+.ats-kw-block{margin-bottom:16px;}
+.ats-kw-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px;font-weight:600;}
+.ats-kw-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.ats-kw-chip{display:inline-block;padding:5px 12px;border-radius:100px;font-size:12px;font-weight:500;}
+.ats-kw-chip.matched{background:rgba(200,153,42,0.1);color:#8A6A1D;border:1px solid rgba(200,153,42,0.3);}
+.ats-kw-chip.missing{background:transparent;color:var(--ink-soft);border:1px dashed rgba(26,39,68,0.3);}
+.ats-tips{list-style:none;padding:14px 0 0;margin:0;border-top:1px solid var(--hairline);}
+.ats-tips li{position:relative;padding:6px 0 6px 20px;font-size:13px;color:var(--ink-soft);line-height:1.6;}
+.ats-tips li::before{content:'';position:absolute;left:2px;top:14px;width:6px;height:6px;border-radius:50%;background:var(--gold);}
+@media (max-width:720px){.ats-bar-row{grid-template-columns:110px 1fr auto;}.ats-card{padding:22px 20px;}}
+{% endif %}
+
 /* EMPTY STATE */
 .empty-tile{background:var(--paper);border:1px dashed rgba(26,39,68,0.18);border-radius:12px;padding:24px 28px;color:var(--ink-soft);font-size:13px;line-height:1.6;}
 .empty-tile b{display:block;color:var(--navy);font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:4px;}
+/* v12.7 — 3-layer empty state: heading → point-wise topic lines → muted auto-surface line */
+.empty-tile ul.empty-points{list-style:none;margin:6px 0 10px;padding:0;}
+.empty-tile .empty-points li{position:relative;padding-left:18px;margin-bottom:5px;color:var(--ink-soft);}
+.empty-tile .empty-points li::before{content:'';position:absolute;left:2px;top:8px;width:6px;height:6px;border-radius:50%;background:var(--gold);}
+.empty-tile .empty-auto{display:block;font-size:12px;color:var(--ink-soft);opacity:0.72;}
 
 /* POWERED BY */
 .powered-by{background:var(--navy-deep);color:#fff;padding:40px 32px;}
@@ -412,13 +471,16 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
 
 {# ─── Dual-score macro: renders faculty + AI agent scores side-by-side
      Falls back gracefully when only one score is present. ─── #}
-{# v12.5 fmt_date — '2026-05-08T17:53:42' → '8 May 2026' #}
+{# v12.5 fmt_date — '2026-05-08T17:53:42' → '8 May 2026'
+   v12.7 — output wrapped in <time class="lts" datetime="..."> so client-side JS re-renders
+   the date in the VIEWER'S local timezone (UTC-naive strings treated as UTC). Server text
+   stays as the no-JS fallback. #}
 {% macro fmt_date(s) -%}
   {%- if not s -%}{%- else -%}
     {%- set d = (s|string).split('T')[0] -%}
     {%- if d|length >= 10 -%}
       {%- set months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] -%}
-      {{ d[8:10]|int }} {{ months[(d[5:7]|int) - 1] }} {{ d[0:4] }}
+      <time class="lts" datetime="{{ s }}">{{ d[8:10]|int }} {{ months[(d[5:7]|int) - 1] }} {{ d[0:4] }}</time>
     {%- else -%}{{ d }}{%- endif -%}
   {%- endif -%}
 {%- endmacro %}
@@ -463,7 +525,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="masthead-left">
     <span class="masthead-brand">Upskillize Solutions</span>
     <span class="masthead-divider"></span>
-    <span class="ai-badge">AI Profile</span>
+    <span class="ai-badge">Upskillize LMS Record</span>
   </div>
  <div style="color:rgba(255,255,255,0.5);"></div>
 </div>
@@ -498,6 +560,11 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         {% if github_url %}<a href="{{ github_url }}" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.1 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.2.9 2.4v3.5c0 .3.1.7.8.6A12 12 0 0 0 12 .3"/></svg>GitHub</a>{% endif %}
         {% if portfolio_url %}<a href="{{ portfolio_url }}" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Portfolio</a>{% endif %}
       </div>
+      {# v12.9.1 ATS — owner-only hero chip; the badge treatment is earned:
+         shown only at 60+. Below 60 the Readiness & Fit card coaches instead. #}
+      {% if show_ats and ats and not ats.locked and (ats.total_score|int) >= 60 %}
+      <a class="ats-hero-chip" href="#readiness">ATS Readiness · <span class="ats-chip-num">{{ ats.total_score|int }}</span></a>
+      {% endif %}
     </div>
 
     <div class="dna-card">
@@ -523,6 +590,10 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         </svg>
       </div>
       <div class="dna-foot">Average Score <span class="dna-foot-val">{{ perf_snapshot.average }}</span></div>
+      {# v12.9.1 ATS — owner-only snapshot tile; shown only at 60+ (earned badge) #}
+      {% if show_ats and ats and not ats.locked and (ats.total_score|int) >= 60 %}
+      <a class="ats-dna-tile" href="#readiness"><span class="ats-dna-label">ATS Readiness</span><span class="ats-dna-num">{{ ats.total_score|int }}</span></a>
+      {% endif %}
     </div>
   </div>
 </header>
@@ -542,14 +613,16 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
 <!-- COMMAND BAR (deep-links to perf tabs) -->
 <div class="command-bar-wrap">
   <div class="command-bar">
+    {# v12.7 — chip order MUST mirror the locked 11-tab Top Performance order below #}
     <a href="#performance" class="cmd-chip" onclick="goToPerf('courses');return false;">Enrolled Courses</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('capstones');return false;">Capstones</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('casestudies');return false;">Case Studies</a>
     <a href="#performance" class="cmd-chip" onclick="goToPerf('assignments');return false;">Assignments</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('casestudies');return false;">Case Studies</a>
     <a href="#performance" class="cmd-chip" onclick="goToPerf('assessments');return false;">Assessments</a>
-    <a href="#performance" class="cmd-chip" onclick="goToPerf('mock-int');return false;">Mock Interviews</a>
     <a href="#performance" class="cmd-chip" onclick="goToPerf('mock-test');return false;">Mock Tests</a>
     <a href="#performance" class="cmd-chip" onclick="goToPerf('industry');return false;">Industry Sessions</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('mock-int');return false;">Mock Interviews</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('capstones');return false;">Capstones</a>
+    <a href="#performance" class="cmd-chip" onclick="goToPerf('punctuality');return false;">Punctuality</a>
     <a href="#performance" class="cmd-chip" onclick="goToPerf('hack');return false;">Hackathons</a>
     {% if cohort_label %}<a href="#performance" class="cmd-chip" onclick="goToPerf('cohort');return false;"><span class="cmd-chip-num wide">{{ cohort_label }}</span>Cohort</a>{% endif %}
   </div>
@@ -560,8 +633,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
 <!-- ═══ 01 SUMMARY ═══ -->
 <section id="summary">
   <div class="section-head">
-    <div><span class="section-num">01 / Intelligence Brief</span><h2 class="section-title">Professional Summary</h2></div>
-    <span class="section-sub">AI-Generated</span>
+    <h2 class="section-title">Professional Summary</h2>
   </div>
   <div class="section-rule"></div>
   {% if has_summary %}
@@ -576,15 +648,14 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% endif %}
     </ul>
   {% else %}
-    <div class="empty-tile"><b>Professional summary pending</b>Generate or regenerate your profile to populate this section.</div>
+    <div class="empty-tile"><b>Professional summary pending</b><ul class="empty-points"><li>A recruiter-grade positioning statement, synthesized from your resume, LinkedIn, GitHub, and LMS record.</li></ul><span class="empty-auto">Generate or regenerate your profile to populate this section.</span></div>
   {% endif %}
 </section>
 
 <!-- ═══ 02 WORK & LEARNING ═══ -->
 <section id="work">
   <div class="section-head">
-    <div><span class="section-num">02 / Background</span><h2 class="section-title">Work &amp; Learning</h2></div>
-    <span class="section-sub">Experience · Projects · Education · Skills</span>
+    <h2 class="section-title">Work &amp; Learning</h2>
   </div>
   <div class="section-rule"></div>
   <div class="itab-bar">
@@ -607,7 +678,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         </div>
         {% endfor %}
       </div>
-    {% else %}<div class="empty-tile"><b>No work experience yet</b>Add roles, internships, or freelance work on your LMS profile.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No work experience yet</b><ul class="empty-points"><li>Internships, part-time roles, freelance — every real-world hour counts.</li><li>Even a short stint shows the initiative recruiters look for.</li></ul><span class="empty-auto">Add roles, internships, or freelance work on your LMS profile.</span></div>{% endif %}
   </div>
 
   <div class="itab-panel" data-tab-group="work" data-tab-id="projects">
@@ -622,7 +693,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         </div>
         {% endfor %}
       </div>
-    {% else %}<div class="empty-tile"><b>No projects yet</b>Connect GitHub or add projects on the LMS.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No projects yet</b><ul class="empty-points"><li>Projects show what you can build, not just what you’ve studied.</li><li>Two shipped projects with clear outcomes beat ten listed technologies.</li></ul><span class="empty-auto">Connect GitHub or add projects on the LMS.</span></div>{% endif %}
   </div>
 
   <div class="itab-panel" data-tab-group="work" data-tab-id="education">
@@ -642,7 +713,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         </div>
         {% endfor %}
       </div>
-    {% else %}<div class="empty-tile"><b>No education added</b>Add your academic background on the LMS profile.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No education added</b><ul class="empty-points"><li>Your academic foundation — degrees, institutions, and scores in one clean record.</li></ul><span class="empty-auto">Add your academic background on the LMS profile.</span></div>{% endif %}
   </div>
 
   <div class="itab-panel" data-tab-group="work" data-tab-id="skills">
@@ -652,15 +723,14 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         <div class="skill-col soft"><div class="skill-col-label">Soft Skills</div><div>{% set sns = namespace(seen=[]) %}{% for sk in skills_data.get('soft_skills',[]) %}{% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}{% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in sns.seen %}{% set _ = sns.seen.append(nm|lower) %}<span class="skill-chip soft">{{ nm }}</span>{% endif %}{% endfor %}</div></div>
         <div class="skill-col tool"><div class="skill-col-label">Tools</div><div>{% set lns = namespace(seen=[]) %}{% for sk in skills_data.get('tools',[]) %}{% set nm = ((sk.name if sk is mapping and sk.name is defined else sk)|string|trim) %}{% if nm|length > 1 and nm|lower not in JUNK and nm|lower not in lns.seen %}{% set _ = lns.seen.append(nm|lower) %}<span class="skill-chip tool">{{ nm }}</span>{% endif %}{% endfor %}</div></div>
       </div>
-    {% else %}<div class="empty-tile"><b>No skills tagged</b>Add skills on the LMS profile.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No skills tagged</b><ul class="empty-points"><li>The first filter recruiters search by — core, tools, and soft skills, categorised.</li><li>Ten focused skills beat forty scattered ones.</li></ul><span class="empty-auto">Add skills on the LMS profile.</span></div>{% endif %}
   </div>
 </section>
 
 <!-- ═══ 03 TOP PERFORMANCE (11 internal tabs) ═══ -->
 <section id="performance">
   <div class="section-head">
-    <div><span class="section-num">03 / Verified Performance</span><h2 class="section-title">Top Performance</h2></div>
-    <span class="section-sub">Score · Course · Date</span>
+    <h2 class="section-title">Top Performance</h2>
   </div>
   <div class="section-rule"></div>
   {# v12.6 — locked 11-tab order: Courses → Assignments → Case Studies → Assessments →
@@ -712,7 +782,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       </div>
       {% endfor %}
     </div>
-    {% else %}<div class="empty-tile"><b>No courses enrolled</b>Enroll in an Upskillize track to see your progress here.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No courses enrolled</b><ul class="empty-points"><li>Structured, industry-aligned tracks that anchor every validated score on this profile.</li></ul><span class="empty-auto">Enroll in an Upskillize track to see your progress here.</span></div>{% endif %}
   </div>
 
   {# ── Capstones ── #}
@@ -736,7 +806,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% endfor %}
       {% if capstone_projects|length > 5 %}<div class="perf-more">+ {{ capstone_projects|length - 5 }} More Capstones in Portfolio</div>{% endif %}
     </div>
-    {% else %}<div class="empty-tile"><b>No capstones yet</b>Capstones unlock at the end of each Upskillize track.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No capstones yet</b><ul class="empty-points"><li>End-to-end projects that mirror real workplace deliverables.</li><li>The closest a profile gets to work experience before the first job.</li></ul><span class="empty-auto">Capstones unlock at the end of each Upskillize track.</span></div>{% endif %}
   </div>
 
   {# ── Case Studies (v12.6 — deduped best-first in renderer, top 5) ── #}
@@ -754,6 +824,8 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
             {% if c.submitted_at %} · Submitted {{ fmt_date(c.submitted_at) }}{% endif %}
             {% if c.ai_grade_label or c.ai_grade %} · AiRev: {{ c.ai_grade_label or c.ai_grade }}{% endif %}
             {% if c.status and c.status != 'reviewed' %} · {{ c.status|capitalize }}{% endif %}
+            {# v12.9 — surface which attempt this score came from, when known #}
+            {% set _att = c.attempt or c.attempt_number or c.attempts %}{% if _att and (_att is number or _att is string) %} · Attempt {{ _att }}{% endif %}
           </div>
         </div>
         {{ dual_score(c.faculty_score or c.score, c.ai_score, c.max_score, 'AiRev') }}
@@ -761,7 +833,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% endfor %}
       {% if case_studies_raw|length > 5 %}<div class="perf-more">+ {{ case_studies_raw|length - 5 }} more case studies in portfolio</div>{% endif %}
     </div>
-    {% else %}<div class="empty-tile"><b>No case studies yet</b>AiRev-reviewed case studies appear here once submitted.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No case studies yet</b><ul class="empty-points"><li>Real business problems, argued in writing and scored on evidence.</li><li>Case work shows judgment — the skill interviews probe hardest.</li></ul><span class="empty-auto">AiRev-reviewed case studies appear here once submitted.</span></div>{% endif %}
   </div>
 
   {# ── Assignments (v12.6 — deduped best-first in renderer, top 5) ── #}
@@ -785,7 +857,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% endfor %}
       {% if assignments_raw|length > 5 %}<div class="perf-more">+ {{ assignments_raw|length - 5 }} more assignments in portfolio</div>{% endif %}
     </div>
-    {% else %}<div class="empty-tile"><b>No graded assignments yet</b>Submit assignments on the LMS to populate this ranking.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No graded assignments yet</b><ul class="empty-points"><li>Applied practice, graded — proof you can execute, not just attend.</li></ul><span class="empty-auto">Submit assignments on the LMS to populate this ranking.</span></div>{% endif %}
   </div>
 
   {# ── Assessments (formal exams + module quizzes, sorted best-first) ── #}
@@ -803,6 +875,8 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
             {% if t.topic %} · {{ t.topic|capitalize }}{% endif %}
             {% if t.kind == 'quiz' %} · Module Quiz{% else %} · Exam{% endif %}
             {% if t.submitted_at %} · {{ fmt_date(t.submitted_at) }}{% endif %}
+            {# v12.9 — surface which attempt this score came from, when known #}
+            {% set _att = t.attempt or t.attempt_number or t.attempts %}{% if _att and (_att is number or _att is string) %} · Attempt {{ _att }}{% endif %}
           </div>
         </div>
         <div>
@@ -813,7 +887,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% endfor %}
       {% if test_scores_raw|length > 5 %}<div class="perf-more">+ {{ test_scores_raw|length - 5 }} more assessments in portfolio</div>{% endif %}
     </div>
-    {% else %}<div class="empty-tile"><b>No assessments yet</b>Take module assessments or quizzes on the LMS — both formal exams and module checkpoints appear here.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No assessments yet</b><ul class="empty-points"><li>Graded, benchmarked tests that turn learning into recruiter-readable proof.</li><li>Every score here is Upskillize-validated — never self-reported.</li></ul><span class="empty-auto">Take module assessments or quizzes on the LMS — both formal exams and module checkpoints appear here.</span></div>{% endif %}
   </div>
 
   {# ── Mock Interviews ── #}
@@ -831,6 +905,8 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
             {% if m.round %} · {{ m.round }}{% endif %}
             {% if m.interviewer %} · {{ m.interviewer }}{% endif %}
             {% if m.submitted_at %} · {{ fmt_date(m.submitted_at) }}{% elif m.completed_at %} · {{ fmt_date(m.completed_at) }}{% elif m.scheduled_at %} · {{ fmt_date(m.scheduled_at) }}{% endif %}
+            {# v12.9 — surface which attempt this score came from, when known #}
+            {% set _att = m.attempt or m.attempt_number or m.attempts %}{% if _att and (_att is number or _att is string) %} · Attempt {{ _att }}{% endif %}
           </div>
         </div>
         {{ dual_score(m.faculty_score or m.faculty_score_alt or m.score or m.overall_score, m.ai_score, 100, 'InterviewIQ') }}
@@ -838,7 +914,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% endfor %}
       {% if mock_interviews_raw|length > 5 %}<div class="perf-more">+ {{ mock_interviews_raw|length - 5 }} more mock interviews in portfolio</div>{% endif %}
     </div>
-    {% else %}<div class="empty-tile"><b>No mock interviews yet</b>Mock interviews with industry mentors via InterviewIQ appear here once completed.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No mock interviews yet</b><ul class="empty-points"><li>AI-scored simulations that measure structure, clarity, and confidence under pressure.</li><li>Recruiters trust candidates already tested in interview conditions.</li></ul><span class="empty-auto">Mock interviews with industry mentors via InterviewIQ appear here once completed.</span></div>{% endif %}
   </div>
 
   {# ── Mock Tests (TestGen / BrainDrill) ── #}
@@ -856,6 +932,8 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
             {% if t.test_type %} · {{ t.test_type|capitalize }}{% else %} · TestGen{% endif %}
             {% if t.time_taken_minutes %} · {{ t.time_taken_minutes }} min{% endif %}
             {% if t.attempted_at %} · {{ fmt_date(t.attempted_at) }}{% elif t.submitted_at %} · {{ fmt_date(t.submitted_at) }}{% endif %}
+            {# v12.9 — surface which attempt this score came from, when known #}
+            {% set _att = t.attempt or t.attempt_number or t.attempts %}{% if _att and (_att is number or _att is string) %} · Attempt {{ _att }}{% endif %}
           </div>
         </div>
         <div>
@@ -866,7 +944,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% endfor %}
       {% if mock_tests_raw|length > 5 %}<div class="perf-more">+ {{ mock_tests_raw|length - 5 }} more mock tests in portfolio</div>{% endif %}
     </div>
-    {% else %}<div class="empty-tile"><b>No mock tests yet</b>TestGen-powered timed practice tests appear here once attempted.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No mock tests yet</b><ul class="empty-points"><li>Exam-condition practice that builds speed and accuracy before the real test.</li><li>Consistent high mocks signal preparation, not luck.</li></ul><span class="empty-auto">TestGen-powered timed practice tests appear here once attempted.</span></div>{% endif %}
   </div>
 
   {# ── Industry Sessions ── #}
@@ -893,7 +971,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% endfor %}
       {% if industry_sessions_raw|length > 5 %}<div class="perf-more">+ {{ industry_sessions_raw|length - 5 }} more industry sessions in portfolio</div>{% endif %}
     </div>
-    {% else %}<div class="empty-tile"><b>No industry sessions logged</b>Live mentor masterclasses attended via Upskillize appear here.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No industry sessions logged</b><ul class="empty-points"><li>Live masterclasses with working professionals — current practice, not textbook theory.</li><li>Attendance and key takeaways are logged as engagement proof.</li></ul><span class="empty-auto">Sessions attended via Upskillize appear here automatically.</span></div>{% endif %}
   </div>
 
   {# ── Punctuality (v12.6 — 9th tab; score card or coming-soon) ── #}
@@ -951,7 +1029,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       </div>
       {% endfor %}
     </div>
-    {% else %}<div class="empty-tile"><b>No hackathons logged</b>Hackathon participation and awards appear here once added.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No hackathons logged</b><ul class="empty-points"><li>Timed builds under real pressure — ship a working product, judged by industry.</li><li>One hackathon win outweighs a semester of theory on a recruiter’s desk.</li></ul><span class="empty-auto">Participation and awards appear here automatically once added.</span></div>{% endif %}
   </div>
 
   {# ── Cohort ── #}
@@ -988,10 +1066,73 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
 <!-- ═══ 04 READINESS & FIT (3 internal tabs) ═══ -->
 <section id="readiness">
   <div class="section-head">
-    <div><span class="section-num">04 / Hire Signal</span><h2 class="section-title">Readiness &amp; Fit</h2></div>
-    <span class="section-sub">Interview · Top Matches · Preferences</span>
+    <h2 class="section-title">Readiness &amp; Fit</h2>
   </div>
   <div class="section-rule"></div>
+
+  {# ── v12.9 ATS — owner-only readiness detail. Gated on show_ats: recruiter/
+       public HTML contains none of this markup. Sits above the internal tabs
+       so the hero chip / snapshot tile always land on a visible card. ── #}
+  {% if show_ats and ats %}
+    {% if ats.locked %}
+    <div class="empty-tile" style="margin-bottom:28px;"><b>ATS Readiness locked</b>{{ ats.message or ats.locked_message or 'Complete more of your profile to unlock your ATS Readiness score.' }}</div>
+    {% else %}
+    <div class="ats-card" id="ats-detail">
+      <div class="ats-card-head">
+        <div class="ats-card-title">ATS Readiness</div>
+        <div class="ats-card-sub">Visible only to you</div>
+      </div>
+      <div class="ats-score-row">
+        <div class="ats-score-big">{{ ats.total_score|int }}<span class="ats-score-suffix">/100</span></div>
+        {% if ats.band %}<div class="ats-band">{{ ats.band }}</div>{% endif %}
+      </div>
+      {# v12.9.1 — below 60: coach before publish. The score stays private to
+         the student and the chip/tile stay hidden until the 60 mark is earned. #}
+      {% if (ats.total_score|int) < 60 %}
+      <div class="ats-improve-note">
+        <b>Improve before you publish.</b> Recruiters respond best to profiles at 60 and above —
+        work through the missing keywords and tips below, then regenerate your profile and publish
+        when your score crosses 60.
+      </div>
+      {% endif %}
+      {% set _comps = ats.components or {} %}
+      {% if _comps %}
+      <div class="ats-bars">
+        {% for _ckey, _clabel, _cmax in [('keyword','Keyword match',55),('completeness','Profile completeness',25),('evidence','Validated evidence',20)] %}
+          {% set _comp = _comps.get(_ckey) or {} %}
+          {% set _cmaxv = _comp.get('max') or _cmax %}
+          {% set _cval = _comp.get('score') or 0 %}
+          <div class="ats-bar-row">
+            <span class="ats-bar-label">{{ _clabel }}</span>
+            <div class="ats-bar-track"><div class="ats-bar-fill" style="width:{{ ((_cval / _cmaxv * 100) if _cmaxv else 0)|round(1) }}%;"></div></div>
+            <span class="ats-bar-val">{{ _cval|int }} / {{ _cmaxv|int }}</span>
+          </div>
+        {% endfor %}
+      </div>
+      {% set _kw = _comps.get('keyword') or {} %}
+      {% set _matched = _kw.get('matched') or [] %}
+      {% set _missing = _kw.get('missing') or [] %}
+      {% if _matched %}
+      <div class="ats-kw-block">
+        <div class="ats-kw-label">Matched keywords</div>
+        <div class="ats-kw-chips">{% for k in _matched %}<span class="ats-kw-chip matched">{{ k }}</span>{% endfor %}</div>
+      </div>
+      {% endif %}
+      {% if _missing %}
+      <div class="ats-kw-block">
+        <div class="ats-kw-label">Add these for {{ ats.target_role or ats.best_role_match or 'your target role' }}</div>
+        <div class="ats-kw-chips">{% for k in _missing %}<span class="ats-kw-chip missing">{{ k }}</span>{% endfor %}</div>
+      </div>
+      {% endif %}
+      {% endif %}
+      {% set _tips = ats.tips or ats.improvement_tips or [] %}
+      {% if _tips %}
+      <ul class="ats-tips">{% for tip in _tips %}<li>{{ tip }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    {% endif %}
+  {% endif %}
+
   <div class="itab-bar">
     <button class="itab-btn active" data-tab-group="ready" data-tab-id="interview" onclick="switchTab('ready','interview')">Interview Readiness</button>
     <button class="itab-btn" data-tab-group="ready" data-tab-id="matches" onclick="switchTab('ready','matches')">Top Matches</button>
@@ -1019,7 +1160,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       </div>
     </div>
     {% else %}
-    <div class="empty-tile"><b>Domain breakdown unlocks after mocks</b>Complete a few mock interviews and tests to see per-domain readiness bars.</div>
+    <div class="empty-tile"><b>Domain breakdown unlocks after mocks</b><ul class="empty-points"><li>Per-domain readiness bars show recruiters exactly where you are strongest.</li></ul><span class="empty-auto">Complete a few mock interviews and tests to see per-domain readiness bars.</span></div>
     {% endif %}
   </div>
 
@@ -1042,7 +1183,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       </div>
       {% endfor %}
     </div>
-    {% else %}<div class="empty-tile"><b>Role matches pending</b>Regenerate your profile after adding skills and preferences — CareerIQ will surface your top role fits here.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>Role matches pending</b><ul class="empty-points"><li>CareerIQ maps your skills, experience, and coursework to the roles you fit best.</li></ul><span class="empty-auto">Regenerate your profile after adding skills and preferences — your top role fits surface here.</span></div>{% endif %}
   </div>
 
   {# ── Open To ── #}
@@ -1051,7 +1192,8 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       <div class="open-card"><div class="open-label">Role</div><div class="open-value">{{ job_preferences.preferred_role or '—' }}</div><div class="open-detail">{% if job_preferences.preferred_industry %}{{ job_preferences.preferred_industry }}{% else %}Set on LMS Job Preferences{% endif %}</div></div>
       <div class="open-card"><div class="open-label">Locations</div><div class="open-value">{{ job_preferences.preferred_location or student_location or '—' }}</div><div class="open-detail">{% if job_preferences.work_mode %}{{ job_preferences.work_mode }}{% else %}Mode not set{% endif %}</div></div>
       <div class="open-card"><div class="open-label">Work Mode</div><div class="open-value">{{ job_preferences.work_mode or 'Hybrid' }}</div><div class="open-detail">{{ job_preferences.employment_type or 'Full-time' }}</div></div>
-      <div class="open-card"><div class="open-label">CTC Expectation</div><div class="open-value">{% if job_preferences.expected_salary_min and job_preferences.expected_salary_max %}₹{{ job_preferences.expected_salary_min }}–{{ job_preferences.expected_salary_max }} LPA{% else %}—{% endif %}</div><div class="open-detail">{% if job_preferences.notice_period %}Notice: {{ job_preferences.notice_period }}{% else %}Immediate{% endif %}</div></div>
+      {# v12.9 — CTC/salary expectation removed from the recruiter-visible card; notice period kept as its own card #}
+      <div class="open-card"><div class="open-label">Notice Period</div><div class="open-value">{{ job_preferences.notice_period or 'Immediate' }}</div><div class="open-detail">{% if job_preferences.open_to_relocation %}Open to relocation: {{ job_preferences.open_to_relocation }}{% else %}Availability as per LMS profile{% endif %}</div></div>
     </div>
   </div>
 </section>
@@ -1059,8 +1201,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
 <!-- ═══ 05 ACHIEVEMENTS + CERTIFICATIONS (2 internal tabs) ═══ -->
 <section id="achievements">
   <div class="section-head">
-    <div><span class="section-num">05 / Validated</span><h2 class="section-title">Achievements</h2></div>
-    <span class="section-sub">Third-Party Validated</span>
+    <h2 class="section-title">Achievements</h2>
   </div>
   <div class="section-rule"></div>
   <div class="itab-bar">
@@ -1081,7 +1222,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       </div>
       {% endfor %}
     </div>
-    {% else %}<div class="empty-tile"><b>No achievements yet</b>Top assignments, hackathon results, and course badges will surface here automatically as you progress.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No achievements yet</b><ul class="empty-points"><li>Top assignments, hackathon results, and course badges — merit, validated.</li><li>Every entry here is earned, never claimed.</li></ul><span class="empty-auto">Achievements surface here automatically as you progress.</span></div>{% endif %}
   </div>
 
   <div class="itab-panel" data-tab-group="ach" data-tab-id="certs">
@@ -1090,7 +1231,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       {% for cert in certifications_data[:10] %}
       <div class="cert-card">
         <div>
-          <div class="cert-name">{{ cert.certificate_name or cert.name or 'Certificate' }}{% if (cert.completion_pct and (cert.completion_pct|int) >= 100) or cert.upskillize_verified %}<span class="verified-badge">✓ Upskillize Verified</span>{% endif %}</div>
+          <div class="cert-name">{{ cert.certificate_name or cert.name or 'Certificate' }}{% if (cert.completion_pct and (cert.completion_pct|int) >= 100) or cert.upskillize_verified %}<span class="cred-badge">✓ Upskillize Certified</span>{% endif %}</div>
           {% if cert.course_name %}<div class="cert-issuer">{{ cert.course_name }}{% if cert.score %} · Score {{ cert.score }}%{% endif %}</div>{% elif cert.issuer %}<div class="cert-issuer">{{ cert.issuer }}</div>{% endif %}
           {% if cert.description %}<div class="cert-desc" style="font-size:12px;color:var(--ink-soft);margin-top:6px;line-height:1.5;">{{ cert.description|trim }}</div>{% endif %}
         </div>
@@ -1098,15 +1239,14 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       </div>
       {% endfor %}
     </div>
-    {% else %}<div class="empty-tile"><b>No certificates yet</b>Complete an Upskillize course to receive an Industry-Validated Certificate.</div>{% endif %}
+    {% else %}<div class="empty-tile"><b>No certificates yet</b><ul class="empty-points"><li>Industry-Validated Certificates prove your skills against real industry benchmarks.</li><li>Validated credentials outrank self-declared skills on every shortlist.</li></ul><span class="empty-auto">Complete an Upskillize course to receive an Industry-Validated Certificate.</span></div>{% endif %}
   </div>
 </section>
 
 <!-- ═══ 06 BEYOND WORK ═══ -->
 <section id="beyond">
   <div class="section-head">
-    <div><span class="section-num">06 / Off the Resume</span><h2 class="section-title">Beyond Work</h2></div>
-    <span class="section-sub">Personality &amp; Interests</span>
+    <h2 class="section-title">Beyond Work</h2>
   </div>
   <div class="section-rule"></div>
   <div class="beyond-grid">
@@ -1183,7 +1323,7 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;">
     <div>© Upskillize Solutions · upskillize.com</div>
     <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:10px;color:rgba(255,255,255,0.35);">
-      {% if generated_date %}<span>Generated {{ generated_date }}</span>{% endif %}
+      {% if generated_date %}<span>Generated <time class="lts lts-upper" datetime="{{ generated_at_iso|default('', true) }}">{{ generated_date }}</time></span>{% endif %}
       {% if updated_date %}<span>Updated {{ updated_date }}</span>{% endif %}
       {% if total_views is not none %}<span>{{ total_views }} views</span>{% endif %}
       {# v12.6 — removed "Open ↗" link: it pointed at the DELETED /profile/public/{slug} endpoint and leaked the slug in shared HTML #}
@@ -1212,6 +1352,22 @@ function switchTab(group, id){
     el.classList.toggle('active', el.dataset.tabId === id);
   });
 }
+
+/* v12.7 — LOCAL TIMEZONE: re-render every <time class="lts"> in the viewer's machine
+   timezone. Naive timestamps (no Z/offset) are treated as UTC. Date-only strings are
+   left untouched (no time component to convert). Server-rendered text is the fallback. */
+(function(){
+  var M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.querySelectorAll('time.lts').forEach(function(el){
+    var s = el.getAttribute('datetime');
+    if (!s || s.indexOf('T') === -1) return;                       // date-only → keep as-is
+    if (!/([Zz]|[+\-]\d{2}:?\d{2})$/.test(s)) s += 'Z';            // naive → UTC
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return;
+    var t = d.getDate() + ' ' + M[d.getMonth()] + ' ' + d.getFullYear();
+    el.textContent = el.classList.contains('lts-upper') ? t.toUpperCase() : t;
+  });
+})();
 
 function goToPerf(tabId){
   // Guard: only switch if the target panel exists — switching to an unknown

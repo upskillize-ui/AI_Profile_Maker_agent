@@ -47,9 +47,15 @@ Preserved from v4 (unchanged, still working):
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 from slugify import slugify
+from collections import defaultdict
+import asyncio
+import hashlib
+import json
+import os
+import re
 import secrets
 import time
 import logging
@@ -73,6 +79,7 @@ from app.models.schemas import (
 from app.agents.profile_orchestrator import ProfileOrchestrator
 from app.services.data_collector import DataCollector
 from app.services.profile_renderer import ProfileRenderer
+from app.services import profile_renderer as profile_renderer_module
 from app.services.cache_service import CacheService
 from app.config import get_settings
 
@@ -90,6 +97,264 @@ AGENT_BASE = getattr(settings, "PUBLIC_DOMAIN", None) \
 # Unified error text — do not vary this. Different messages leak information
 # about which paths hit rows vs miss rows.
 _ERR_NOT_FOUND = "Profile not found"
+
+
+# =========================================================================
+# OPERATIONAL METRICS — v5.3
+# =========================================================================
+# NOTE: process-local counters (single uvicorn worker). They reset on
+# restart and do NOT aggregate across replicas — good enough for the
+# single-Space deployment; move to Redis/StatsD if we ever scale out.
+METRICS = defaultdict(int)
+METRICS_STARTED_AT = time.time()
+
+
+def _template_version() -> str:
+    """Current renderer template version. getattr keeps the app booting
+    even if the renderer module predates the TEMPLATE_VERSION export —
+    the sentinel simply never matches a stored marker, so healing and
+    the fingerprint no-op both fail safe (toward regeneration)."""
+    return str(getattr(profile_renderer_module, "TEMPLATE_VERSION", "0.0.0"))
+
+
+# =========================================================================
+# GENERATION ADMISSION CONTROL — v5.1
+# =========================================================================
+# Protects the Space from a generation stampede (e.g. a whole cohort
+# clicking "Generate" together):
+#
+#   • MAX_PARALLEL_GENERATIONS  — pipelines actually running at once.
+#     Everything above this waits its turn (bounded, in order).
+#   • GENERATION_WAITING_ROOM   — total students admitted at once
+#     (running + waiting). Student #201 gets a polite 503 "agent is
+#     occupied" message IMMEDIATELY — the system never queues unbounded
+#     work and never falls over.
+#   • GENERATION_WAIT_SECONDS   — max time an admitted request waits for
+#     a running slot before it too gets the polite message (kept under
+#     typical proxy timeouts so students see our message, not a gateway
+#     error).
+#   • Duplicate-click guard     — a student whose generation is already
+#     in flight gets a friendly "already generating" response instead of
+#     a second (paid) pipeline.
+#
+# All state is process-local (single uvicorn worker) and only touched on
+# the event loop — no cross-request locking needed.
+
+MAX_PARALLEL_GENERATIONS = int(os.environ.get("MAX_PARALLEL_GENERATIONS", "8"))
+GENERATION_WAITING_ROOM  = int(os.environ.get("GENERATION_WAITING_ROOM", "200"))
+GENERATION_WAIT_SECONDS  = float(os.environ.get("GENERATION_WAIT_SECONDS", "55"))
+
+# v5.2 — REGEN OVERWRITE POLICY (product decision 23 Jul 2026):
+# Every force_regenerate must update the stored profile with the LATEST
+# generated result. The old 70%-richness guard silently kept stale data
+# when collection came back thinner — students saw "regenerated" but got
+# last month's profile. Protection now applies only to CATASTROPHIC
+# results (essentially-empty collection), which would otherwise wipe a
+# real profile with nothing. Set REGEN_ALWAYS_OVERWRITE=false to restore
+# the old cautious behavior.
+REGEN_ALWAYS_OVERWRITE = os.environ.get("REGEN_ALWAYS_OVERWRITE", "true").lower() == "true"
+
+_generation_semaphore = asyncio.Semaphore(MAX_PARALLEL_GENERATIONS)
+_admitted_generations = 0          # running + waiting, capped by WAITING_ROOM
+_inflight_students: set = set()    # student_ids with a generation in flight
+
+AGENT_BUSY_MESSAGE = (
+    "Our Profile Agent is helping many learners right now and is fully "
+    "occupied. Please wait a few minutes and try again — your data is safe "
+    "and nothing has been lost."
+)
+
+ALREADY_GENERATING_MESSAGE = (
+    "Your profile is already being generated. Give it a minute, then "
+    "refresh — clicking again won't make it faster."
+)
+
+
+def _agent_busy(retry_after: int = 180) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail=AGENT_BUSY_MESSAGE,
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
+async def _run_with_admission(student_id: int, work):
+    """Run `work()` (a zero-arg async callable that performs generation)
+    under the admission-control rules above."""
+    global _admitted_generations
+
+    # Duplicate click → friendly no-op, zero cost.
+    if student_id in _inflight_students:
+        METRICS["duplicate_clicks"] += 1
+        return {
+            "message": ALREADY_GENERATING_MESSAGE,
+            "status": "generating",
+            "already_in_progress": True,
+        }
+
+    # Waiting room full → polite message, immediately.
+    if _admitted_generations >= GENERATION_WAITING_ROOM:
+        METRICS["busy_rejected_room"] += 1
+        logger.warning(
+            "Generation waiting room full (%d) — student %s politely deferred",
+            GENERATION_WAITING_ROOM, student_id,
+        )
+        raise _agent_busy(retry_after=180)
+
+    _admitted_generations += 1
+    _inflight_students.add(student_id)
+    acquired = False
+    try:
+        try:
+            await asyncio.wait_for(
+                _generation_semaphore.acquire(),
+                timeout=GENERATION_WAIT_SECONDS,
+            )
+            acquired = True
+        except asyncio.TimeoutError:
+            METRICS["busy_rejected_timeout"] += 1
+            logger.warning(
+                "Generation slot wait (%.0fs) timed out — student %s politely deferred",
+                GENERATION_WAIT_SECONDS, student_id,
+            )
+            raise _agent_busy(retry_after=120)
+        return await work()
+    finally:
+        if acquired:
+            _generation_semaphore.release()
+        _inflight_students.discard(student_id)
+        _admitted_generations -= 1
+
+
+def _collect_all_sync(db: Session, student_id: int):
+    """v5.1 — run the DataCollector off the event loop. Its 'async'
+    methods contain only sync DB calls, so a private loop inside this
+    worker thread is safe, and the main loop stays responsive for share
+    views and health checks while collection runs."""
+    return asyncio.run(DataCollector(db).collect_all(student_id))
+
+
+# =========================================================================
+# TEMPLATE FRESHNESS + SOURCE FINGERPRINT — v5.3
+# =========================================================================
+# The renderer stamps every HTML it produces with a marker right after
+# <head>:   <!-- piq:tpl=<version> fp=<fingerprint> -->
+# We use it two ways:
+#   • render-on-read healing: a share/corporate view served from a stale
+#     template silently re-renders (NO AI) before serving.
+#   • smart regen: if the source data fingerprint hasn't changed AND the
+#     template is current, force_regenerate becomes a free no-op.
+
+_MARKER_RE = re.compile(r"<!--\s*piq:tpl=(\S+)\s+fp=(\S+?)\s*-->")
+
+
+def _parse_marker(html):
+    """Extract (template_version, fingerprint) from rendered HTML.
+    Tolerates absence (pre-v12.9 HTML) → (None, None)."""
+    if not html:
+        return (None, None)
+    m = _MARKER_RE.search(html)
+    if not m:
+        return (None, None)
+    return (m.group(1), m.group(2))
+
+
+def _source_fingerprint(student_data: dict) -> str:
+    """Stable hash of the inputs that materially change a profile.
+    Deliberately a SUBSET of collect_all's payload — volatile fields
+    (timestamps, view counts, raw rows) are excluded so the fingerprint
+    only moves when the student's actual story moves."""
+    personal = student_data.get("personal", {}) or {}
+    computed = student_data.get("computed", {}) or {}
+    projects = (student_data.get("projects")
+                or student_data.get("capstone_projects")
+                or student_data.get("capstones")
+                or [])
+    stable = {
+        "personal": {
+            "name":           personal.get("full_name", ""),
+            "designation":    personal.get("current_designation", ""),
+            "employer":       personal.get("current_employer", ""),
+            "skills":         personal.get("key_skills", ""),
+            "goals":          personal.get("career_goals", ""),
+            "preferred_role": personal.get("preferred_role", ""),
+        },
+        "education":       student_data.get("education", []) or [],
+        "work_experience": student_data.get("work_experience", []) or [],
+        "project_titles":  sorted(
+            str(p.get("title") or p.get("name") or "")
+            for p in projects if isinstance(p, dict)
+        ),
+        "courses": sorted(
+            (str(c.get("course_name", "")), str(c.get("progress", "")))
+            for c in (student_data.get("courses", []) or [])
+            if isinstance(c, dict)
+        ),
+        "best_scores": {
+            "overall_score":        computed.get("overall_score", 0),
+            "best_test_score":      computed.get("best_test_score", 0),
+            "avg_test_score":       computed.get("avg_test_score", 0),
+            "avg_case_study_score": computed.get("avg_case_study_score", 0),
+            "avg_quiz_score":       computed.get("avg_quiz_score", 0),
+            "completed_courses":    computed.get("completed_courses", 0),
+        },
+        "certifications": sorted(
+            str(c.get("name") or c.get("certificate_name") or c)
+            for c in (student_data.get("certifications", []) or [])
+        ),
+    }
+    payload = json.dumps(stable, sort_keys=True, default=str)
+    return hashlib.md5(payload.encode("utf-8")).hexdigest()
+
+
+def _profile_data_from_db(existing: StudentProfile, fresh: dict = None) -> dict:
+    """Rebuild the renderer's profile_data dict from stored DB columns.
+    `fresh` (optional) supplies LMS passthrough sections computed during a
+    live pipeline run (education/work/roles/etc.); absent → empty defaults.
+    Shared by: _safe_regenerate's data-loss path, render-on-read healing,
+    and the owner ATS view."""
+    fresh = fresh or {}
+    return {
+        "professional_summary":  existing.professional_summary or "",
+        "skills_data":           existing.skills_data or {},
+        "performance_data":      existing.performance_data or {},
+        "journey_data":          existing.journey_data or {},
+        "personality_data":      existing.personality_data or {},
+        "case_studies_data":     existing.case_studies_data or [],
+        "testgen_data":          existing.testgen_data or {},
+        "projects_data":         existing.projects_data or [],
+        "certifications_data":   existing.certifications_data or [],
+        "ats_keywords":          existing.ats_keywords or [],
+        "headline":              existing.student_headline or "Professional",
+        "education_data":        fresh.get("education_data", []),
+        "work_experience":       fresh.get("work_experience", []),
+        "role_matches":          fresh.get("role_matches", []),
+        "ats_data":              fresh.get("ats_data", {}),
+        "top_achievements":      fresh.get("top_achievements", []),
+        "case_study_highlights": fresh.get("case_study_highlights", []),
+        "test_highlights":       fresh.get("test_highlights", []),
+        "data_sources":          fresh.get("data_sources", ["lms"]),
+    }
+
+
+def _og_card_url(token) -> str:
+    """OG card image URL for a share token (None-safe — renderer falls
+    back when a profile has no share token yet)."""
+    return f"{AGENT_BASE}/api/v1/profile/share/{token}/card.png" if token else None
+
+
+def _ats_from_student_data(student_data: dict) -> dict:
+    """Cheap fresh ATS: merge collected sources, then score. Pure CPU on
+    dicts — call via asyncio.to_thread together with collection."""
+    from app.services.data_merger import DataMerger
+    from app.agents.role_matcher import RoleMatcher
+    merged = DataMerger().merge(
+        lms_data      = student_data,
+        resume_data   = student_data.get("resume_data"),
+        github_data   = student_data.get("github_data"),
+        linkedin_data = student_data.get("linkedin_data"),
+    )
+    return RoleMatcher().calculate_ats_score(merged)
 
 
 # =========================================================================
@@ -246,21 +511,63 @@ async def generate_profile(
             **_profile_response(existing),
         }
 
-    # Case 2: exists + regen → full generation with data-loss safety
+    # ── v5.1 admission pre-checks BEFORE any status mutation ──────────
+    # (no awaits between here and _run_with_admission's own checks, so
+    # these stay consistent on the single event loop)
+    if student_id in _inflight_students:
+        METRICS["duplicate_clicks"] += 1
+        return {
+            "message": ALREADY_GENERATING_MESSAGE,
+            "status": "generating",
+            "already_in_progress": True,
+        }
+    if _admitted_generations >= GENERATION_WAITING_ROOM:
+        METRICS["busy_rejected_room"] += 1
+        raise _agent_busy(retry_after=180)
+
+    # Case 2: exists + regen → full generation with data-loss safety.
+    # v5.3 SMART REGEN: collect first (cheap DB reads, off the loop),
+    # fingerprint the source data, and if NOTHING changed since the last
+    # generation AND the template is current → free no-op, zero AI spend.
+    # The check runs inside admission so the duplicate-click guard and
+    # concurrency caps still apply to the collection work.
     if existing and existing.status == ProfileStatus.COMPLETED and body.force_regenerate:
-        return await _safe_regenerate(student_id, existing, db)
+        async def _regen_work():
+            student_data = await asyncio.to_thread(_collect_all_sync, db, student_id)
+            fp = _source_fingerprint(student_data)
+            stored_tpl, stored_fp = _parse_marker(existing.rendered_html or "")
+            if stored_fp == fp and stored_tpl == _template_version():
+                METRICS["regen_no_op_fingerprint"] += 1
+                logger.info(
+                    "Regen no-op for student %s — fingerprint %s unchanged, "
+                    "template current", student_id, fp[:8],
+                )
+                return {
+                    "message": (
+                        "Already up to date — nothing changed in your data "
+                        "since the last generation."
+                    ),
+                    "was_no_op": True,
+                    **_profile_response(existing),
+                }
+            # Pass the collected data through — NOT collected twice.
+            return await _safe_regenerate(
+                student_id, existing, db, student_data=student_data, fp=fp
+            )
+        return await _run_with_admission(student_id, _regen_work)
 
     # Case 3: no profile yet → create with locked defaults
     if not existing:
         existing = StudentProfile(
             student_id            = student_id,
             status                = ProfileStatus.GENERATING,
-            # ─── Locked v5 defaults ────────────────────────────────
-            # Product decision: Corporate ON, Visibility PRIVATE.
-            # Corporates find the student immediately (placements are the
-            # point of using ProfileIQ). Share URL waits for one deliberate
+            # ─── Locked v5.3 defaults ──────────────────────────────
+            # Product decision REVERSED 23 Jul 2026: profiles start
+            # UNPUBLISHED. The student reviews the generated profile,
+            # then clicks Publish (toggle-corporate) to make it visible
+            # to recruiters. Share URL still waits for one deliberate
             # click by the student ("Copy Link" mints the token).
-            visible_to_corporates = True,
+            visible_to_corporates = False,
             share_token           = None,
             # ──────────────────────────────────────────────────────────
         )
@@ -271,16 +578,21 @@ async def generate_profile(
         existing.status = ProfileStatus.GENERATING
         db.flush()
 
-    return await _full_generate(student_id, existing, db)
+    return await _run_with_admission(
+        student_id, lambda: _full_generate(student_id, existing, db)
+    )
 
 
 async def _full_generate(student_id: int, existing: StudentProfile, db: Session) -> dict:
     """First-time generation — runs the full orchestrator pipeline."""
     try:
         start = time.time()
+        METRICS["generations_started"] += 1
 
-        collector    = DataCollector(db)
-        student_data = await collector.collect_all(student_id)
+        # v5.1: collector runs in a worker thread — its sync MySQL queries
+        # no longer freeze the event loop for every other request.
+        student_data = await asyncio.to_thread(_collect_all_sync, db, student_id)
+        fp = _source_fingerprint(student_data)
 
         orchestrator = ProfileOrchestrator()
         profile_data = await orchestrator.generate_profile(student_data)
@@ -290,11 +602,16 @@ async def _full_generate(student_id: int, existing: StudentProfile, db: Session)
         slug     = f"{slugify(name)}-{student_id}-{secrets.token_hex(4)}"
 
         renderer = ProfileRenderer()
-        html = renderer.render(
-            student_data = student_data,
-            profile_data = profile_data,
-            slug         = slug,
-            visibility   = "private",   # template hint for footer badge
+        # v5.1: 89 KB Jinja render off the loop too (pure CPU).
+        html = await asyncio.to_thread(
+            renderer.render,
+            student_data       = student_data,
+            profile_data       = profile_data,
+            slug               = slug,
+            visibility         = "private",   # template hint for footer badge
+            show_ats           = False,       # public HTML never carries ATS
+            source_fingerprint = fp,
+            og_card_url        = _og_card_url(existing.share_token),
         )
 
         # ── Persist everything ────────────────────────────────────────
@@ -325,10 +642,11 @@ async def _full_generate(student_id: int, existing: StudentProfile, db: Session)
         # NOTE: we do NOT cache the HTML here because visibility can change
         # right after generation. Cache is populated on first read.
 
+        METRICS["generations_completed"] += 1
         return {
             "message":  (
-                "Profile generated successfully. Visible to corporate recruiters. "
-                "Click 'Copy Link' to create a shareable URL for friends and family."
+                "Profile generated. Review it, then click Publish to make it "
+                "visible to recruiters."
             ),
             **_profile_response(existing),
             "generation_time":  existing.generation_time_seconds,
@@ -336,26 +654,50 @@ async def _full_generate(student_id: int, existing: StudentProfile, db: Session)
         }
 
     except Exception as e:
+        METRICS["generations_failed"] += 1
         logger.exception(f"Profile generation failed for student {student_id}")
-        existing.status = ProfileStatus.FAILED
-        db.commit()
+        # v5.1 FIX: roll back FIRST — committing on a failed session raises
+        # PendingRollbackError and masks the real error.
+        try:
+            db.rollback()
+            existing.status = ProfileStatus.FAILED
+            db.commit()
+        except Exception:
+            logger.exception(
+                "Could not mark profile FAILED for student %s", student_id
+            )
         raise HTTPException(500, "Profile generation failed. Please try again.")
 
 
-async def _safe_regenerate(student_id: int, existing: StudentProfile, db: Session) -> dict:
+async def _safe_regenerate(
+    student_id: int,
+    existing: StudentProfile,
+    db: Session,
+    student_data: dict = None,
+    fp: str = None,
+) -> dict:
     """
     Regeneration with DATA-LOSS SAFETY GUARD.
     Preserves visibility choices (visible_to_corporates + share_token) —
     a student who published their share URL last month keeps that URL.
+
+    v5.3: accepts pre-collected `student_data` (and its fingerprint `fp`)
+    from the smart-regen path so collection never runs twice. Both are
+    optional — when absent, collects/computes here (legacy call shape).
     """
     try:
         start = time.time()
+        METRICS["generations_started"] += 1
 
         old_richness = _count_db_richness(existing)
         logger.info(f"Safe regen student {student_id}: old richness = {old_richness}")
 
-        collector    = DataCollector(db)
-        student_data = await collector.collect_all(student_id)
+        # v5.1: collector off the event loop (see _collect_all_sync).
+        # v5.3: skipped when the caller already collected.
+        if student_data is None:
+            student_data = await asyncio.to_thread(_collect_all_sync, db, student_id)
+        if fp is None:
+            fp = _source_fingerprint(student_data)
 
         orchestrator = ProfileOrchestrator()
         profile_data = await orchestrator.generate_profile(student_data)
@@ -368,39 +710,44 @@ async def _safe_regenerate(student_id: int, existing: StudentProfile, db: Sessio
         # Preserve existing slug so old owner-side bookmarks keep working
         slug     = existing.slug or f"{slugify(name)}-{student_id}-{secrets.token_hex(4)}"
 
-        # ── Data-loss check ───────────────────────────────────────────
-        if old_richness >= 5 and new_richness < old_richness * 0.7:
+        # ── Data-loss check (v5.2 policy) ─────────────────────────────
+        # CATASTROPHIC = collection returned essentially nothing — a full
+        # overwrite here would destroy a real profile. Always protected.
+        _personal_ok = bool((student_data.get("personal", {}) or {}).get("full_name"))
+        catastrophic = (new_richness == 0) or not _personal_ok
+
+        # Non-catastrophic richness drop: overwrite with the latest result
+        # (REGEN_ALWAYS_OVERWRITE, default) but log it loudly for review.
+        if (not catastrophic) and old_richness >= 5 and new_richness < old_richness * 0.7:
+            if REGEN_ALWAYS_OVERWRITE:
+                logger.warning(
+                    f"Richness dropped on regen for student {student_id}: "
+                    f"old={old_richness}, new={new_richness} — overwriting with "
+                    f"latest anyway (REGEN_ALWAYS_OVERWRITE=true)."
+                )
+
+        if catastrophic or (
+            not REGEN_ALWAYS_OVERWRITE
+            and old_richness >= 5 and new_richness < old_richness * 0.7
+        ):
             logger.error(
-                f"DATA LOSS DETECTED student {student_id}: "
-                f"old={old_richness}, new={new_richness}. Keeping old profile."
+                f"DATA LOSS GUARD student {student_id}: "
+                f"old={old_richness}, new={new_richness}, "
+                f"catastrophic={catastrophic}. Keeping old profile."
             )
             # Rebuild HTML from old DB data but with fresh LMS passthroughs
-            old_profile_data = {
-                "professional_summary":  existing.professional_summary or "",
-                "skills_data":           existing.skills_data or {},
-                "performance_data":      existing.performance_data or {},
-                "journey_data":          existing.journey_data or {},
-                "personality_data":      existing.personality_data or {},
-                "case_studies_data":     existing.case_studies_data or [],
-                "testgen_data":          existing.testgen_data or {},
-                "projects_data":         existing.projects_data or [],
-                "certifications_data":   existing.certifications_data or [],
-                "ats_keywords":          existing.ats_keywords or [],
-                "headline":              existing.student_headline or "Professional",
-                "education_data":        profile_data.get("education_data", []),
-                "work_experience":       profile_data.get("work_experience", []),
-                "role_matches":          profile_data.get("role_matches", []),
-                "ats_data":              profile_data.get("ats_data", {}),
-                "top_achievements":      profile_data.get("top_achievements", []),
-                "case_study_highlights": profile_data.get("case_study_highlights", []),
-                "test_highlights":       profile_data.get("test_highlights", []),
-                "data_sources":          profile_data.get("data_sources", ["lms"]),
-            }
-            html = ProfileRenderer().render(
-                student_data = student_data,
-                profile_data = old_profile_data,
-                slug         = slug,
-                visibility   = "private",
+            # (v5.3: shared helper — same mapping used by render-on-read
+            # healing and the owner ATS view)
+            old_profile_data = _profile_data_from_db(existing, fresh=profile_data)
+            html = await asyncio.to_thread(
+                ProfileRenderer().render,
+                student_data       = student_data,
+                profile_data       = old_profile_data,
+                slug               = slug,
+                visibility         = "private",
+                show_ats           = False,
+                source_fingerprint = fp,
+                og_card_url        = _og_card_url(existing.share_token),
             )
             existing.rendered_html            = html
             existing.generation_time_seconds  = round(time.time() - start, 2)
@@ -408,6 +755,7 @@ async def _safe_regenerate(student_id: int, existing: StudentProfile, db: Sessio
             if existing.share_token:
                 CacheService.invalidate_profile(existing.share_token)
 
+            METRICS["generations_completed"] += 1
             return {
                 "message":  "Profile refreshed with latest template (data preserved).",
                 **_profile_response(existing),
@@ -417,11 +765,15 @@ async def _safe_regenerate(student_id: int, existing: StudentProfile, db: Sessio
 
         # ── Normal regeneration path ──────────────────────────────────
         renderer = ProfileRenderer()
-        html = renderer.render(
-            student_data = student_data,
-            profile_data = profile_data,
-            slug         = slug,
-            visibility   = "private",
+        html = await asyncio.to_thread(
+            renderer.render,
+            student_data       = student_data,
+            profile_data       = profile_data,
+            slug               = slug,
+            visibility         = "private",
+            show_ats           = False,
+            source_fingerprint = fp,
+            og_card_url        = _og_card_url(existing.share_token),
         )
 
         existing.slug                    = slug
@@ -451,6 +803,7 @@ async def _safe_regenerate(student_id: int, existing: StudentProfile, db: Sessio
         if existing.share_token:
             CacheService.invalidate_profile(existing.share_token)
 
+        METRICS["generations_completed"] += 1
         return {
             "message":  "Profile regenerated successfully.",
             **_profile_response(existing),
@@ -459,7 +812,14 @@ async def _safe_regenerate(student_id: int, existing: StudentProfile, db: Sessio
         }
 
     except Exception as e:
+        METRICS["generations_failed"] += 1
         logger.exception(f"Safe regeneration failed for student {student_id}")
+        # v5.1 FIX: roll back so the session is clean and the student's
+        # existing COMPLETED profile stays untouched.
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise HTTPException(500, "Regeneration failed. Please try again.")
 
 
@@ -487,7 +847,19 @@ async def get_my_profile(
             "message": "No profile generated yet. Click 'Generate My AI Profile' to create one.",
         }
 
+    # v5.3 — OWNER ATS: computed fresh on every owner read (cheap: DB
+    # collection + pure-CPU merge/score, both off the event loop; no AI).
+    # Never breaks /profile/me — any failure degrades to ats: None.
+    ats = None
+    try:
+        student_data = await asyncio.to_thread(_collect_all_sync, db, student.id)
+        ats = await asyncio.to_thread(_ats_from_student_data, student_data)
+    except Exception:
+        logger.exception("Owner ATS computation failed for student %s", student.id)
+        ats = None
+
     return {
+        "ats":  ats,
         "id":                    profile.id,
         "slug":                  profile.slug,
         "status":                profile.status.value if profile.status else "pending",
@@ -515,9 +887,100 @@ async def get_my_profile(
     }
 
 
+@router.get("/profile/me/view")
+async def get_my_profile_view(
+    student=Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    v5.3 — OWNER-ONLY LIVE VIEW with the ATS score rendered in.
+    Rebuilds the page from stored sections + fresh LMS data + a freshly
+    computed ATS block, rendered with show_ats=True. The stored/public
+    HTML NEVER contains ATS — this is the only place it renders.
+    """
+    if student is None:
+        raise HTTPException(401, "Authentication required. Please log in and try again.")
+
+    profile = db.query(StudentProfile).filter_by(student_id=student.id).first()
+    if not profile or profile.status != ProfileStatus.COMPLETED:
+        raise HTTPException(404, _ERR_NOT_FOUND)
+
+    student_data = await asyncio.to_thread(_collect_all_sync, db, student.id)
+
+    profile_data = _profile_data_from_db(profile)
+    try:
+        profile_data["ats_data"] = await asyncio.to_thread(
+            _ats_from_student_data, student_data
+        )
+    except Exception:
+        logger.exception("ATS computation failed in /profile/me/view for student %s", student.id)
+        profile_data["ats_data"] = {}
+
+    html = await asyncio.to_thread(
+        ProfileRenderer().render,
+        student_data       = student_data,
+        profile_data       = profile_data,
+        slug               = profile.slug or f"student-{student.id}",
+        visibility         = "private",
+        show_ats           = True,          # owner sees the ATS score
+        source_fingerprint = _source_fingerprint(student_data),
+        og_card_url        = _og_card_url(profile.share_token),
+    )
+    return HTMLResponse(
+        content=html,
+        status_code=200,
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
 # =========================================================================
 # PROFILE — SHARE TOKEN (public, holder-of-URL access)
 # =========================================================================
+
+async def _heal_stale_html(db: Session, profile: StudentProfile, old_fp) -> str:
+    """
+    v5.3 RENDER-ON-READ HEALING: the stored HTML was produced by an older
+    template — re-render it from stored DB sections + fresh LMS data with
+    the CURRENT template, WITHOUT any AI call, persist, and return it.
+    The stored source fingerprint is preserved (data didn't change — only
+    the template did), so smart-regen no-op detection keeps working.
+
+    Never raises: on any failure the caller serves the stored HTML
+    unchanged — a share view must never break because healing hiccuped.
+    """
+    try:
+        student_data = await asyncio.to_thread(_collect_all_sync, db, profile.student_id)
+        profile_data = _profile_data_from_db(profile)
+        html = await asyncio.to_thread(
+            ProfileRenderer().render,
+            student_data       = student_data,
+            profile_data       = profile_data,
+            slug               = profile.slug or f"student-{profile.student_id}",
+            visibility         = "private",
+            show_ats           = False,
+            source_fingerprint = old_fp,       # preserve — data unchanged
+            og_card_url        = _og_card_url(profile.share_token),
+        )
+        profile.rendered_html = html
+        db.commit()
+        if profile.share_token:
+            CacheService.invalidate_profile(profile.share_token)
+        METRICS["template_rerenders"] += 1
+        logger.info(
+            "Template rerender: student %s healed to tpl %s on read",
+            profile.student_id, _template_version(),
+        )
+        return html
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.exception(
+            "Template rerender failed for student %s — serving stored HTML",
+            profile.student_id,
+        )
+        return profile.rendered_html
 
 @router.post("/profile/share/create")
 async def create_share_link(
@@ -587,26 +1050,174 @@ async def get_profile_by_share_token(
     if not token or len(token) < 20:
         raise HTTPException(404, _ERR_NOT_FOUND)
 
-    # Cache lookup — but always re-check the DB for token validity
+    # Cache lookup — but always re-check the DB for token validity.
+    # v5.3: a cached page from an older template is NOT served — we fall
+    # through to the DB path so render-on-read healing can run.
     cached = CacheService.get_profile_html(token)
     if cached:
         profile = db.query(StudentProfile).filter_by(share_token=token).first()
         if profile:
-            _log_view(db, profile.id, request, viewer_type="share")
-            profile.total_views = (profile.total_views or 0) + 1
-            db.commit()
-            return HTMLResponse(content=cached, status_code=200)
+            cached_tpl, _ = _parse_marker(cached)
+            if cached_tpl == _template_version():
+                _log_view(db, profile.id, request, viewer_type="share")
+                profile.total_views = (profile.total_views or 0) + 1
+                db.commit()
+                METRICS["share_views"] += 1
+                return HTMLResponse(content=cached, status_code=200)
 
     profile = db.query(StudentProfile).filter_by(share_token=token).first()
     if not profile or not profile.rendered_html:
         raise HTTPException(404, _ERR_NOT_FOUND)
 
+    # v5.3 TEMPLATE FRESHNESS: stale stored HTML heals itself on read
+    # (no AI — stored sections + fresh LMS data + current template).
+    # On any healing failure the stored HTML is served unchanged.
+    html = profile.rendered_html
+    stored_tpl, stored_fp = _parse_marker(html)
+    if stored_tpl != _template_version():
+        html = await _heal_stale_html(db, profile, stored_fp)
+
     _log_view(db, profile.id, request, viewer_type="share")
     profile.total_views = (profile.total_views or 0) + 1
     db.commit()
 
-    CacheService.set_profile_html(token, profile.rendered_html)
-    return HTMLResponse(content=profile.rendered_html, status_code=200)
+    CacheService.set_profile_html(token, html)
+    METRICS["share_views"] += 1
+    return HTMLResponse(content=html, status_code=200)
+
+
+# =========================================================================
+# PROFILE — OG SHARE CARD (public, token-gated PNG) — v5.3
+# =========================================================================
+# 1200x630 Open Graph card so a shared profile unfurls beautifully on
+# WhatsApp/LinkedIn. Same auth model as the share view: the token IS the
+# credential; anything else gets the unified 404.
+
+_OG_CARD_CACHE: dict = {}          # (token, str(updated_at)) → PNG bytes
+_OG_CARD_CACHE_MAX = 500           # ~500 cards ≈ tens of MB, bounded
+
+_OG_NAVY   = (11, 22, 40)          # #0B1628
+_OG_GOLD   = (200, 153, 42)        # #C8992A
+_OG_WHITE  = (245, 247, 250)
+_OG_MUTED  = (154, 164, 178)
+
+
+def _og_font(size: int):
+    """Serif-bold first (brand), sans-bold second, PIL default last."""
+    from PIL import ImageFont
+    for name in ("DejaVuSerif-Bold.ttf", "DejaVuSans-Bold.ttf"):
+        try:
+            return ImageFont.truetype(name, size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def _compose_og_card(name: str, headline: str, photo_url: str) -> bytes:
+    """Pure-CPU + short network compose. Runs in a worker thread ONLY."""
+    from PIL import Image, ImageDraw, ImageOps
+    from io import BytesIO
+
+    img  = Image.new("RGB", (1200, 630), _OG_NAVY)
+    draw = ImageDraw.Draw(img)
+
+    # ── Student photo (best-effort; every failure → initial fallback) ──
+    photo = None
+    try:
+        if (photo_url or "").startswith("http"):
+            import httpx
+            with httpx.Client(timeout=5, follow_redirects=True) as client:
+                resp = client.get(photo_url)
+            ctype = resp.headers.get("content-type", "") or ""
+            if (resp.status_code == 200
+                    and ctype.lower().startswith("image/")
+                    and len(resp.content) < 5 * 1024 * 1024):
+                photo = Image.open(BytesIO(resp.content)).convert("RGB")
+    except Exception:
+        photo = None
+
+    px, py, d = 100, 165, 300      # photo circle: top-left + diameter
+    if photo is not None:
+        try:
+            photo = ImageOps.fit(photo, (d, d))
+            mask = Image.new("L", (d, d), 0)
+            ImageDraw.Draw(mask).ellipse((0, 0, d, d), fill=255)
+            img.paste(photo, (px, py), mask)
+        except Exception:
+            photo = None
+    if photo is None:
+        draw.ellipse((px, py, px + d, py + d), outline=_OG_GOLD, width=6)
+        initial = ((name or "U").strip()[:1] or "U").upper()
+        f = _og_font(140)
+        bbox = draw.textbbox((0, 0), initial, font=f)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        draw.text(
+            (px + d / 2 - tw / 2 - bbox[0], py + d / 2 - th / 2 - bbox[1]),
+            initial, font=f, fill=_OG_GOLD,
+        )
+
+    # ── Name, subtle gold rule, headline ──────────────────────────────
+    display_name = (name or "Upskillize Learner").strip()
+    if len(display_name) > 26:
+        display_name = display_name[:25] + "…"
+    draw.text((470, 236), display_name, font=_og_font(64), fill=_OG_WHITE)
+
+    draw.rectangle((470, 336, 1100, 339), fill=_OG_GOLD)   # the gold rule
+
+    hl = (headline or "").strip()
+    if hl:
+        if len(hl) > 58:
+            hl = hl[:57] + "…"
+        draw.text((470, 362), hl, font=_og_font(30), fill=_OG_GOLD)
+
+    # ── Footer, letter-spaced ─────────────────────────────────────────
+    footer = " ".join("UPSKILLIZE · OFFICIAL LMS RECORD")
+    draw.text((100, 562), footer, font=_og_font(20), fill=_OG_MUTED)
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@router.get("/profile/share/{token}/card.png")
+async def get_share_card(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Open Graph card for a shared profile. Token-gated like the share
+    view. Pillow imported lazily — the app boots (and this returns the
+    unified 404) even if Pillow isn't installed."""
+    if not token or len(token) < 20:
+        raise HTTPException(404, _ERR_NOT_FOUND)
+
+    profile = db.query(StudentProfile).filter_by(share_token=token).first()
+    if not profile:
+        raise HTTPException(404, _ERR_NOT_FOUND)
+
+    try:
+        from PIL import Image, ImageDraw, ImageFont   # noqa: F401 — availability probe
+    except ImportError:
+        raise HTTPException(404, _ERR_NOT_FOUND)
+
+    key = (token, str(getattr(profile, "updated_at", "") or ""))
+    png = _OG_CARD_CACHE.get(key)
+    if png is None:
+        png = await asyncio.to_thread(
+            _compose_og_card,
+            profile.student_name or "",
+            profile.student_headline or "",
+            profile.student_photo_url or "",
+        )
+        while len(_OG_CARD_CACHE) >= _OG_CARD_CACHE_MAX:   # evict oldest
+            _OG_CARD_CACHE.pop(next(iter(_OG_CARD_CACHE)))
+        _OG_CARD_CACHE[key] = png
+
+    METRICS["og_cards_served"] += 1
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 # =========================================================================
@@ -627,14 +1238,53 @@ async def toggle_corporate_visibility(
     if not profile:
         raise HTTPException(404, _ERR_NOT_FOUND)
 
+    # ── v5.4 PUBLISH GATE — ATS Readiness below 60 → ask to improve first ──
+    # Product rule (user, 23 Jul): the score is a coach. A student publishing
+    # below the 60 mark is asked to improve before going live; they can still
+    # publish by explicitly confirming (never hard-blocked). Any failure in
+    # the ATS computation publishes normally — an internal error must never
+    # stand between a student and recruiters.
+    if bool(body.visible) and not profile.visible_to_corporates \
+            and not body.confirm_low_score:
+        try:
+            student_data = await asyncio.to_thread(_collect_all_sync, db, student.id)
+            ats = await asyncio.to_thread(_ats_from_student_data, student_data)
+            _score = int(ats.get("total_score", 0)) if isinstance(ats, dict) else 0
+            _locked = bool(ats.get("locked")) if isinstance(ats, dict) else False
+            if _locked or _score < 60:
+                METRICS["publish_deferred_low_ats"] += 1
+                return {
+                    "published": False,
+                    "needs_improvement": True,
+                    "ats_score": _score,
+                    "ats_band": (ats.get("band") if isinstance(ats, dict) else None),
+                    "tips": (ats.get("tips") if isinstance(ats, dict) else []) or [],
+                    "missing_keywords": ((ats.get("components") or {}).get("keyword") or {}).get("missing", [])[:8]
+                                        if isinstance(ats, dict) else [],
+                    "message": (
+                        "Your ATS Readiness needs a start — add your skills and complete "
+                        "your first assessment, then publish."
+                        if _locked else
+                        f"Your ATS Readiness is {_score} — below the 60 mark recruiters "
+                        "respond best to. Strengthen it first using the tips on your "
+                        "Readiness & Fit section, then publish. You can also publish "
+                        "anyway by confirming."
+                    ),
+                    "visible_to_corporates": False,
+                }
+        except Exception:
+            logger.exception("Publish gate ATS check failed — publishing without gate")
+
     profile.visible_to_corporates = bool(body.visible)
     db.commit()
 
     return {
+        # v5.3 — publish language (profiles now start unpublished; this
+        # toggle IS the Publish button)
         "message":              (
-            "Your profile is now visible to corporate recruiters."
+            "Profile published — visible to recruiters."
             if profile.visible_to_corporates
-            else "Your profile is hidden from corporate recruiters."
+            else "Profile unpublished — hidden from recruiters."
         ),
         "visible_to_corporates": bool(profile.visible_to_corporates),
         "corporate_url":         _corporate_url(profile.student_id) if profile.visible_to_corporates else None,
@@ -666,11 +1316,40 @@ async def get_profile_for_corporate(
         # 404 not 403: don't leak "this student exists but hid from corporates"
         raise HTTPException(404, _ERR_NOT_FOUND)
 
+    # v5.3 TEMPLATE FRESHNESS: same render-on-read healing as share views.
+    html = profile.rendered_html
+    stored_tpl, stored_fp = _parse_marker(html)
+    if stored_tpl != _template_version():
+        html = await _heal_stale_html(db, profile, stored_fp)
+
     _log_view(db, profile.id, request, viewer_type="corporate")
     profile.total_views = (profile.total_views or 0) + 1
     db.commit()
 
-    return HTMLResponse(content=profile.rendered_html, status_code=200)
+    METRICS["corporate_views"] += 1
+    return HTMLResponse(content=html, status_code=200)
+
+
+# =========================================================================
+# ADMIN — OPERATIONAL METRICS — v5.3
+# =========================================================================
+
+@router.get("/admin/metrics")
+async def get_admin_metrics(
+    admin=Depends(get_current_admin),
+):
+    """Process-local counters (reset on restart, per-worker — see METRICS
+    note at top of file). For eyeballing load and no-op savings."""
+    return {
+        "uptime_seconds": round(time.time() - METRICS_STARTED_AT, 1),
+        "counters": dict(METRICS),
+        "config": {
+            "waiting_room":     GENERATION_WAITING_ROOM,
+            "max_parallel":     MAX_PARALLEL_GENERATIONS,
+            "wait_seconds":     GENERATION_WAIT_SECONDS,
+            "template_version": _template_version(),
+        },
+    }
 
 
 # =========================================================================
