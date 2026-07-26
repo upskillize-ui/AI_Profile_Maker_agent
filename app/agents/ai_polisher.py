@@ -273,6 +273,8 @@ class AIPolisher:
             )
             resp.raise_for_status()
             data = resp.json()
+            from app.services import usage_reporter
+            usage_reporter.report(model, data.get("usage"))
             return data["content"][0]["text"]
         except Exception as e:
             logger.warning(f"AI Polisher [{model}] failed: {e}")

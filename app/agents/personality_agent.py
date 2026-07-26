@@ -194,7 +194,10 @@ RULES:
                     },
                 )
                 resp.raise_for_status()
-                text = resp.json()["content"][0]["text"].strip()
+                _data = resp.json()
+                from app.services import usage_reporter
+                usage_reporter.report("claude-haiku-4-5-20251001", _data.get("usage"))
+                text = _data["content"][0]["text"].strip()
 
                 # Clean markdown fences
                 if text.startswith("```"):

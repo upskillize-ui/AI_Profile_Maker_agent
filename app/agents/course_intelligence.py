@@ -223,7 +223,10 @@ Now produce the JSON array for the {len(course_summaries)} course(s) above:"""
                     },
                 )
                 resp.raise_for_status()
-                text_response = resp.json()["content"][0]["text"].strip()
+                _data = resp.json()
+                from app.services import usage_reporter
+                usage_reporter.report(model, _data.get("usage"))
+                text_response = _data["content"][0]["text"].strip()
 
                 # Strip markdown fences if present
                 if text_response.startswith("```"):

@@ -685,6 +685,8 @@ async def generate_profile(
 
 async def _full_generate(student_id: int, existing: StudentProfile, db: Session) -> dict:
     """First-time generation — runs the full orchestrator pipeline."""
+    from app.services import usage_reporter
+    usage_reporter.set_student(student_id)   # cost attribution -> Student Cost Sheet
     try:
         start = time.time()
         METRICS["generations_started"] += 1

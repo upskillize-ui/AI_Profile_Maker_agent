@@ -327,7 +327,10 @@ class SummaryAgent:
                 },
             )
             resp.raise_for_status()
-            text = resp.json()["content"][0]["text"].strip()
+            _data = resp.json()
+            from app.services import usage_reporter
+            usage_reporter.report("claude-sonnet-4-6", _data.get("usage"))
+            text = _data["content"][0]["text"].strip()
 
         return self._clean_bullets(text, max_bullets=5)
 
