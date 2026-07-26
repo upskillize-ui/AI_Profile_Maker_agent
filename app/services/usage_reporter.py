@@ -28,7 +28,13 @@ def report(model: str, usage: dict | None) -> None:
     base = os.getenv("LMS_BASE_URL", "").rstrip("/")
     secret = os.getenv("INTERNAL_CREDIT_SECRET", "")
     student_id = _student.get()
-    if not base or not secret or not student_id or not isinstance(usage, dict):
+    if not base or not secret:
+        print("[usage] OFF: LMS_BASE_URL / INTERNAL_CREDIT_SECRET not set in this Space")
+        return
+    if not student_id:
+        print("[usage] skipped: no student set for this generation")
+        return
+    if not isinstance(usage, dict):
         return
     try:
         eff_in = (int(usage.get("input_tokens") or 0)
@@ -44,5 +50,6 @@ def report(model: str, usage: dict | None) -> None:
             headers={"Content-Type": "application/json",
                      "X-Internal-Secret": secret}, method="POST")
         urllib.request.urlopen(req, timeout=5).read()
+        print(f"[usage] ProfileIQ -> LMS user {student_id}: {model}")
     except Exception as e:
         print(f"[usage] report skipped: {e}")
