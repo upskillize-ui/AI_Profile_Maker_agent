@@ -78,7 +78,13 @@ class SkillsAgent:
             for course in courses:
                 cname = (course.get("course_name") or "").lower()
                 progress = course.get("progress_percentage", 0) or 0
-                completed = course.get("completed_at") is not None
+                # v6.9 FIX: the collector always sets completed_at (possibly ""),
+                # so `is not None` was True for every course — skills were being
+                # derived from courses with 0% progress. Use the real status.
+                completed = (
+                    (course.get("completion_status") or course.get("status") or "").lower() == "completed"
+                    or progress >= 100
+                )
 
                 # Only derive skill if course has actual progress or completion
                 if progress < 10 and not completed:

@@ -118,6 +118,12 @@ class DataCollector:
                 for i, r in enumerate(results)
             ]
 
+            # v6.8: proctored exams join the Assessments list.
+            try:
+                assessments = list(assessments) + await self._get_proctored_exams(user_id)
+            except Exception as e:
+                logger.warning(f"_get_proctored_exams failed for user_id={user_id}: {e}")
+
             # v6.7: hackathons (AIthon) — synchronous, after the gather.
             try:
                 hackathons = await self._get_hackathons(user_id, sid, personal.get("email"))
@@ -440,6 +446,40 @@ class DataCollector:
             ORDER BY e.created_at DESC
         """), {"uid": enrollment_student_id}).mappings().all()
 
+    @staticmethod
+    def _pct(grade, max_marks, rubric=None) -> Optional[float]:
+        """v6.8 — admin grades coursework OUT OF total_marks (or the rubric's
+        point total), not out of 100 (see frontend AdminCoursework.jsx:
+        `{r.grade}/{item.total_marks || 100}`). Convert to a percentage.
+        A grade above the maximum is a 0-100 score written by the AI
+        reviewer (same file, line ~1401) — keep it as-is, capped at 100."""
+        if grade is None:
+            return None
+        try:
+            g = float(grade)
+        except (TypeError, ValueError):
+            return None
+        mx = None
+        if rubric:
+            try:
+                rb = json.loads(rubric) if isinstance(rubric, str) else rubric
+                cats = (rb or {}).get("categories") or []
+                tot = sum(float(c.get("points") or 0) for c in cats if isinstance(c, dict))
+                if tot > 0:
+                    mx = tot
+            except Exception:
+                mx = None
+        if mx is None:
+            try:
+                mx = float(max_marks) if max_marks else None
+            except (TypeError, ValueError):
+                mx = None
+        if not mx or mx <= 0:
+            mx = 100.0
+        if g > mx:
+            return round(min(g, 100.0), 2)
+        return round(g / mx * 100.0, 2)
+
     def _resolve_students_id(self, user_id: int) -> Optional[int]:
         """users.id → students.id via the students table (students.user_id)."""
         try:
@@ -473,6 +513,7 @@ class DataCollector:
                     cs.title              AS case_title,
                     cs.description        AS case_brief,
                     cs.course_id,
+                    cs.total_marks        AS total_marks,
                     co.course_name        AS course_name
                 FROM case_study_submissions css
                 LEFT JOIN case_studies cs ON cs.id = css.case_study_id
@@ -484,17 +525,20 @@ class DataCollector:
             items = []
             for r in rows:
                 grade = r.get("grade")
+                pct = self._pct(grade, r.get("total_marks"))
                 items.append({
                     "submission_id":  r["submission_id"],
                     "case_study_id":  r["case_study_id"],
                     "title":          r.get("case_title") or "Case Study",
                     "brief":          r.get("case_brief") or "",
-                    "score":          float(grade) if grade is not None else None,
-                    "ai_score":       float(grade) if grade is not None else None,
-                    "faculty_score":  float(grade) if grade is not None else None,
+                    "score":          pct,
+                    "ai_score":       pct,
+                    "faculty_score":  pct,
+                    "raw_grade":      float(grade) if grade is not None else None,
+                    "total_marks":    r.get("total_marks"),
                     "max_score":      100,
-                    "ai_grade":       self._grade_letter(grade),
-                    "ai_grade_label": self._grade_label(grade),
+                    "ai_grade":       self._grade_letter(pct),
+                    "ai_grade_label": self._grade_label(pct),
                     "status":         r.get("status") or "",
                     "course_name":    r.get("course_name") or "",
                     "module_name":    "",
@@ -525,29 +569,38 @@ class DataCollector:
                     a.title               AS assignment_title,
                     a.description         AS assignment_brief,
                     a.course_id,
+                    a.total_marks         AS total_marks,
+                    a.rubric              AS rubric,
                     co.course_name        AS course_name
                 FROM assignment_submissions asub
                 LEFT JOIN assignments  a ON a.id = asub.assignment_id
                 LEFT JOIN courses      co ON co.id = a.course_id
                 WHERE asub.student_id = :uid
+                  -- v6.9: hackathon-type assignments (AIthon) are shown in the
+                  -- Hackathon tab only — never double-counted as assignments.
+                  AND LOWER(COALESCE(a.title, '')) NOT LIKE '%aithon%'
+                  AND LOWER(COALESCE(a.title, '')) NOT LIKE '%hackathon%'
                 ORDER BY asub.grade DESC, asub.submitted_at DESC
             """), {"uid": user_id}).mappings().all()
 
             items = []
             for r in rows:
                 grade = r.get("grade")
+                pct = self._pct(grade, r.get("total_marks"), r.get("rubric"))
                 items.append({
                     "submission_id":   r["submission_id"],
                     "assignment_id":   r["assignment_id"],
                     "title":           r.get("assignment_title") or "Assignment",
                     "brief":           r.get("assignment_brief") or "",
-                    "score":           float(grade) if grade is not None else None,
-                    "ai_score":        float(grade) if grade is not None else None,
-                    "faculty_score":   float(grade) if grade is not None else None,
-                    "rubric_pct":      float(grade) if grade is not None else None,
+                    "score":           pct,
+                    "ai_score":        pct,
+                    "faculty_score":   pct,
+                    "rubric_pct":      pct,
+                    "raw_grade":       float(grade) if grade is not None else None,
+                    "total_marks":     r.get("total_marks"),
                     "max_score":       100,
-                    "ai_grade_label":  self._grade_label(grade),
-                    "rubric_grade":    self._grade_letter(grade),
+                    "ai_grade_label":  self._grade_label(pct),
+                    "rubric_grade":    self._grade_letter(pct),
                     "status":          r.get("status") or "",
                     "course_name":     r.get("course_name") or "",
                     "module_name":     "",
@@ -776,6 +829,7 @@ class DataCollector:
                        s.feedback, s.notes, s.share_note, s.file_name, s.file_path,
                        s.submitted_at,
                        a.title, a.description, a.due_date, a.course_id,
+                       a.total_marks, a.rubric,
                        co.course_name
                 FROM assignment_submissions s
                 JOIN assignments a ON a.id = s.assignment_id
@@ -791,6 +845,11 @@ class DataCollector:
             for r in rows:
                 seen_assignment.add(r["assignment_id"])
                 grade = r.get("grade")
+                pct = self._pct(grade, r.get("total_marks"), r.get("rubric"))
+                # v6.9 rule: a graded hackathon entry must score ≥ 50% to be
+                # shown on the profile. Ungraded entries (participation) stay.
+                if pct is not None and pct < 50:
+                    continue
                 items.append({
                     "source":            "assignment",
                     "assignment_id":     r["assignment_id"],
@@ -804,7 +863,9 @@ class DataCollector:
                     "description":       (r.get("notes") or r.get("share_note") or "")[:220],
                     "link":              self._abs_link(r.get("file_path")),
                     "link_label":        r.get("file_name") or "View submission",
-                    "score":             float(grade) if grade is not None else None,
+                    "score":             pct,
+                    "raw_grade":         float(grade) if grade is not None else None,
+                    "total_marks":       r.get("total_marks"),
                     "feedback":          r.get("feedback") or "",
                     "status":            r.get("status") or "submitted",
                     "held_at":           str(r.get("due_date") or r.get("submitted_at") or "")[:10],
@@ -898,6 +959,12 @@ class DataCollector:
                     created_at
                 FROM test_history
                 WHERE student_id = :uid
+                  -- v6.9: an attempt with zero correct answers, or no topic, is an
+                  -- opened-and-abandoned test (verified 21 Oct: all 22 such rows
+                  -- for user 87 had correct_answers=0, most under 30s). Excluding
+                  -- them keeps the axis an honest average of real attempts.
+                  AND COALESCE(correct_answers, 0) > 0
+                  AND COALESCE(topic, '') <> ''
                 ORDER BY score_percentage DESC, created_at DESC
             """), {"uid": str(user_id)}).mappings().all()
 
@@ -1075,7 +1142,7 @@ class DataCollector:
         try:
             row = self.db.execute(text("""
                 SELECT
-                    student_id, score, band, events_counted, computed_at
+                    student_id, score, band, events_counted, computed_at, breakdown
                 FROM punctuality_scores
                 WHERE student_id = :uid
                 ORDER BY computed_at DESC
@@ -1085,12 +1152,21 @@ class DataCollector:
             if not row:
                 return {"score": None, "band": None, "events_counted": 0, "status": "no_data"}
 
+            bd = row.get("breakdown")
+            if isinstance(bd, (str, bytes)):
+                try:
+                    bd = json.loads(bd)
+                except Exception:
+                    bd = {}
+            if not isinstance(bd, dict):
+                bd = {}
             return {
                 "score":          float(row["score"]) if row["score"] is not None else None,
                 "band":           row.get("band") or "",
                 "events_counted": int(row.get("events_counted") or 0),
                 "computed_at":    str(row.get("computed_at") or ""),
-                "status":         "available",
+                "breakdown":      bd,
+                "status":         "available" if row["score"] is not None else "cold_start",
             }
         except Exception as e:
             logger.info(f"_get_punctuality: unavailable for user_id={user_id} ({e})")
@@ -1101,16 +1177,83 @@ class DataCollector:
     # =====================================================================
 
     async def _get_psychometric(self, user_id: int) -> Dict[str, Any]:
+        """v6.8 — the LMS stores psychometric results in
+        lms_profile_psychometric_test (routes/psychometric.js): user_id,
+        attempt_no, dominant_trait, dominant_icon, top_traits JSON,
+        trait_scores JSON, conflict_style, learning_style, archetype,
+        work_values JSON, role_matches JSON, is_latest, completed_at.
+        users.psycho_result (the old source) is never written by the LMS;
+        it is kept only as a fallback."""
+        empty = {"personality_type": None, "traits": [], "summary": "", "status": "no_data"}
+
+        def _j(v):
+            if v in (None, ""):
+                return None
+            if isinstance(v, (dict, list)):
+                return v
+            try:
+                return json.loads(v)
+            except Exception:
+                return None
+
         try:
             row = self.db.execute(text("""
+                SELECT * FROM lms_profile_psychometric_test
+                WHERE user_id = :uid
+                ORDER BY is_latest DESC, attempt_no DESC, completed_at DESC
+                LIMIT 1
+            """), {"uid": user_id}).mappings().first()
+        except Exception as e:
+            logger.info(f"_get_psychometric: lms_profile_psychometric_test unavailable ({e})")
+            row = None
+
+        if row:
+            top = _j(row.get("top_traits")) or []
+            traits = []
+            for t in top:
+                if isinstance(t, dict):
+                    nm = t.get("trait") or t.get("name") or t.get("label")
+                    if nm:
+                        traits.append(str(nm))
+                elif t:
+                    traits.append(str(t))
+            scores = _j(row.get("trait_scores")) or {}
+            values = _j(row.get("work_values")) or []
+            roles  = _j(row.get("role_matches")) or []
+            ptype  = row.get("archetype") or row.get("dominant_trait") or ""
+            bits = []
+            if row.get("dominant_trait"):
+                bits.append(f"Dominant trait: {row['dominant_trait']}")
+            if row.get("learning_style"):
+                bits.append(f"learning style: {row['learning_style']}")
+            if row.get("conflict_style"):
+                bits.append(f"conflict style: {row['conflict_style']}")
+            return {
+                "personality_type": ptype,
+                "archetype":        row.get("archetype") or "",
+                "dominant_trait":   row.get("dominant_trait") or "",
+                "traits":           traits,
+                "strengths":        traits[:3],
+                "trait_scores":     scores if isinstance(scores, dict) else {},
+                "learning_style":   row.get("learning_style") or "",
+                "conflict_style":   row.get("conflict_style") or "",
+                "work_values":      values,
+                "role_matches":     roles,
+                "summary":          "; ".join(bits),
+                "completed_at":     str(row.get("completed_at") or ""),
+                "status":           "available",
+            }
+
+        # fallback: legacy users.psycho_result
+        try:
+            r2 = self.db.execute(text("""
                 SELECT psycho_result FROM users WHERE id = :uid LIMIT 1
             """), {"uid": user_id}).first()
-            if not row or not row[0]:
-                return {"personality_type": None, "traits": [], "summary": "", "status": "no_data"}
-            raw = row[0]
-            data = json.loads(raw) if isinstance(raw, str) else raw
+            if not r2 or not r2[0]:
+                return empty
+            data = _j(r2[0]) or {}
             if not isinstance(data, dict):
-                data = {}
+                return empty
             return {
                 "personality_type": data.get("type") or data.get("mbti") or "",
                 "traits":           data.get("traits") or [],
@@ -1120,11 +1263,7 @@ class DataCollector:
             }
         except Exception as e:
             logger.warning(f"_get_psychometric failed for user_id={user_id}: {e}")
-            return {"personality_type": None, "traits": [], "summary": "", "status": "no_data"}
-
-    # =====================================================================
-    # CERTIFICATIONS
-    # =====================================================================
+            return empty
 
     async def _get_certifications(self, user_id: int) -> List[Dict[str, Any]]:
         """users.certifications (self-reported JSON/CSV) + v6.6: LMS-issued
@@ -1178,6 +1317,49 @@ class DataCollector:
     # =====================================================================
     # ASSESSMENTS (faculty-uploaded quizzes)
     # =====================================================================
+
+    async def _get_proctored_exams(self, user_id: int) -> List[Dict[str, Any]]:
+        """v6.8 — Proctored exams (routes/examStudent.js): exam_attempts
+        keyed on users.id; score = total_score / max_score. Only graded or
+        published attempts count. Listed alongside faculty quizzes in the
+        Assessments tab (flagged test_type='proctored')."""
+        try:
+            rows = self.db.execute(text("""
+                SELECT ea.id, ea.exam_id, ea.status, ea.total_score, ea.max_score,
+                       ea.passed, ea.submitted_at,
+                       e.exam_name, e.exam_type, e.total_marks, e.course_id,
+                       co.course_name
+                FROM exam_attempts ea
+                LEFT JOIN exams   e  ON e.id  = ea.exam_id
+                LEFT JOIN courses co ON co.id = e.course_id
+                WHERE ea.student_id = :uid
+                  AND ea.status IN ('graded', 'published')
+                ORDER BY ea.submitted_at DESC
+            """), {"uid": user_id}).mappings().all()
+        except Exception as e:
+            logger.info(f"_get_proctored_exams: unavailable ({e})")
+            return []
+        items = []
+        for r in rows:
+            mx = r.get("max_score") or r.get("total_marks")
+            pct = self._pct(r.get("total_score"), mx)
+            items.append({
+                "quiz_id":      f"exam-{r.get('exam_id')}",
+                "attempt_id":   r["id"],
+                "title":        r.get("exam_name") or "Proctored Exam",
+                "quiz_title":   r.get("exam_name") or "Proctored Exam",
+                "score":        pct,
+                "percentage":   pct,
+                "raw_score":    float(r["total_score"]) if r.get("total_score") is not None else None,
+                "total_marks":  float(mx) if mx else None,
+                "max_score":    100,
+                "passed":       bool(r.get("passed")) if r.get("passed") is not None else None,
+                "status":       r.get("status") or "",
+                "test_type":    "proctored",
+                "course_name":  r.get("course_name") or "",
+                "submitted_at": str(r.get("submitted_at") or ""),
+            })
+        return items
 
     async def _get_assessments(self, user_id: int) -> List[Dict[str, Any]]:
         """
@@ -1567,6 +1749,9 @@ _SCHEMA_CONTRACT: Dict[str, List[str]] = {
     "session_attendance":           ["session_id", "student_id", "attended"],
     "certificates":                 ["course_id", "is_revoked"],
     "upski_coin_ledger":            ["user_id", "task_key", "coins", "note"],
+    "lms_profile_psychometric_test":["user_id", "is_latest", "dominant_trait"],
+    "exam_attempts":                ["student_id", "status", "total_score", "max_score"],
+    "exams":                        ["id", "exam_name"],
     "test_history":                 ["id", "student_id", "score_percentage",
                                      "created_at"],
     "vyom_sessions":                ["id", "user_id", "mode",

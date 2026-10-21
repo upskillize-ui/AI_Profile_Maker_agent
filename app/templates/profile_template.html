@@ -192,6 +192,11 @@ section:last-of-type{border-bottom:none;}
 .perf-item.r8{border-left-color:#D9A85B;}
 .perf-rank{font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--gold-bright);}
 .perf-name{font-family:'Playfair Display',serif;font-size:16px;font-weight:600;color:#EDF0F5;margin-bottom:4px;line-height:1.3;}
+.perf-detail{font-size:12px;color:rgba(255,255,255,0.72);margin-top:5px;line-height:1.5;}
+.perf-detail b{color:rgba(255,255,255,0.92);font-weight:600;}
+.perf-link{color:var(--gold,#C8992A);font-weight:600;text-decoration:underline;}
+.psych-styles{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:12px;font-size:12px;color:var(--body,#475569);}
+.psych-styles b{font-weight:600;color:var(--ink,#0B1628);}
 .perf-context{font-family:'DM Mono',monospace;font-size:10px;color:rgba(255,255,255,0.5);letter-spacing:0.08em;text-transform:uppercase;}
 .perf-context span{color:var(--teal);}
 .perf-score{font-family:'DM Mono',monospace;font-size:24px;font-weight:600;color:var(--gold-bright);text-align:right;line-height:1;}
@@ -402,6 +407,14 @@ section:last-of-type{border-bottom:none;}
 .powered-btn.ghost:hover{background:rgba(255,255,255,0.06);}
 
 /* ── Punctuality panel card (v12.6) ── */
+.punct-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0 14px;}
+.punct-tile{border:1px solid var(--rule,#E5E7EB);border-radius:12px;padding:14px 16px;background:var(--paper,#fff);}
+.punct-tile-label{font-family:'DM Mono',ui-monospace,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold,#C8992A);font-weight:500;}
+.punct-tile-val{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:30px;line-height:1.1;margin-top:6px;color:var(--ink,#0B1628);}
+.punct-tile-val span{font-family:'DM Mono',ui-monospace,monospace;font-style:normal;font-size:11px;color:var(--hint,#6B7280);margin-left:4px;}
+.punct-tile-meta{font-size:12px;color:var(--body,#475569);margin-top:4px;line-height:1.4;}
+.punct-foot{font-size:12px;color:var(--hint,#6B7280);line-height:1.6;border-top:1px solid var(--rule2,#F1F5F9);padding-top:12px;}
+@media (max-width:640px){.punct-grid{grid-template-columns:1fr;}}
 .punct-card{padding:32px 24px;background:#FAF7F0;border:1px solid #EDE7D8;border-radius:12px;max-width:640px;margin:0 auto;}
 .punct-score-row{display:flex;align-items:baseline;gap:18px;padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid #EDE7D8;}
 .punct-score-num{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-weight:500;font-size:56px;color:#0B1628;line-height:1;}
@@ -951,25 +964,21 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="perf" data-tab-id="industry">
     {% if industry_sessions_raw and industry_sessions_raw|length > 0 %}
     <div class="perf-card">
-      {% for s in industry_sessions_raw[:5] %}
+      {% for s in industry_sessions_raw[:8] %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
-          <div class="perf-name">{{ s.title or 'Industry Session' }}{% if s.attempt_count and s.attempt_count > 1 %} <span class="perf-badge-mini">{{ s.attempt_count }} attempts · best score</span>{% endif %}</div>
-          <div class="perf-context">{% if s.speaker %}<span>{{ s.speaker }}</span>{% endif %}{% if s.company %} · {{ s.company }}{% endif %}{% if s.duration %} · {{ s.duration }}{% endif %}{% if s.held_at %} · {{ fmt_date(s.held_at) }}{% endif %}</div>
+          <div class="perf-name">{{ s.title or 'Industry Session' }}</div>
+          <div class="perf-context">{% if s.type %}{{ s.type|replace('-',' ') }}{% endif %}{% if s.held_at %} · {{ fmt_date(s.held_at) }}{% endif %}{% if s.held_time %} · {{ s.held_time }}{% endif %}{% if s.duration %} · {{ s.duration }}{% endif %}{% if s.platform %} · {{ s.platform }}{% endif %}</div>
+          {% if s.speaker or s.company %}<div class="perf-detail"><b>Speaker:</b> {{ s.speaker }}{% if s.company %}{% if s.speaker %}, {% endif %}{{ s.company }}{% endif %}</div>{% endif %}
+          {% if s.brief %}<div class="perf-detail"><b>About:</b> {{ s.brief|striptags|truncate(260) }}</div>{% endif %}
+          {% if s.insight %}<div class="perf-detail"><b>My takeaway:</b> {{ s.insight|striptags|truncate(260) }}</div>{% endif %}
+          {% if s.attachment_url %}<div class="perf-detail"><a href="{{ s.attachment_url }}" target="_blank" rel="noopener" class="perf-link">{{ s.attachment_name or 'View submission' }} ↗</a></div>{% endif %}
         </div>
-        {# v12.6 — show the real submission score when present; LIVE badge only when unscored #}
-        {% if s.score is not none %}
-        <div>
-          <div class="perf-score">{{ s.score|int }}<span class="perf-score-pct">%</span></div>
-          <div class="perf-score-meta">{% if s.band %}{{ s.band }}{% elif s.grade %}Grade {{ s.grade }}{% else %}Scored{% endif %}</div>
-        </div>
-        {% else %}
-        <div><div class="perf-score live">LIVE</div><div class="perf-score-meta">Attended</div></div>
-        {% endif %}
+        <div><div class="perf-score live">{% if s.status == 'graded' %}GRADED{% else %}ATTENDED{% endif %}</div><div class="perf-score-meta">{% if s.submitted_at and s.status != 'attended' %}Insight submitted{% else %}Live session{% endif %}</div></div>
       </div>
       {% endfor %}
-      {% if industry_sessions_raw|length > 5 %}<div class="perf-more">+ {{ industry_sessions_raw|length - 5 }} more industry sessions in portfolio</div>{% endif %}
+      {% if industry_sessions_raw|length > 8 %}<div class="perf-more">+ {{ industry_sessions_raw|length - 8 }} more industry sessions in portfolio</div>{% endif %}
     </div>
     {% else %}<div class="empty-tile"><b>No industry sessions logged</b><ul class="empty-points"><li>Live masterclasses with working professionals — current practice, not textbook theory.</li><li>Attendance and key takeaways are logged as engagement proof.</li></ul><span class="empty-auto">Sessions attended via Upskillize appear here automatically.</span></div>{% endif %}
   </div>
@@ -981,18 +990,34 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
     {% set _pct_band = perf_snapshot.punctuality_band or '' %}
     <div class="punct-card">
       {% if _pct_score and _pct_score > 0 %}
-      {# ─── Data available: score + band, then bullets ─── #}
+      {# ─── Data available: score + band + the three real curves ─── #}
+      {% set _bd = perf_snapshot.punctuality_breakdown or {} %}
+      {% set _dl = _bd.get('deadline', {}) %}{% set _at = _bd.get('attendance', {}) %}{% set _lg = _bd.get('logins', {}) %}
       <div class="punct-score-row">
         <div class="punct-score-num">{{ _pct_score | int }}<span class="punct-score-suffix">/100</span></div>
         {% if _pct_band %}<div class="punct-score-band">{{ _pct_band }}</div>{% endif %}
       </div>
-      <div class="punct-heading">Your Punctuality Score reflects:</div>
-      <ul class="punct-bullets">
-        <li>Reliability in attending live sessions</li>
-        <li>Consistency in submitting work by deadlines</li>
-        <li>Timeliness in responding to session commitments</li>
-        <li>Recent behavior weighted more than older activity</li>
-      </ul>
+      <div class="punct-grid">
+        <div class="punct-tile">
+          <div class="punct-tile-label">Deadlines</div>
+          <div class="punct-tile-val">{% if _dl.get('avg') is not none %}{{ _dl.get('avg') }}<span>/100</span>{% else %}—{% endif %}</div>
+          <div class="punct-tile-meta">{{ _dl.get('events', 0) }} submission{{ '' if _dl.get('events', 0) == 1 else 's' }} vs due date</div>
+        </div>
+        <div class="punct-tile">
+          <div class="punct-tile-label">Attendance</div>
+          <div class="punct-tile-val">{% if _at.get('avg') is not none %}{{ _at.get('avg') }}<span>/100</span>{% else %}—{% endif %}</div>
+          <div class="punct-tile-meta">{{ _at.get('events', 0) }} live session{{ '' if _at.get('events', 0) == 1 else 's' }} tracked</div>
+        </div>
+        <div class="punct-tile">
+          <div class="punct-tile-label">Log-in rhythm</div>
+          <div class="punct-tile-val">{% if _lg.get('score') is not none %}{{ _lg.get('score') }}<span>/100</span>{% else %}—{% endif %}</div>
+          <div class="punct-tile-meta">{{ _lg.get('active_days', 0) }} of last {{ _lg.get('window_days', 30) }} days active</div>
+        </div>
+      </div>
+      <div class="punct-foot">
+        Recent behaviour counts more: last 30 days ×0.5 · days 31–60 ×0.3 · older ×0.2.
+        {{ perf_snapshot.punctuality_events or 0 }} events scored{% if perf_snapshot.punctuality_computed %} · updated {{ fmt_date(perf_snapshot.punctuality_computed) }}{% endif %}.
+      </div>
       {% else %}
       {# ─── No data: same bullets with Coming Soon framing ─── #}
       <div class="punct-coming-soon">
@@ -1015,21 +1040,17 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
     {% if hackathons_raw and hackathons_raw|length > 0 %}
     <div class="perf-card">
       {% for h in hackathons_raw[:5] %}
-      {% set rank = h.rank or h.placement %}
       <div class="perf-item r{{ loop.index if loop.index <= 8 else 1 }}">
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
           <div class="perf-name">{{ h.title or h.name or 'Hackathon' }}</div>
-          <div class="perf-context">{% if h.organiser %}<span>{{ h.organiser }}</span>{% endif %}{% if h.team_size %} · Team of {{ h.team_size }}{% endif %}{% if h.duration %} · {{ h.duration }}{% endif %}{% if h.held_at %} · {{ h.held_at }}{% endif %}{% if h.coins %} · {{ h.coins }} Upski Coins{% endif %}</div>
-          {% if h.problem_statement %}<div class="perf-context" style="margin-top:6px;"><b>Problem:</b> {{ h.problem_statement|striptags|truncate(220) }}</div>{% endif %}
-          {% if h.solution %}<div class="perf-context" style="margin-top:4px;"><b>Solution:</b> {{ h.solution|striptags|truncate(300) }}</div>{% endif %}
-          {% if h.link %}<div class="perf-context" style="margin-top:6px;"><a href="{{ h.link }}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:600;text-decoration:underline;">{{ h.link_label or 'View submission' }} ↗</a></div>{% endif %}
+          <div class="perf-context">{% if h.organiser %}{{ h.organiser }}{% endif %}{% if h.held_at %} · {{ fmt_date(h.held_at) }}{% endif %}{% if h.submitted_time %} · submitted {{ h.submitted_time }}{% endif %}{% if h.course_name %} · {{ h.course_name }}{% endif %}{% if h.coins %} · {{ h.coins }} Upski Coins{% endif %}</div>
+          {% if h.problem_statement %}<div class="perf-detail"><b>Problem statement:</b> {{ h.problem_statement|striptags|truncate(300) }}</div>{% endif %}
+          {% if h.solution %}<div class="perf-detail"><b>Solution:</b> {{ h.solution|striptags|truncate(360) }}</div>{% endif %}
+          {% if h.feedback %}<div class="perf-detail"><b>Jury feedback:</b> {{ h.feedback|striptags|truncate(200) }}</div>{% endif %}
+          {% if h.link %}<div class="perf-detail"><a href="{{ h.link }}" target="_blank" rel="noopener" class="perf-link">{{ h.link_label or 'View submission' }} ↗</a></div>{% endif %}
         </div>
-        <div>
-          {% if rank %}<div class="perf-score">#{{ rank }}</div><div class="perf-score-meta">{% if h.total %}/ {{ h.total }} teams{% else %}Ranked{% endif %}</div>
-          {% elif h.score is not none %}<div class="perf-score">{{ h.score|int }}<span class="perf-score-pct">%</span></div><div class="perf-score-meta">{{ h.award or 'Scored' }}</div>
-          {% else %}<div class="perf-score live">{{ (h.badge or 'Top')|upper }}</div><div class="perf-score-meta">{{ h.award or 'Attended' }}</div>{% endif %}
-        </div>
+        <div><div class="perf-score live">{{ (h.badge or 'Participant')|upper }}</div><div class="perf-score-meta">{{ h.award or 'Participated' }}</div></div>
       </div>
       {% endfor %}
     </div>
@@ -1264,8 +1285,16 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
       </div>
       {% if has_personality %}
       <div class="trait-list">
+        {% if personality_data.trait_scores %}
+        {# v6.9 — real server-scored traits (0-100), highest first #}
+        {% for tr in personality_data.trait_scores[:6] %}
+          <div>
+            <div class="trait-meta"><span class="trait-name">{{ tr.name }}{% if loop.first %} — dominant{% endif %}</span><span class="trait-pts">{{ tr.score }} / 100</span></div>
+            <div class="trait-bar"><div class="trait-fill tf{{ loop.index }}" style="--target-width:{{ tr.score }}%;"></div></div>
+          </div>
+        {% endfor %}
+        {% else %}
         {% set trait_keys = [('work_style','Work Style','tf1'),('communication','Communication','tf2'),('leadership','Team Role','tf3'),('integrity','Integrity','tf4'),('adaptability','Adaptability','tf5'),('innovation','Innovation','tf6')] %}
-        {% set rendered = namespace(count=0) %}
         {% for key, label, cls in trait_keys %}
           {% set val = personality_data.get(key) %}
           {% if val %}
@@ -1274,8 +1303,14 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
               <div class="trait-meta"><span class="trait-name">{{ label }}{% if val is string and val|length > 2 %} — {{ val|trim }}{% endif %}</span><span class="trait-pts">{{ pct }} / 100</span></div>
               <div class="trait-bar"><div class="trait-fill {{ cls }}" style="--target-width:{{ pct }}%;"></div></div>
             </div>
-            {% set rendered.count = rendered.count + 1 %}
           {% endif %}
+        {% endfor %}
+        {% endif %}
+      </div>
+      {% if personality_data.learning_style or personality_data.conflict_style or personality_data.completed_at %}
+      <div class="psych-styles">{% if personality_data.learning_style %}<span><b>Learning style:</b> {{ personality_data.learning_style }}</span>{% endif %}{% if personality_data.conflict_style %}<span><b>Conflict style:</b> {{ personality_data.conflict_style }}</span>{% endif %}{% if personality_data.completed_at %}<span>Assessed {{ fmt_date(personality_data.completed_at) }}</span>{% endif %}</div>
+      {% endif %}
+      {% endif %}
         {% endfor %}
       </div>
       {% endif %}

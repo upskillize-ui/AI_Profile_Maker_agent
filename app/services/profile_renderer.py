@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # v12.9 — exported template version; stamped into the rendered HTML head as
 # <!-- piq:tpl=... --> so ops can tell which template produced a stored page.
-TEMPLATE_VERSION = "12.10.0"  # v6.7: hackathon card (problem/solution/link), industry from session_understandings
+TEMPLATE_VERSION = "12.12.0"  # v6.8: grade normalisation, psychometric table, proctored exams, hackathon card
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 
@@ -358,7 +358,10 @@ def _compute_perf_snapshot(student_data: Dict, profile_data: Dict, computed: Dic
             "rings": rings, "average": avg, "cx": cx, "cy": cy,
             # Punctuality tab reads these (band pill + coming-soon switch)
             "punctuality_band":   punctuality.get("band") or "",
-            "punctuality_status": punctuality.get("status") or "no_data"}
+            "punctuality_status": punctuality.get("status") or "no_data",
+            "punctuality_breakdown": punctuality.get("breakdown") or {},
+            "punctuality_events":    punctuality.get("events_counted") or 0,
+            "punctuality_computed":  punctuality.get("computed_at") or ""}
 
 
 # ═══════════════════════════════════════════
