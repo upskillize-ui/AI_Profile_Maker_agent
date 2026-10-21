@@ -65,6 +65,7 @@ from app.api.deps import (
     get_current_student,
     get_current_admin,
     get_current_corporate,   # NEW — see deps.py note at bottom of this file
+    rate_limit,
 )
 from app.models.db_models import (
     StudentProfile, ProfileViewLog, ProfileStatus,
@@ -91,6 +92,10 @@ router  = APIRouter(prefix="/api/v1", tags=["Profile & Rubric"])
 # Old /api/v1/... links keep working forever (both routes hit the same handler).
 pretty_router = APIRouter(tags=["Share"])
 settings = get_settings()
+
+# SECURITY: share/corporate pages contain email + phone. Never let browsers or
+# shared proxies cache them.
+_NO_STORE = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
 logger   = logging.getLogger(__name__)
 
 # ─── Configurable public domain ──────────────────────────────────────────
@@ -590,6 +595,9 @@ async def generate_profile(
     """
     if student is None:
         raise HTTPException(401, "Authentication required. Please log in and try again.")
+
+    # SECURITY: cap AI-cost abuse (each generate calls paid AI + external fetches).
+    rate_limit(f"gen:{student.id}", limit=10, window_seconds=3600)
 
     # ── IDOR guard ────────────────────────────────────────────────────
     # If body.student_id was provided and doesn't match, log it as a
@@ -1244,7 +1252,7 @@ async def get_profile_by_share_token(
                 profile.total_views = (profile.total_views or 0) + 1
                 db.commit()
                 METRICS["share_views"] += 1
-                return HTMLResponse(content=cached, status_code=200)
+                return HTMLResponse(content=cached, status_code=200, headers=_NO_STORE)
 
     profile = db.query(StudentProfile).filter_by(share_token=token).first()
     if not profile or not profile.rendered_html:
@@ -1264,7 +1272,7 @@ async def get_profile_by_share_token(
 
     CacheService.set_profile_html(token, html)
     METRICS["share_views"] += 1
-    return HTMLResponse(content=html, status_code=200)
+    return HTMLResponse(content=html, status_code=200, headers=_NO_STORE)
 
 
 # =========================================================================
@@ -1490,6 +1498,9 @@ async def get_profile_for_corporate(
     if corporate is None:
         raise HTTPException(401, "Corporate authentication required.")
 
+    # SECURITY: stop bulk-scraping of sequential student IDs.
+    rate_limit(f"corp:{corporate.id}", limit=120, window_seconds=600)
+
     profile = db.query(StudentProfile).filter_by(student_id=student_id).first()
     if not profile or not profile.rendered_html:
         raise HTTPException(404, _ERR_NOT_FOUND)
@@ -1509,7 +1520,7 @@ async def get_profile_for_corporate(
     db.commit()
 
     METRICS["corporate_views"] += 1
-    return HTMLResponse(content=html, status_code=200)
+    return HTMLResponse(content=html, status_code=200, headers=_NO_STORE)
 
 
 # =========================================================================
@@ -1556,6 +1567,10 @@ async def debug_my_profile_data(
 
     if student is None:
         raise HTTPException(401, "Authentication required. Please log in and try again.")
+
+    # SECURITY: diagnostics (triggers external fetches) — admin or DEBUG only.
+    if not (settings.DEBUG or getattr(student, "role", "") == "admin"):
+        raise HTTPException(404, "Not Found")
 
     collector    = DataCollector(db)
     student_data = await collector.collect_all(student.id)

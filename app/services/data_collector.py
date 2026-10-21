@@ -37,6 +37,7 @@ EVERYTHING ELSE FROM v6.2 IS UNCHANGED:
 
 import asyncio
 import json
+import os
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -69,10 +70,11 @@ class DataCollector:
             # students.id. Resolve students.id ONCE and route each read to the
             # correct id. Verified per-table:
             #   users.id  → test_history, vyom_sessions, capstones, attendance(user_id),
-            #               punctuality, psychometric, certifications
+            #               punctuality, psychometric, certifications,
+            #               session_understandings / session_attendance (industry
+            #               sessions — LMS routes/industrySession.js writes req.user.id)
             #   students.id → enrollments (courses), case_study_submissions,
-            #               assignment_submissions, quiz_attempts (assessments),
-            #               industry_session_submissions
+            #               assignment_submissions, quiz_attempts (assessments)
             # NOT hardcoded — _resolve_students_id maps EACH user to their own
             # students.id. Falls back to user_id if no students row (query then
             # simply returns nothing, gracefully).
@@ -86,7 +88,7 @@ class DataCollector:
                 self._get_case_studies(sid),            # 1  students.id
                 self._get_assignments(sid),             # 2  students.id
                 self._get_capstones(user_id),           # 3  users.id
-                self._get_industry_sessions(sid),       # 4  students.id
+                self._get_industry_sessions(user_id),   # 4  users.id (v6.6 fix)
                 self._get_mock_tests(user_id),          # 5  users.id (varchar)
                 self._get_mock_interviews(user_id),     # 6  users.id (varchar)
                 self._get_attendance(user_id),          # 7  users.id
@@ -116,6 +118,13 @@ class DataCollector:
                 for i, r in enumerate(results)
             ]
 
+            # v6.7: hackathons (AIthon) — synchronous, after the gather.
+            try:
+                hackathons = await self._get_hackathons(user_id, sid, personal.get("email"))
+            except Exception as e:
+                logger.warning(f"_get_hackathons failed for user_id={user_id}: {e}")
+                hackathons = []
+
             snapshot = self._compute_snapshot(
                 assignments        = assignments,
                 case_studies       = case_studies,
@@ -136,6 +145,7 @@ class DataCollector:
                 "capstone_projects":     capstones,          # legacy alias for renderer
                 "industry_sessions":     industry_sessions,
                 "industry_interactions": industry_sessions,  # legacy alias for renderer
+                "hackathons":            hackathons,
                 "mock_tests":            mock_tests,
                 "mock_interviews":       mock_interviews,
                 "assessments":           assessments,
@@ -345,7 +355,8 @@ class DataCollector:
                     f"cannot read enrollments (convention: students.id)")
                 return []
             rows = self._query_courses(sid)
-            return [
+            certs = self._query_certificates(user_id, sid)   # course_id → cert row
+            out = [
                 {
                     "enrollment_id": r["enrollment_id"],
                     "course_id":     r["course_id"],
@@ -360,12 +371,55 @@ class DataCollector:
                     "progress_percentage": float(r["progress_percentage"]) if r.get("progress_percentage") is not None else 0.0,
                     "completed_at":  str(r.get("completed_at") or ""),
                     "enrolled_at":   str(r.get("enrolled_at") or ""),
+                    "certificate":   None,
                 }
                 for r in rows
             ]
+            # v6.6: an issued, non-revoked LMS certificate is proof of
+            # completion even when enrollments.completion_status lags the
+            # progress engine (it only flips at 100% or on manual override).
+            for c in out:
+                cert = certs.get(c["course_id"])
+                if cert:
+                    c["certificate"] = cert
+                    if (c["completion_status"] or "").lower() != "completed":
+                        c["status"] = c["completion_status"] = "completed"
+                        c["progress"] = c["progress_percentage"] = 100.0
+                        c["completed_at"] = c["completed_at"] or cert.get("issued_at", "")
+            return out
         except Exception as e:
             logger.warning(f"_get_courses failed for user_id={user_id}: {e}")
             return []
+
+    def _query_certificates(self, user_id: int, students_id: Optional[int]) -> Dict[int, Dict[str, Any]]:
+        """LMS `certificates` table — written by routes/certificates.js,
+        routes/enrollments.js and routes/student.js. Rows carry user_id
+        (users.id) and/or student_id (students.id); the date column is
+        issued_at in some writers and issued_date in others, so SELECT *."""
+        try:
+            rows = self.db.execute(text("""
+                SELECT * FROM certificates
+                WHERE (user_id = :uid OR student_id = :sid)
+                  AND COALESCE(is_revoked, 0) = 0
+            """), {"uid": user_id, "sid": students_id if students_id is not None else -1}
+            ).mappings().all()
+        except Exception as e:
+            logger.info(f"_query_certificates: unavailable ({e})")
+            return {}
+        out: Dict[int, Dict[str, Any]] = {}
+        for r in rows:
+            cid = r.get("course_id")
+            if cid is None:
+                continue
+            out[int(cid)] = {
+                "certificate_id": r.get("certificate_id"),
+                "course_name":    r.get("course_name") or "",
+                "final_score":    r.get("final_score"),
+                "grade":          r.get("grade"),
+                "png_url":        r.get("png_url") or "",
+                "issued_at":      str(r.get("issued_at") or r.get("issued_date") or r.get("created_at") or ""),
+            }
+        return out
 
     def _query_courses(self, enrollment_student_id: int):
         """Raw enrollments query for one candidate id (users.id OR students.id)."""
@@ -571,64 +625,253 @@ class DataCollector:
 
     async def _get_industry_sessions(self, user_id: int) -> List[Dict[str, Any]]:
         """
-        industry_sessions columns (from result 13, DESCRIBE):
-          id, title, description, speaker (not speaker_name), course_id,
-          date, duration, type, status, company, mentor_name, key_topics
-        industry_session_submissions columns (from result 14):
-          id, session_id, student_id, score, band, grade, insight_text,
-          feedback_json, attempt_number, has_feedback, submitted_at,
-          reviewed_at, file_url, file_name
+        v6.6 FIX (21 Oct 2026): the LMS never writes `industry_session_submissions`.
+        Industry-session work lives in (backend/routes/industrySession.js +
+        routes/adminCoursework.js):
+
+          session_understandings  — id, session_id, student_id (= users.id),
+              content, ai_review (JSON), submitted_at, attachment_url/_type/_name,
+              and lazily-added grade DECIMAL, max_marks INT, feedback, status
+              ('submitted' | 'graded')
+          session_attendance      — id, session_id, student_id (= users.id),
+              joined_at, attended BOOL, marked_by
+          industry_sessions       — id, title, description, speaker, company,
+              type, date, duration, platform, course_id, status
+
+        Score = grade / max_marks * 100 when admin graded, else None (an
+        attended / submitted-but-ungraded session is listed with no score and
+        therefore does not move the snapshot axis).
         """
         try:
+            # SELECT * — grade/max_marks/feedback/status columns are added at
+            # runtime by the LMS (ensureSessionGradeCols) and may be absent.
             rows = self.db.execute(text("""
-                SELECT
-                    iss.id                AS submission_id,
-                    iss.session_id,
-                    iss.score,
-                    iss.band,
-                    iss.grade,
-                    iss.insight_text,
-                    iss.feedback_json,
-                    iss.has_feedback,
-                    iss.attempt_number,
-                    iss.submitted_at,
-                    iss.reviewed_at,
-                    ise.title             AS session_title,
-                    ise.description       AS session_brief,
-                    ise.speaker           AS speaker,
-                    ise.company           AS company,
-                    ise.type              AS session_type,
-                    ise.duration          AS duration
-                FROM industry_session_submissions iss
-                LEFT JOIN industry_sessions ise ON ise.id = iss.session_id
-                WHERE iss.student_id = :uid
-                ORDER BY iss.score DESC, iss.submitted_at DESC
+                SELECT u.*, u.id AS submission_id,
+                       ise.title       AS session_title,
+                       ise.description AS session_brief,
+                       ise.speaker     AS speaker,
+                       ise.company     AS company,
+                       ise.type        AS session_type,
+                       ise.duration    AS duration,
+                       ise.date        AS session_date
+                FROM session_understandings u
+                LEFT JOIN industry_sessions ise ON ise.id = u.session_id
+                WHERE u.student_id = :uid
+                ORDER BY u.submitted_at DESC
             """), {"uid": user_id}).mappings().all()
 
-            items = []
+            items: List[Dict[str, Any]] = []
+            seen_sessions = set()
             for r in rows:
-                score = r.get("score")
+                grade = r.get("grade")
+                max_marks = r.get("max_marks")
+                score = None
+                if grade is not None:
+                    try:
+                        mm = float(max_marks) if max_marks else 100.0
+                        score = round(float(grade) / mm * 100.0, 2) if mm > 0 else None
+                    except (TypeError, ValueError):
+                        score = None
+                seen_sessions.add(r.get("session_id"))
                 items.append({
                     "submission_id": r["submission_id"],
-                    "session_id":    r["session_id"],
+                    "session_id":    r.get("session_id"),
                     "title":         r.get("session_title") or "Industry Session",
                     "brief":         r.get("session_brief") or "",
-                    "score":         float(score) if score is not None else None,
-                    "band":          r.get("band") or "",
-                    "grade":         r.get("grade") or "",
+                    "score":         score,
+                    "band":          "",
+                    "grade":         str(grade) if grade is not None else "",
+                    "status":        r.get("status") or ("graded" if grade is not None else "submitted"),
                     "speaker":       r.get("speaker") or "",
                     "company":       r.get("company") or "",
                     "type":          r.get("session_type") or "",
-                    "insight":       r.get("insight_text") or "",
-                    "insight_text":  r.get("insight_text") or "",
-                    "held_at":       str(r.get("submitted_at") or ""),
+                    "insight":       r.get("content") or "",
+                    "insight_text":  r.get("content") or "",
+                    "feedback":      r.get("feedback") or "",
+                    "held_at":       str(r.get("session_date") or r.get("submitted_at") or ""),
                     "duration":      r.get("duration") or "",
                     "submitted_at":  str(r.get("submitted_at") or ""),
+                    "attended":      True,
                 })
+
+            # Attended-only sessions (no written insight) still count as
+            # participation — list them without a score.
+            try:
+                att = self.db.execute(text("""
+                    SELECT sa.session_id, sa.joined_at, sa.attended,
+                           ise.title AS session_title, ise.speaker, ise.company,
+                           ise.type AS session_type, ise.duration, ise.date AS session_date
+                    FROM session_attendance sa
+                    LEFT JOIN industry_sessions ise ON ise.id = sa.session_id
+                    WHERE sa.student_id = :uid AND sa.attended = 1
+                """), {"uid": user_id}).mappings().all()
+                for r in att:
+                    if r.get("session_id") in seen_sessions:
+                        continue
+                    items.append({
+                        "submission_id": None,
+                        "session_id":    r.get("session_id"),
+                        "title":         r.get("session_title") or "Industry Session",
+                        "brief":         "",
+                        "score":         None,
+                        "band":          "",
+                        "grade":         "",
+                        "status":        "attended",
+                        "speaker":       r.get("speaker") or "",
+                        "company":       r.get("company") or "",
+                        "type":          r.get("session_type") or "",
+                        "insight":       "",
+                        "insight_text":  "",
+                        "feedback":      "",
+                        "held_at":       str(r.get("session_date") or r.get("joined_at") or ""),
+                        "duration":      r.get("duration") or "",
+                        "submitted_at":  str(r.get("joined_at") or ""),
+                        "attended":      True,
+                    })
+            except Exception as e:
+                logger.info(f"_get_industry_sessions: attendance-only read skipped ({e})")
+
             return items
         except Exception as e:
             logger.warning(f"_get_industry_sessions failed for user_id={user_id}: {e}")
             return []
+
+    # =====================================================================
+    # HACKATHONS — v6.7 (21 Oct 2026)
+    # =====================================================================
+    # Verified in production (defaultdb):
+    #   • AIthon submissions are rows of assignment_submissions for the
+    #     assignment whose title is "Aithon" (id 50) — keyed on students.id.
+    #     Columns: notes, share_note, file_name, file_path, grade, feedback,
+    #     status, submitted_at. The assignment's description holds the
+    #     problem statement.
+    #   • upski_coin_ledger: task_key 'aithon_participation'
+    #     (ref_id 'aithon2026:participation', coins 50, user_id = users.id)
+    #     marks felicitated participants.
+    #   • aithon_coin_sheet (email, participation, winner, offline, prize)
+    #     is the organiser's sheet — winner / prize flags live here.
+    # No dedicated hackathon table exists; this reads the sources directly.
+
+    _HACK_TITLE_PATTERNS = ("%aithon%", "%hackathon%", "%hack-a-thon%")
+    _LMS_PUBLIC_BASE = os.environ.get("LMS_PUBLIC_BASE_URL",
+                                      "https://upskillize-lms-backend.onrender.com")
+
+    def _abs_link(self, path: Optional[str]) -> str:
+        if not path:
+            return ""
+        p = str(path).strip()
+        if p.startswith("http://") or p.startswith("https://"):
+            return p
+        return self._LMS_PUBLIC_BASE.rstrip("/") + ("/" + p.lstrip("/"))
+
+    async def _get_hackathons(self, user_id: int, students_id: Optional[int],
+                              email: Optional[str] = None) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
+        seen_assignment: set = set()
+
+        # 1. Hackathon-type assignments the student submitted
+        if students_id is not None:
+            rows = self.db.execute(text("""
+                SELECT s.id AS submission_id, s.assignment_id, s.status, s.grade,
+                       s.feedback, s.notes, s.share_note, s.file_name, s.file_path,
+                       s.submitted_at,
+                       a.title, a.description, a.due_date, a.course_id,
+                       co.course_name
+                FROM assignment_submissions s
+                JOIN assignments a ON a.id = s.assignment_id
+                LEFT JOIN courses co ON co.id = a.course_id
+                WHERE s.student_id = :sid
+                  AND (LOWER(a.title) LIKE :p1 OR LOWER(a.title) LIKE :p2
+                       OR LOWER(a.title) LIKE :p3 OR LOWER(a.description) LIKE :p1)
+                ORDER BY s.submitted_at DESC
+            """), {"sid": students_id,
+                   "p1": self._HACK_TITLE_PATTERNS[0],
+                   "p2": self._HACK_TITLE_PATTERNS[1],
+                   "p3": self._HACK_TITLE_PATTERNS[2]}).mappings().all()
+            for r in rows:
+                seen_assignment.add(r["assignment_id"])
+                grade = r.get("grade")
+                items.append({
+                    "source":            "assignment",
+                    "assignment_id":     r["assignment_id"],
+                    "submission_id":     r["submission_id"],
+                    "title":             r.get("title") or "Hackathon",
+                    "name":              r.get("title") or "Hackathon",
+                    "organiser":         "Upskillize Solutions",
+                    "category":          "Hackathon",
+                    "problem_statement": r.get("description") or "",
+                    "solution":          (r.get("notes") or r.get("share_note") or ""),
+                    "description":       (r.get("notes") or r.get("share_note") or "")[:220],
+                    "link":              self._abs_link(r.get("file_path")),
+                    "link_label":        r.get("file_name") or "View submission",
+                    "score":             float(grade) if grade is not None else None,
+                    "feedback":          r.get("feedback") or "",
+                    "status":            r.get("status") or "submitted",
+                    "held_at":           str(r.get("due_date") or r.get("submitted_at") or "")[:10],
+                    "submitted_at":      str(r.get("submitted_at") or ""),
+                    "course_name":       r.get("course_name") or "",
+                    "participated":      True,
+                    "winner":            False,
+                    "prize":             "",
+                    "award":             "Participant",
+                    "badge":             "Participant",
+                })
+
+        # 2. Felicitated participation (coin ledger) — may exist without a submission
+        try:
+            led = self.db.execute(text("""
+                SELECT task_key, coins, note, ref_id, earned_at
+                FROM upski_coin_ledger
+                WHERE user_id = :uid
+                  AND (task_key LIKE 'aithon%' OR task_key LIKE '%hackathon%')
+                ORDER BY earned_at DESC
+            """), {"uid": user_id}).mappings().all()
+        except Exception as e:
+            logger.info(f"_get_hackathons: ledger read skipped ({e})")
+            led = []
+        coins_total = sum(int(r.get("coins") or 0) for r in led)
+        if led:
+            if items:
+                items[0]["coins"] = coins_total
+                items[0]["award"] = "Felicitated participant"
+                items[0]["badge"] = "Felicitated"
+            else:
+                r = led[0]
+                items.append({
+                    "source": "ledger", "title": "AIthon 2026", "name": "AIthon 2026",
+                    "organiser": "Upskillize Solutions × DCCL", "category": "Hackathon",
+                    "problem_statement": "", "solution": "", "description": r.get("note") or "",
+                    "link": "", "link_label": "", "score": None, "feedback": "",
+                    "status": "participated", "held_at": str(r.get("earned_at") or "")[:10],
+                    "submitted_at": "", "course_name": "", "participated": True,
+                    "winner": False, "prize": "", "award": "Felicitated participant",
+                    "badge": "Felicitated", "coins": coins_total,
+                })
+
+        # 3. Organiser sheet — winner / prize
+        if email and items:
+            try:
+                sh = self.db.execute(text("""
+                    SELECT * FROM aithon_coin_sheet WHERE LOWER(email) = LOWER(:em) LIMIT 1
+                """), {"em": email}).mappings().first()
+            except Exception as e:
+                logger.info(f"_get_hackathons: aithon_coin_sheet skipped ({e})")
+                sh = None
+            if sh:
+                def _truthy(v):
+                    return str(v).strip().lower() not in ("", "0", "no", "false", "none", "null")
+                win = _truthy(sh.get("winner"))
+                prize = sh.get("prize")
+                items[0]["winner"] = win
+                items[0]["prize"] = str(prize) if prize not in (None, "", 0, "0") else ""
+                if win:
+                    items[0]["award"] = "Winner" + (f" · {items[0]['prize']}" if items[0]["prize"] else "")
+                    items[0]["badge"] = "Winner"
+                elif items[0]["prize"]:
+                    items[0]["award"] = items[0]["prize"]
+                    items[0]["badge"] = "Prize"
+
+        return items
 
     # =====================================================================
     # ACTIVITY FLOW 5 — MOCK TESTS (TestGen)
@@ -884,30 +1127,53 @@ class DataCollector:
     # =====================================================================
 
     async def _get_certifications(self, user_id: int) -> List[Dict[str, Any]]:
+        """users.certifications (self-reported JSON/CSV) + v6.6: LMS-issued
+        course certificates from the `certificates` table, flagged
+        upskillize_verified so the template renders the verified badge."""
+        out: List[Dict[str, Any]] = []
         try:
             row = self.db.execute(text("""
                 SELECT certifications FROM users WHERE id = :uid LIMIT 1
             """), {"uid": user_id}).first()
-            if not row or not row[0]:
-                return []
-            raw = row[0]
+            raw = row[0] if row and row[0] else None
             if isinstance(raw, str):
                 try:
                     parsed = json.loads(raw)
                     if isinstance(parsed, list):
-                        return [
+                        out = [
                             (c if isinstance(c, dict) else {"name": str(c), "certificate_name": str(c)})
                             for c in parsed
                         ]
                 except Exception:
-                    return [
+                    out = [
                         {"name": c.strip(), "certificate_name": c.strip()}
                         for c in raw.split(",") if c.strip()
                     ]
-            return []
         except Exception as e:
             logger.warning(f"_get_certifications failed for user_id={user_id}: {e}")
-            return []
+
+        try:
+            sid = self._resolve_students_id(user_id)
+            have = {(c.get("certificate_name") or c.get("name") or "").strip().lower() for c in out}
+            for cid, cert in self._query_certificates(user_id, sid).items():
+                name = cert.get("course_name") or f"Course #{cid}"
+                if name.strip().lower() in have:
+                    continue
+                out.append({
+                    "name":                name,
+                    "certificate_name":    name,
+                    "course_name":         cert.get("course_name") or "",
+                    "issuer":              "Upskillize Solutions",
+                    "issued_at":           (cert.get("issued_at") or "")[:10],
+                    "score":               cert.get("final_score"),
+                    "completion_pct":      100,
+                    "upskillize_verified": True,
+                    "certificate_id":      cert.get("certificate_id"),
+                    "url":                 cert.get("png_url") or "",
+                })
+        except Exception as e:
+            logger.info(f"_get_certifications: LMS certificates skipped ({e})")
+        return out
 
     # =====================================================================
     # ASSESSMENTS (faculty-uploaded quizzes)
@@ -1240,6 +1506,7 @@ class DataCollector:
             "capstones":             [],
             "capstone_projects":     [],
             "industry_sessions":     [],
+            "hackathons":            [],
             "industry_interactions": [],
             "mock_tests":            [],
             "mock_interviews":       [],
@@ -1295,8 +1562,11 @@ _SCHEMA_CONTRACT: Dict[str, List[str]] = {
     "capstones":                    ["id", "student_id", "title", "grade",
                                      "total_marks", "submitted_at"],
     "industry_sessions":            ["id", "title", "speaker"],
-    "industry_session_submissions": ["id", "student_id", "session_id",
-                                     "score", "submitted_at"],
+    "session_understandings":       ["id", "student_id", "session_id",
+                                     "content", "submitted_at"],
+    "session_attendance":           ["session_id", "student_id", "attended"],
+    "certificates":                 ["course_id", "is_revoked"],
+    "upski_coin_ledger":            ["user_id", "task_key", "coins", "note"],
     "test_history":                 ["id", "student_id", "score_percentage",
                                      "created_at"],
     "vyom_sessions":                ["id", "user_id", "mode",

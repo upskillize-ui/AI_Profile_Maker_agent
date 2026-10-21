@@ -42,6 +42,38 @@ if not JWT_SECRET:
 
 JWT_ALGORITHM = "HS256"
 
+# SECURITY: fail closed. PyJWT will happily verify HS256 tokens signed with an
+# EMPTY key, so a missing JWT_SECRET would let anyone forge a login token.
+def _require_jwt_secret() -> str:
+    secret = settings.JWT_SECRET
+    if not secret or len(secret) < 16:
+        logger.critical("JWT_SECRET missing or too short — refusing all authenticated requests.")
+        raise HTTPException(503, "Authentication is not configured on this service.")
+    return secret
+
+
+# ── Minimal in-memory rate limiter (per process) ─────────────────────────────
+# Good enough for the single-worker HF Space. Resets on restart; replace with
+# Redis if the service is ever scaled to multiple workers.
+import time as _time
+from collections import defaultdict as _dd, deque as _dq
+
+_RATE_BUCKETS = _dd(_dq)
+
+
+def rate_limit(key: str, limit: int, window_seconds: int) -> None:
+    """Raise 429 if `key` made more than `limit` calls in the last window."""
+    now = _time.monotonic()
+    bucket = _RATE_BUCKETS[key]
+    while bucket and now - bucket[0] > window_seconds:
+        bucket.popleft()
+    if len(bucket) >= limit:
+        raise HTTPException(429, "Too many requests. Please wait a while and try again.")
+    bucket.append(now)
+    if len(_RATE_BUCKETS) > 20000:  # keep memory bounded
+        for k in [k for k, v in _RATE_BUCKETS.items() if not v][:5000]:
+            _RATE_BUCKETS.pop(k, None)
+
 
 def get_db():
     db = SessionLocal()
@@ -66,7 +98,7 @@ async def get_current_student(authorization: str = Header(None)):
         if not token or token.strip().lower() in ("null", "undefined", "none"):
             raise HTTPException(401, "No authentication token provided")
 
-        decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        decoded = jwt.decode(token, _require_jwt_secret(), algorithms=[JWT_ALGORITHM])
 
         class AuthenticatedUser:
             def __init__(self, payload):
@@ -105,7 +137,7 @@ def get_current_corporate(
              raise HTTPException(401, "Corporate authentication required.")
          token = authorization[len("Bearer "):]
          try:
-             payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+             payload = jwt.decode(token, _require_jwt_secret(), algorithms=["HS256"])
              user_id = payload.get("id") or payload.get("sub")
          except jwt.PyJWTError:
              raise HTTPException(401, "Invalid token.")

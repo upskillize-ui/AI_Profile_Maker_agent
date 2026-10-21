@@ -63,25 +63,32 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="AI Profile Builder & Rubric Grading Engine for Upskillize",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # SECURITY: don't publish the full API map (incl. admin routes) in production.
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
-# CORS — allow frontend domains
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://upskillize.com",
-        "https://lms.upskillize.com",
-        "https://www.upskillize.com",
-        "https://upskillize.netlify.app",
+# CORS — allow frontend domains (localhost only when DEBUG)
+_CORS_ORIGINS = [
+    "https://upskillize.com",
+    "https://lms.upskillize.com",
+    "https://www.upskillize.com",
+    "https://upskillize.netlify.app",
+]
+if settings.DEBUG:
+    _CORS_ORIGINS += [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:5174",
-    ],
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Register routes
@@ -122,6 +129,6 @@ async def root():
     <body><div class="card">
         <h1>Upskillize AI Profile Agent</h1>
         <p>Bridging Academia and Industry</p>
-        <a href="/docs">Open API Docs →</a>
+        <a href="https://lms.upskillize.com">Open Upskillize LMS →</a>
     </div></body></html>
     """

@@ -615,6 +615,31 @@ class ProfileOrchestrator:
     # HELPERS (unchanged from v6)
     # ══════════════════════════════════════════════════════════════════
 
+    @staticmethod
+    async def _is_safe_resume_url(url: str) -> bool:
+        """SSRF guard: http(s) only, optional host allowlist, and the host must
+        not resolve to a private/loopback/link-local/metadata address.
+        (DNS-rebinding between check and fetch remains a small residual risk.)"""
+        import os, socket, ipaddress
+        from urllib.parse import urlparse
+        try:
+            u = urlparse(url)
+            if u.scheme not in ("http", "https") or not u.hostname:
+                return False
+            host = u.hostname.lower()
+            allow = [h.strip().lower() for h in os.environ.get("RESUME_HOST_ALLOWLIST", "").split(",") if h.strip()]
+            if allow and not any(host == h or host.endswith("." + h) for h in allow):
+                return False
+            infos = await asyncio.to_thread(socket.getaddrinfo, host, u.port or (443 if u.scheme == "https" else 80))
+            for info in infos:
+                ip = ipaddress.ip_address(info[4][0])
+                if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                        or ip.is_multicast or ip.is_unspecified):
+                    return False
+            return True
+        except Exception:
+            return False
+
     async def _download_resume(self, url: str) -> str:
         """Download resume PDF from URL and extract text."""
         try:
@@ -651,10 +676,17 @@ class ProfileOrchestrator:
 
             logger.info(f"Resume download attempts: {len(urls_to_try)} URLs to try for path '{url}'")
 
+            # SECURITY: validate EVERY request, including redirect hops.
+            async def _ssrf_guard(request):
+                if not await self._is_safe_resume_url(str(request.url)):
+                    raise httpx.RequestError("Blocked unsafe resume URL")
+
             async with httpx.AsyncClient(
                 timeout=15.0,
                 follow_redirects=True,
+                max_redirects=3,
                 headers={"User-Agent": "Mozilla/5.0 ProfileAgent/1.0"},
+                event_hooks={"request": [_ssrf_guard]},
             ) as client:
                 resp = None
                 successful_url = None

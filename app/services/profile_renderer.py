@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # v12.9 — exported template version; stamped into the rendered HTML head as
 # <!-- piq:tpl=... --> so ops can tell which template produced a stored page.
-TEMPLATE_VERSION = "12.9.0"
+TEMPLATE_VERSION = "12.10.0"  # v6.7: hackathon card (problem/solution/link), industry from session_understandings
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 

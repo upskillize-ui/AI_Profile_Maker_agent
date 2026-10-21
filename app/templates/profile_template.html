@@ -1020,10 +1020,14 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
         <div class="perf-rank">#{{ loop.index }}</div>
         <div>
           <div class="perf-name">{{ h.title or h.name or 'Hackathon' }}</div>
-          <div class="perf-context">{% if h.organiser %}<span>{{ h.organiser }}</span>{% endif %}{% if h.team_size %} · Team of {{ h.team_size }}{% endif %}{% if h.duration %} · {{ h.duration }}{% endif %}{% if h.held_at %} · {{ h.held_at }}{% endif %}</div>
+          <div class="perf-context">{% if h.organiser %}<span>{{ h.organiser }}</span>{% endif %}{% if h.team_size %} · Team of {{ h.team_size }}{% endif %}{% if h.duration %} · {{ h.duration }}{% endif %}{% if h.held_at %} · {{ h.held_at }}{% endif %}{% if h.coins %} · {{ h.coins }} Upski Coins{% endif %}</div>
+          {% if h.problem_statement %}<div class="perf-context" style="margin-top:6px;"><b>Problem:</b> {{ h.problem_statement|striptags|truncate(220) }}</div>{% endif %}
+          {% if h.solution %}<div class="perf-context" style="margin-top:4px;"><b>Solution:</b> {{ h.solution|striptags|truncate(300) }}</div>{% endif %}
+          {% if h.link %}<div class="perf-context" style="margin-top:6px;"><a href="{{ h.link }}" target="_blank" rel="noopener" style="color:var(--gold);font-weight:600;text-decoration:underline;">{{ h.link_label or 'View submission' }} ↗</a></div>{% endif %}
         </div>
         <div>
           {% if rank %}<div class="perf-score">#{{ rank }}</div><div class="perf-score-meta">{% if h.total %}/ {{ h.total }} teams{% else %}Ranked{% endif %}</div>
+          {% elif h.score is not none %}<div class="perf-score">{{ h.score|int }}<span class="perf-score-pct">%</span></div><div class="perf-score-meta">{{ h.award or 'Scored' }}</div>
           {% else %}<div class="perf-score live">{{ (h.badge or 'Top')|upper }}</div><div class="perf-score-meta">{{ h.award or 'Attended' }}</div>{% endif %}
         </div>
       </div>
