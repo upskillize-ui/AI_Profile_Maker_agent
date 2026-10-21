@@ -314,6 +314,25 @@ def _source_fingerprint(student_data: dict) -> str:
             str(c.get("name") or c.get("certificate_name") or c)
             for c in (student_data.get("certifications", []) or [])
         ),
+        # v6.7: sections that previously could change without moving the
+        # fingerprint (so Regenerate said "already up to date" and skipped).
+        "industry_sessions": sorted(
+            (str(i.get("session_id") or i.get("title") or ""), str(i.get("score")), str(i.get("status") or ""))
+            for i in (student_data.get("industry_sessions", []) or []) if isinstance(i, dict)
+        ),
+        "hackathons": sorted(
+            (str(h.get("title") or ""), str(h.get("score")), str(h.get("award") or ""), str(h.get("link") or ""))
+            for h in (student_data.get("hackathons", []) or []) if isinstance(h, dict)
+        ),
+        "punctuality": {
+            "score": (student_data.get("punctuality") or {}).get("score"),
+            "band":  (student_data.get("punctuality") or {}).get("band"),
+        },
+        "assignments": sorted(
+            (str(a.get("assignment_id") or a.get("title") or ""), str(a.get("score") if a.get("score") is not None else a.get("grade")))
+            for a in (student_data.get("assignments", []) or []) if isinstance(a, dict)
+        ),
+        "attendance_pct": (student_data.get("attendance") or {}).get("attendance_percent"),
     }
     payload = json.dumps(stable, sort_keys=True, default=str)
     return hashlib.md5(payload.encode("utf-8")).hexdigest()
