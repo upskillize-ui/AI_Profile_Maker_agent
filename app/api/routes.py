@@ -52,6 +52,7 @@ from sqlalchemy.orm import Session
 from slugify import slugify
 from collections import defaultdict
 import asyncio
+from typing import Optional
 import hashlib
 import json
 import os
@@ -554,9 +555,16 @@ def _corporate_url(student_id: int) -> str:
     return f"{AGENT_BASE}/api/v1/profile/corporate/{student_id}"
 
 
-def _mint_share_token() -> str:
-    """32-character URL-safe token. ~10^57 space, unguessable."""
-    return secrets.token_urlsafe(24)   # 24 bytes → 32 base64url chars
+def _mint_share_token(name: str = "", serial: Optional[int] = None) -> str:
+    """v6.7 — readable share token: `<student-name>-<serial>`, e.g.
+    ranjana-kumari-0052. `serial` is the profile's generation number
+    (StudentProfile.id, zero-padded to 4 digits). The link is opt-in
+    (Share Link toggle) and revocable (revoke → 404). Old 32-char random
+    tokens remain valid. Column width is 64."""
+    base = slugify(name or "")[:48].strip("-")
+    if base and serial is not None:
+        return f"{base}-{int(serial):04d}"
+    return secrets.token_urlsafe(24)   # fallback when no name/serial
 
 
 def _profile_response(profile: StudentProfile) -> dict:
@@ -1187,7 +1195,12 @@ async def create_share_link(
         raise HTTPException(404, _ERR_NOT_FOUND)
 
     if profile.share_token is None:
-        profile.share_token = _mint_share_token()
+        token = _mint_share_token(profile.student_name or getattr(student, "name", "") or "",
+                                  profile.id)
+        if db.query(StudentProfile).filter(StudentProfile.share_token == token,
+                                           StudentProfile.id != profile.id).first():
+            token = _mint_share_token("", None)   # should never happen (id is unique)
+        profile.share_token = token
         db.commit()
 
     return {
@@ -1236,7 +1249,7 @@ async def get_profile_by_share_token(
     Rejects any request where the token doesn't exactly match a stored
     non-NULL share_token. Returns unified 404 to prevent enumeration.
     """
-    if not token or len(token) < 20:
+    if not token or len(token) < 6:
         raise HTTPException(404, _ERR_NOT_FOUND)
 
     # Cache lookup — but always re-check the DB for token validity.
@@ -1376,7 +1389,7 @@ async def get_share_card(
     """Open Graph card for a shared profile. Token-gated like the share
     view. Pillow imported lazily — the app boots (and this returns the
     unified 404) even if Pillow isn't installed."""
-    if not token or len(token) < 20:
+    if not token or len(token) < 6:
         raise HTTPException(404, _ERR_NOT_FOUND)
 
     profile = db.query(StudentProfile).filter_by(share_token=token).first()
