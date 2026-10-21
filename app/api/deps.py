@@ -61,6 +61,11 @@ async def get_current_student(authorization: str = Header(None)):
         else:
             token = authorization
 
+        # Frontend sent "Bearer null"/"Bearer undefined"/empty (token cleared
+        # after logout or session revoked). Say so instead of a JWT decode error.
+        if not token or token.strip().lower() in ("null", "undefined", "none"):
+            raise HTTPException(401, "No authentication token provided")
+
         decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 
         class AuthenticatedUser:
