@@ -298,10 +298,38 @@ def _source_fingerprint(student_data: dict) -> str:
             for p in projects if isinstance(p, dict)
         ),
         "courses": sorted(
-            (str(c.get("course_name", "")), str(c.get("progress", "")))
+            (str(c.get("course_name", "")), str(c.get("progress", "")),
+             str(c.get("completion_status") or c.get("status") or ""))
             for c in (student_data.get("courses", []) or [])
             if isinstance(c, dict)
         ),
+        # v6.9: every LMS signal that can change the profile story
+        "industry_sessions": sorted(
+            (str(x.get("title", "")), str(x.get("score", "")), str(x.get("attended", "")))
+            for x in (student_data.get("industry_sessions", []) or []) if isinstance(x, dict)
+        ),
+        "hackathons": sorted(
+            (str(x.get("title", "")), str(x.get("score", "")), str(x.get("link", "")))
+            for x in (student_data.get("hackathons", []) or []) if isinstance(x, dict)
+        ),
+        "assignments": sorted(
+            (str(x.get("title", "")), str(x.get("score", "")))
+            for x in (student_data.get("assignments", []) or []) if isinstance(x, dict)
+        ),
+        "case_studies": sorted(
+            (str(x.get("title", "")), str(x.get("score", "")))
+            for x in (student_data.get("case_studies", []) or []) if isinstance(x, dict)
+        ),
+        "mock_tests": sorted(
+            (str(x.get("topic") or x.get("title") or ""), str(x.get("score", "")))
+            for x in (student_data.get("mock_tests", []) or []) if isinstance(x, dict)
+        ),
+        "assessments": sorted(
+            (str(x.get("title", "")), str(x.get("score", "")))
+            for x in (student_data.get("assessments", []) or []) if isinstance(x, dict)
+        ),
+        "punctuality": str((student_data.get("punctuality") or {}).get("score", "")),
+        "personality": str((student_data.get("personality") or {}).get("archetype", "")),
         "best_scores": {
             "overall_score":        computed.get("overall_score", 0),
             "best_test_score":      computed.get("best_test_score", 0),
@@ -314,25 +342,6 @@ def _source_fingerprint(student_data: dict) -> str:
             str(c.get("name") or c.get("certificate_name") or c)
             for c in (student_data.get("certifications", []) or [])
         ),
-        # v6.7: sections that previously could change without moving the
-        # fingerprint (so Regenerate said "already up to date" and skipped).
-        "industry_sessions": sorted(
-            (str(i.get("session_id") or i.get("title") or ""), str(i.get("score")), str(i.get("status") or ""))
-            for i in (student_data.get("industry_sessions", []) or []) if isinstance(i, dict)
-        ),
-        "hackathons": sorted(
-            (str(h.get("title") or ""), str(h.get("score")), str(h.get("award") or ""), str(h.get("link") or ""))
-            for h in (student_data.get("hackathons", []) or []) if isinstance(h, dict)
-        ),
-        "punctuality": {
-            "score": (student_data.get("punctuality") or {}).get("score"),
-            "band":  (student_data.get("punctuality") or {}).get("band"),
-        },
-        "assignments": sorted(
-            (str(a.get("assignment_id") or a.get("title") or ""), str(a.get("score") if a.get("score") is not None else a.get("grade")))
-            for a in (student_data.get("assignments", []) or []) if isinstance(a, dict)
-        ),
-        "attendance_pct": (student_data.get("attendance") or {}).get("attendance_percent"),
     }
     payload = json.dumps(stable, sort_keys=True, default=str)
     return hashlib.md5(payload.encode("utf-8")).hexdigest()
@@ -574,16 +583,28 @@ def _corporate_url(student_id: int) -> str:
     return f"{AGENT_BASE}/api/v1/profile/corporate/{student_id}"
 
 
-def _mint_share_token(name: str = "", serial: Optional[int] = None) -> str:
-    """v6.7 — readable share token: `<student-name>-<serial>`, e.g.
-    ranjana-kumari-0052. `serial` is the profile's generation number
-    (StudentProfile.id, zero-padded to 4 digits). The link is opt-in
-    (Share Link toggle) and revocable (revoke → 404). Old 32-char random
-    tokens remain valid. Column width is 64."""
-    base = slugify(name or "")[:48].strip("-")
-    if base and serial is not None:
-        return f"{base}-{int(serial):04d}"
-    return secrets.token_urlsafe(24)   # fallback when no name/serial
+def _mint_share_token(name: str = "", serial: Optional[int] = None,
+                      db: Optional[Session] = None, exclude_id: Optional[int] = None) -> str:
+    """v13 — readable share token = the student's name only, e.g.
+    `ranjana-kumari` → lms.upskillize.com/p/ranjana-kumari. When another
+    profile already owns that slug the next free numeric suffix is used
+    (ranjana-kumari1, ranjana-kumari2, …). Old `<name>-NNNN` and 32-char
+    random tokens stay valid (the lookup is exact-match on the column).
+    Column width is 64."""
+    base = slugify(name or "")[:56].strip("-")
+    if not base:
+        return secrets.token_urlsafe(24)
+    if db is None:
+        return base
+    candidate, n = base, 0
+    while True:
+        q = db.query(StudentProfile.id).filter(StudentProfile.share_token == candidate)
+        if exclude_id is not None:
+            q = q.filter(StudentProfile.id != exclude_id)
+        if not q.first():
+            return candidate
+        n += 1
+        candidate = f"{base}{n}"
 
 
 def _profile_response(profile: StudentProfile) -> dict:
@@ -1213,14 +1234,17 @@ async def create_share_link(
     if not profile:
         raise HTTPException(404, _ERR_NOT_FOUND)
 
-    if profile.share_token is None:
+    # v13: mint when missing, and upgrade legacy `<name>-NNNN` tokens to the
+    # clean name-only form the first time the student shares again.
+    _legacy = bool(profile.share_token) and re.fullmatch(r"[a-z0-9-]+-\d{4}", profile.share_token or "") is not None
+    if profile.share_token is None or _legacy:
+        old = profile.share_token
         token = _mint_share_token(profile.student_name or getattr(student, "name", "") or "",
-                                  profile.id)
-        if db.query(StudentProfile).filter(StudentProfile.share_token == token,
-                                           StudentProfile.id != profile.id).first():
-            token = _mint_share_token("", None)   # should never happen (id is unique)
+                                  profile.id, db=db, exclude_id=profile.id)
         profile.share_token = token
         db.commit()
+        if old:
+            CacheService.invalidate_profile(old)
 
     return {
         "message":   "Share link ready. Anyone with this URL can view your profile.",
@@ -1305,6 +1329,58 @@ async def get_profile_by_share_token(
     CacheService.set_profile_html(token, html)
     METRICS["share_views"] += 1
     return HTMLResponse(content=html, status_code=200, headers=_NO_STORE)
+
+
+# =========================================================================
+# PROFILE — RESUME EXPORT (public, token-gated DOCX) — v13
+# =========================================================================
+# "Download as resume": a plain white/black Word document built from the
+# same context the profile page renders from. Same auth model as the share
+# view — the token IS the credential; anything else gets the unified 404.
+
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@router.get("/profile/share/{token}/resume.docx")
+@pretty_router.get("/p/{token}/resume.docx")
+async def download_resume_docx(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    if not token or len(token) < 3:
+        raise HTTPException(404, _ERR_NOT_FOUND)
+    profile = db.query(StudentProfile).filter_by(share_token=token).first()
+    if not profile or profile.status != ProfileStatus.COMPLETED:
+        raise HTTPException(404, _ERR_NOT_FOUND)
+    rate_limit(f"resume:{request.client.host if request.client else 'x'}", limit=30, window_seconds=3600)
+
+    try:
+        student_data = await asyncio.to_thread(_collect_all_sync, db, profile.student_id)
+        profile_data = _profile_data_from_db(profile, fresh={
+            # the stored row has no education/work columns — take them from the live LMS data
+            "education_data":  student_data.get("education", []) or [],
+            "work_experience": student_data.get("work_experience", []) or [],
+            "role_matches":    [],
+        })
+        renderer = ProfileRenderer()
+        await asyncio.to_thread(
+            renderer.render,
+            student_data=student_data, profile_data=profile_data,
+            slug=profile.slug or f"student-{profile.student_id}",
+            visibility="public", show_ats=False,
+        )
+        from app.services.resume_docx import build_resume_docx
+        data = await asyncio.to_thread(build_resume_docx, renderer.last_context)
+    except Exception:
+        logger.exception("Resume export failed for profile %s", profile.id)
+        raise HTTPException(500, "Resume could not be generated right now. Please try again.")
+
+    fname = f"{slugify(profile.student_name or 'candidate')}-resume.docx"
+    return Response(
+        content=data, media_type=_DOCX_MIME,
+        headers={"Content-Disposition": f'attachment; filename="{fname}"', **_NO_STORE},
+    )
 
 
 # =========================================================================

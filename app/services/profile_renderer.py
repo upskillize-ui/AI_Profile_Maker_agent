@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # v12.9 — exported template version; stamped into the rendered HTML head as
 # <!-- piq:tpl=... --> so ops can tell which template produced a stored page.
-TEMPLATE_VERSION = "12.12.0"  # v6.8: grade normalisation, psychometric table, proctored exams, hackathon card
+TEMPLATE_VERSION = "13.0.0"  # v13: dynamic sections, Petrol & Coral design, no placeholders, 50% floor
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 
@@ -120,7 +120,43 @@ def _row_score(row: Dict) -> float:
 
 # Top Performance quality floor (user-confirmed): show only work scoring
 # at or above this, best 5. Below it (including 0) is hidden from the tabs.
-SCORE_FLOOR = 60
+SCORE_FLOOR = 50
+
+
+def _row_pct(row: Dict):
+    """Best score for a row normalised to 0-100 (uses max_score / total_marks
+    when the raw value is above 100). None when the row has no score."""
+    v = _row_score(row)
+    if v is None:
+        return None
+    if v > 100:
+        for mk in ("max_score", "total_marks"):
+            try:
+                ms = float(row.get(mk) or 0)
+            except (TypeError, ValueError):
+                ms = 0
+            if ms > 0:
+                v = v / ms * 100
+                break
+    return round(max(0.0, min(100.0, v)), 1)
+
+
+def _attach_pct(rows: List[Dict]) -> List[Dict]:
+    for r in rows:
+        if isinstance(r, dict):
+            r["score_pct"] = _row_pct(r)
+    return rows
+
+
+_MANIFEST_RE = re.compile(r"===\s*SUBMISSION MANIFEST\s*===.*", re.S | re.I)
+
+
+def _clean_text(v) -> str:
+    """Drop machine dumps (AiRev submission manifests) from student-facing text."""
+    if not v:
+        return ""
+    t = _MANIFEST_RE.sub("", str(v)).strip()
+    return t
 
 
 def _apply_score_floor(rows: List[Dict], keep_unscored: bool = False) -> List[Dict]:
@@ -129,7 +165,7 @@ def _apply_score_floor(rows: List[Dict], keep_unscored: bool = False) -> List[Di
     industry sessions, where presence has value without a number)."""
     out = []
     for r in rows:
-        s = _row_score(r)
+        s = _row_pct(r)
         if s is None:
             if keep_unscored:
                 out.append(r)
@@ -281,87 +317,151 @@ def _avg_pct(items: List[Dict], *keys: str) -> float:
     return round(sum(vals) / len(vals), 1) if vals else 0.0
 
 
-def _compute_perf_snapshot(student_data: Dict, profile_data: Dict, computed: Dict) -> Dict[str, Any]:
-    # Best attempt per item FIRST (locked rule) — a retried mock test
-    # counts once at its highest score, never averaged across attempts.
-    assignments     = _dedupe_best_rows(student_data.get("assignments", []) or [], "assignment_id", "title")
-    test_scores     = _dedupe_best_rows(student_data.get("test_scores", []) or [], "quiz_id", "title")
-    case_studies    = _dedupe_best_rows(student_data.get("case_studies", []) or [], "case_study_id", "title")
-    capstones       = _dedupe_best_rows(student_data.get("capstone_projects", []) or [], "capstone_id", "title")
-    # topic-first: TestGen mints a new test_id per attempt, so grouping by
-    # test_id never collapses retakes (the "32 mock tests / axis 24" bug).
-    mock_tests      = _dedupe_best_rows(
-        (student_data.get("mock_tests", []) or student_data.get("quiz_scores", []) or []),
-        "topic", "title")
-    mock_interviews = _dedupe_best_rows(student_data.get("mock_interviews", []) or [], "session_id", "title")
-    industry        = _dedupe_best_rows(
-        (student_data.get("industry_sessions", []) or student_data.get("industry_interactions", []) or []),
-        "session_id", "title")
-    punctuality     = student_data.get("punctuality", {}) or {}
+# v13 — section registry. Order is fixed; a section renders only when the
+# student has data for it. Add a row here (and a branch in the template)
+# to introduce a new tab — nothing else changes.
+SECTION_REGISTRY = [
+    # key              label                tab_id      axis_key     axis label        kind
+    ("courses",        "Enrolled Courses",  "p-crs",    None,        None,             "progress"),
+    ("assignments",    "Assignments",       "p-asg",    "assignment","Assignments",    "scored"),
+    ("case_studies",   "Case Studies",      "p-cs",     "case_study","Case Studies",   "scored"),
+    ("assessments",    "Assessments",       "p-ass",    "assessment","Assessments",    "scored"),
+    ("mock_tests",     "Mock Tests",        "p-mt",     "mock_test", "Mock Tests",     "scored"),
+    ("industry",       "Industry Sessions", "p-ind",    "industry",  "Industry",       "attended"),
+    ("mock_interviews","Mock Interviews",   "p-mi",     "interview", "Mock Interviews","scored"),
+    ("capstones",      "Capstones",         "p-cap",    "capstone",  "Capstone",       "scored"),
+    ("punctuality",    "Punctuality",       "p-pun",    "punctuality","Punctuality",   "signal"),
+    ("hackathons",     "Hackathons",        "p-hack",   None,        None,             "attended"),
+    ("cohort",         "Cohort",            "p-coh",    None,        None,             "cohort"),
+]
 
-    punct_score = punctuality.get("score")
+
+def _compute_perf_snapshot(ranked: Dict[str, List[Dict]], punctuality: Dict,
+                           perf_data: Dict) -> Dict[str, Any]:
+    """v13 — axes are DYNAMIC: only dimensions with data are emitted, the
+    polygon is built for that count, and `overall` averages the scored ones.
+    Industry sessions attended but ungraded appear as a count (axis value 0).
+    Cohort ticks appear only when the LMS supplies a real cohort average."""
+    punct_score = punctuality.get("score") if punctuality else None
     try:
-        punct_val = float(punct_score) if punct_score is not None else 0.0
+        punct_val = float(punct_score) if punct_score is not None else None
     except (TypeError, ValueError):
-        punct_val = 0.0
+        punct_val = None
 
-    scores = {
-        "assignment":  _avg_pct(assignments,     "rubric_pct", "percentage", "score", "grade"),
-        "assessment":  _avg_pct(test_scores,     "percentage", "score"),
-        "mock_test":   _avg_pct(mock_tests,      "percentage", "score"),
-        "industry":    _avg_pct(industry,        "score", "rating", "percentage"),
-        "interview":   _avg_pct(mock_interviews, "score", "percentage", "overall_score"),
-        "capstone":    _avg_pct(capstones,       "score", "rubric_pct", "percentage"),
-        "case_study":  _avg_pct(case_studies,    "score", "ai_score", "percentage"),
-        "punctuality":  round(max(0.0, min(100.0, punct_val)), 1),   # NEW 8th axis
-        
-    }
+    real_cohort = {}
+    for row in (perf_data.get("cohort_comparison") or []) if perf_data else []:
+        if isinstance(row, dict) and row.get("name") and row.get("cohort") not in (None, 0, "0"):
+            real_cohort[str(row["name"]).strip().lower()] = row["cohort"]
 
-    cx, cy, max_r, n = 180.0, 145.0, 100.0, len(PERF_AXES)
+    present = []   # (axis_key, label, score, tab_id, count, count_label, scored)
+    for key, label, tab_id, axis_key, axis_label, kind in SECTION_REGISTRY:
+        if not axis_key:
+            continue
+        if kind == "scored":
+            rows = ranked.get(key) or []
+            if rows:
+                present.append((axis_key, axis_label, _avg_pct(rows, "score_pct"), tab_id, len(rows), "", True))
+        elif kind == "attended":
+            rows = ranked.get(key) or []
+            if rows:
+                graded = [r for r in rows if r.get("score_pct") is not None]
+                sc = _avg_pct(graded, "score_pct") if graded else 0.0
+                present.append((axis_key, axis_label, sc, tab_id, len(rows),
+                                "attended" if len(rows) != 1 else "attended", bool(graded)))
+        elif kind == "signal":
+            if punct_val is not None:
+                present.append((axis_key, axis_label, max(0.0, min(100.0, punct_val)), tab_id, 0, "", True))
 
-    def vertex(i, sc):
-        s = max(0.18, min(100.0, sc) / 100.0)
-        a = math.radians(-90 + i * (360.0 / n))
-        return round(cx + math.cos(a) * max_r * s, 1), round(cy + math.sin(a) * max_r * s, 1)
-
-    def axis_end(i):
-        a = math.radians(-90 + i * (360.0 / n))
-        return round(cx + math.cos(a) * max_r, 1), round(cy + math.sin(a) * max_r, 1)
-
-    axes_out, poly = [], []
-    for i, (key, label) in enumerate(PERF_AXES):
-        sc = scores[key]
-        vx, vy = vertex(i, sc); ex, ey = axis_end(i)
-        a = math.radians(-90 + i * (360.0 / n))
-        lx = round(cx + math.cos(a) * (max_r + 22), 1)
-        ly = round(cy + math.sin(a) * (max_r + 22), 1)
-        axes_out.append({"key": key, "label": label, "score": int(round(sc)),
+    n = len(present)
+    cx, cy, max_r = 165.0, 165.0, 100.0
+    axes_out, poly, rings = [], [], []
+    for i, (akey, label, sc, tab_id, count, count_label, scored) in enumerate(present):
+        ang = math.radians(-90 + i * (360.0 / max(n, 1)))
+        frac = max(0.0, min(100.0, sc)) / 100.0
+        vx, vy = round(cx + math.cos(ang) * max_r * frac, 1), round(cy + math.sin(ang) * max_r * frac, 1)
+        ex, ey = round(cx + math.cos(ang) * max_r, 1), round(cy + math.sin(ang) * max_r, 1)
+        lx, ly = round(cx + math.cos(ang) * (max_r + 24), 1), round(cy + math.sin(ang) * (max_r + 24), 1)
+        cohort = real_cohort.get(label.lower()) or real_cohort.get(akey)
+        axes_out.append({"key": akey, "label": label, "score": int(round(sc)), "scored": scored,
+                         "count": count, "count_label": count_label, "tab_id": tab_id,
+                         "cohort": int(round(float(cohort))) if cohort is not None else None,
                          "vx": vx, "vy": vy, "ex": ex, "ey": ey, "lx": lx, "ly": ly})
         poly.append(f"{vx},{vy}")
+    if n >= 3:
+        for frac in (0.25, 0.50, 0.75, 1.00):
+            pts = []
+            for i in range(n):
+                ang = math.radians(-90 + i * (360.0 / n))
+                pts.append(f"{round(cx + math.cos(ang) * max_r * frac, 1)},{round(cy + math.sin(ang) * max_r * frac, 1)}")
+            rings.append(" ".join(pts))
 
-    # Locked rule: overall average divides by ALL 8 axes; an empty axis
-    # counts as 0. The score doubles as a programme-completion signal.
-    avg = int(round(sum(a["score"] for a in axes_out) / float(n)))
+    scored_axes = [a for a in axes_out if a["scored"]]
+    overall = int(round(sum(a["score"] for a in scored_axes) / len(scored_axes))) if scored_axes else None
 
-    # Guide rings generated for the real axis count — the old template had
-    # hardcoded 7-sided rings behind 8 axes, which skewed the radar.
-    rings = []
-    for frac in (0.25, 0.50, 0.75, 1.00):
-        pts = []
-        for i in range(n):
-            a = math.radians(-90 + i * (360.0 / n))
-            pts.append(f"{round(cx + math.cos(a) * max_r * frac, 1)},"
-                       f"{round(cy + math.sin(a) * max_r * frac, 1)}")
-        rings.append(" ".join(pts))
+    return {"axes": axes_out, "polygon_points": " ".join(poly), "rings": rings,
+            "overall": overall, "scored_count": len(scored_axes),
+            "average": overall if overall is not None else 0,
+            "cx": cx, "cy": cy,
+            "punctuality": {
+                "score": punct_val,
+                "band": (punctuality or {}).get("band") or "",
+                "status": (punctuality or {}).get("status") or "no_data",
+                "breakdown": (punctuality or {}).get("breakdown") or {},
+                "events_counted": (punctuality or {}).get("events_counted") or 0,
+                "computed_at": (punctuality or {}).get("computed_at") or "",
+            },
+            # legacy keys (older callers)
+            "punctuality_band": (punctuality or {}).get("band") or "",
+            "punctuality_status": (punctuality or {}).get("status") or "no_data",
+            "punctuality_breakdown": (punctuality or {}).get("breakdown") or {},
+            "punctuality_events": (punctuality or {}).get("events_counted") or 0,
+            "punctuality_computed": (punctuality or {}).get("computed_at") or ""}
 
-    return {"axes": axes_out, "polygon_points": " ".join(poly),
-            "rings": rings, "average": avg, "cx": cx, "cy": cy,
-            # Punctuality tab reads these (band pill + coming-soon switch)
-            "punctuality_band":   punctuality.get("band") or "",
-            "punctuality_status": punctuality.get("status") or "no_data",
-            "punctuality_breakdown": punctuality.get("breakdown") or {},
-            "punctuality_events":    punctuality.get("events_counted") or 0,
-            "punctuality_computed":  punctuality.get("computed_at") or ""}
+
+def _build_sections(ranked: Dict[str, List[Dict]], courses: List[Dict], hackathons: List[Dict],
+                    punctuality: Dict, cohort_rank, cohort_comparison: List[Dict]) -> List[Dict]:
+    """Ordered list of Top Performance sections that have data. Nothing else renders."""
+    out = []
+    for key, label, tab_id, axis_key, axis_label, kind in SECTION_REGISTRY:
+        has = False
+        if key == "courses":
+            has = bool(courses)
+        elif key == "hackathons":
+            has = bool(hackathons)
+        elif key == "punctuality":
+            has = (punctuality or {}).get("score") is not None
+        elif key == "cohort":
+            has = bool(cohort_rank) or bool(cohort_comparison)
+        else:
+            has = bool(ranked.get(key))
+        if has:
+            out.append({"key": key, "label": label, "tab_id": tab_id, "kind": kind})
+    return out
+
+
+def _build_kpis(courses: List[Dict], ranked: Dict[str, List[Dict]], punctuality: Dict,
+                certifications: List[Dict], activity_counts: Dict) -> List[Dict]:
+    """KPI strip — only tiles with a real value."""
+    k = []
+    done = [c for c in courses if (str(c.get("completion_status") or "").lower() == "completed"
+                                   or float(c.get("progress_percentage") or 0) >= 100)]
+    if courses:
+        k.append({"label": "Courses completed", "value": len(done), "suffix": f"/{len(courses)}"})
+    best = lambda rows: max((r.get("score_pct") or 0) for r in rows) if rows else 0
+    if ranked.get("assessments"):
+        k.append({"label": "Best assessment", "value": int(round(best(ranked["assessments"]))), "suffix": "%"})
+    if ranked.get("mock_tests"):
+        k.append({"label": "Best mock test", "value": int(round(best(ranked["mock_tests"]))), "suffix": "%"})
+    mi = activity_counts.get("mock_interviews_total") or len(ranked.get("mock_interviews") or [])
+    if mi:
+        k.append({"label": "Mock interviews", "value": mi, "suffix": ""})
+    if ranked.get("assignments"):
+        k.append({"label": "Best assignment", "value": int(round(best(ranked["assignments"]))), "suffix": "%"})
+    if (punctuality or {}).get("score") is not None:
+        k.append({"label": "Punctuality", "value": int(round(float(punctuality["score"]))), "suffix": ""})
+    if certifications:
+        k.append({"label": "Certificates", "value": len(certifications), "suffix": ""})
+    return k[:6]
 
 
 # ═══════════════════════════════════════════
@@ -526,13 +626,9 @@ def _compute_cohort_comparison(perf_snapshot: Dict, perf_data: Dict) -> List[Dic
         ("Mock Interview",    "interview"),
         ("Punctuality",       "punctuality"),
     ]
-    axes_by_key = {a["key"]: a["score"] for a in perf_snapshot.get("axes", [])}
-    rows = []
-    for name, key in dims:
-        self_score = axes_by_key.get(key, 0)
-        cohort_score = max(50, self_score - 8) if self_score > 0 else 0
-        rows.append({"name": name, "you": self_score, "cohort": cohort_score})
-    return rows
+    # v13 — no synthetic cohort numbers. Without a real cohort feed the
+    # Cohort tab and the snapshot ticks simply do not render.
+    return []
 
 
 # ═══════════════════════════════════════════
@@ -544,17 +640,8 @@ def _compute_mock_domains(student_data: Dict, profile_data: Dict, perf_snapshot:
     if perf.get("mock_domains"):
         return perf["mock_domains"]
 
-    axes = {a["key"]: a["score"] for a in perf_snapshot.get("axes", [])}
-    base = max(axes.get("mock_test", 0), axes.get("interview", 0), 0)
-    if base == 0:
-        return []
-
-    return [
-        {"name": "Python & Backend", "pct": min(100, base + 4), "cls": "f1"},
-        {"name": "Algorithms & DSA", "pct": max(0,   base - 2), "cls": "f2"},
-        {"name": "System Design",    "pct": max(0,   base - 6), "cls": "f3"},
-        {"name": "Communication",    "pct": min(100, base - 3), "cls": "f4"},
-    ]
+    # v13 — derived domain bars were synthetic; only real LMS data renders.
+    return []
 
 
 # ═══════════════════════════════════════════
@@ -683,11 +770,12 @@ class ProfileRenderer:
                 "session_id", "title"),
         }
 
-        # Derivations
-        perf_snapshot     = _compute_perf_snapshot(student_data, profile_data, computed)
         # activity_counts stays TRUE distinct counts (Cohort stats use them) —
         # computed BEFORE the score floor is applied to the tab lists.
         activity_counts   = _compute_activity_counts(student_data, ranked)
+        activity_counts["mock_interviews_total"] = activity_counts.get("mock_interviews", 0)
+        for _k in ranked:
+            _attach_pct(ranked[_k])
 
         # v12.8 — Top Performance shows only PASSING work (score >= 60), best 5.
         # User-confirmed rule: no zero/low-value rows in the ranked tabs.
@@ -697,9 +785,23 @@ class ProfileRenderer:
                    "assessments", "mock_tests", "mock_interviews"):
             ranked[_k] = _apply_score_floor(ranked[_k])
         ranked["industry"] = _apply_score_floor(ranked["industry"], keep_unscored=True)
+
+        # v13 — hackathons: participation records, cleaned of machine dumps
+        hackathons_clean = []
+        for h in (student_data.get("hackathons", []) or []):
+            h2 = dict(h)
+            h2["problem_statement"] = _clean_text(h2.get("problem_statement"))
+            h2["solution"] = _clean_text(h2.get("solution"))
+            h2["description"] = _clean_text(h2.get("description"))
+            h2["feedback"] = _clean_text(h2.get("feedback"))
+            h2["score_pct"] = _row_pct(h2)
+            hackathons_clean.append(h2)
+
+        punct_raw = student_data.get("punctuality", {}) or {}
+        perf_snapshot     = _compute_perf_snapshot(ranked, punct_raw, profile_data.get("performance_data", {}) or {})
         cohort_comparison = _compute_cohort_comparison(perf_snapshot, profile_data.get("performance_data", {}) or {})
         mock_domains      = _compute_mock_domains(student_data, profile_data, perf_snapshot)
-        achievement_cards = _compute_achievement_cards(student_data, profile_data)
+        achievement_cards = _compute_achievement_cards({**student_data, "hackathons": hackathons_clean}, profile_data)
         _generated_at     = datetime.now(timezone.utc)
         generated_date    = _generated_at.strftime("%d %b %Y").upper()
         # v12.7 — full ISO timestamp so the template can render "Generated" in the
@@ -770,11 +872,16 @@ class ProfileRenderer:
             ats = dict(_ats_raw)
             ats["total_score"] = _ats_raw.get("total_score", _ats_raw.get("score", 0))
 
-        # Interview readiness KPIs
-        mock_int_avg   = perf_snapshot["axes"][4]["score"] if len(perf_snapshot["axes"]) > 4 else 0
-        mock_test_avg  = perf_snapshot["axes"][2]["score"] if len(perf_snapshot["axes"]) > 2 else 0
+        # Interview readiness KPIs — real values only (v13: no synthetic consistency)
+        _ax = {a["key"]: a["score"] for a in perf_snapshot["axes"]}
+        mock_int_avg   = _ax.get("interview", 0)
+        mock_test_avg  = _ax.get("mock_test", 0)
         mocks_done     = activity_counts.get("mock_interviews", 0)
-        consistency    = 60 if mocks_done == 0 else min(90, 60 + mocks_done * 2)
+        consistency    = None
+
+        sections = _build_sections(ranked, enriched_courses, hackathons_clean, punct_raw, cohort_rank, cohort_comparison)
+        kpis     = _build_kpis(enriched_courses, ranked, punct_raw,
+                               profile_data.get("certifications_data", []) or [], activity_counts)
 
         context = {
             # Hero
@@ -830,7 +937,9 @@ class ProfileRenderer:
             "mock_interviews_raw":  ranked["mock_interviews"],
             "mock_tests_raw":       ranked["mock_tests"],
             "industry_sessions_raw": ranked["industry"],
-            "hackathons_raw":       student_data.get("hackathons", []) or [],
+            "hackathons_raw":       hackathons_clean,
+            "sections":             sections,
+            "kpis":                 kpis,
 
             # Personality / Achievements
             "personality_data":    personality_data,
@@ -896,5 +1005,6 @@ class ProfileRenderer:
             "top_role":          (profile_data.get("role_matches", [{}]) or [{}])[0],
         }
 
+        self.last_context = context   # v13: reused by the resume (DOCX) export
         template = _env.get_template("profile_template.html")
         return template.render(**context)
