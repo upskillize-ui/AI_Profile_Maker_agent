@@ -1309,14 +1309,16 @@ footer{background:var(--navy-deep);color:rgba(255,255,255,0.4);padding:18px 32px
   <div class="itab-panel" data-tab-group="ach" data-tab-id="certs">
     {% if has_certs %}
     <div class="cert-grid">
-      {% for cert in certifications_data[:10] %}
+      {% for cert in certifications_data %}
       <div class="cert-card">
         <div>
           <div class="cert-name">{{ cert.certificate_name or cert.name or 'Certificate' }}{% if (cert.completion_pct and (cert.completion_pct|int) >= 100) or cert.upskillize_verified %}<span class="cred-badge">✓ Upskillize Certified</span>{% endif %}</div>
           {% if cert.course_name %}<div class="cert-issuer">{{ cert.course_name }}{% if cert.score %} · Score {{ cert.score }}%{% endif %}</div>{% elif cert.issuer %}<div class="cert-issuer">{{ cert.issuer }}</div>{% endif %}
+          {% if cert.code %}<div class="cert-issuer" style="font-family:'DM Mono',monospace;font-size:11px;margin-top:4px;">{{ cert.code }}</div>{% endif %}
           {% if cert.description %}<div class="cert-desc" style="font-size:12px;color:var(--ink-soft);margin-top:6px;line-height:1.5;">{{ cert.description|trim }}</div>{% endif %}
+          {% if cert.url %}<a href="{{ cert.url }}" target="_blank" rel="noopener" class="perf-link" style="display:inline-block;margin-top:8px;font-size:12px;">View certificate ↗</a>{% endif %}
         </div>
-        {% if cert.issued_at %}<div class="cert-year">{{ cert.issued_at }}</div>{% endif %}
+        {% if cert.issued_at %}<div class="cert-year">{{ fmt_date(cert.issued_at) }}</div>{% endif %}
       </div>
       {% endfor %}
     </div>

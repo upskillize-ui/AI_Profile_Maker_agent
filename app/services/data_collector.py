@@ -422,7 +422,9 @@ class DataCollector:
                 "course_name":    r.get("course_name") or "",
                 "final_score":    r.get("final_score"),
                 "grade":          r.get("grade"),
-                "png_url":        r.get("png_url") or "",
+                "png_url":        r.get("png_url") or r.get("pdf_url") or r.get("certificate_url") or "",
+                "code":           (r.get("certificate_code") or r.get("certificate_number")
+                                   or r.get("programme_code") or r.get("code") or ""),
                 "issued_at":      str(r.get("issued_at") or r.get("issued_date") or r.get("created_at") or ""),
             }
         return out
@@ -1308,6 +1310,7 @@ class DataCollector:
                     "completion_pct":      100,
                     "upskillize_verified": True,
                     "certificate_id":      cert.get("certificate_id"),
+                    "code":                cert.get("code") or "",
                     "url":                 cert.get("png_url") or "",
                 })
         except Exception as e:

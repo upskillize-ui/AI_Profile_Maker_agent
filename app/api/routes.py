@@ -347,6 +347,23 @@ def _source_fingerprint(student_data: dict) -> str:
     return hashlib.md5(payload.encode("utf-8")).hexdigest()
 
 
+def _journey_with_sections(profile_data: dict) -> dict:
+    """v13.1 — persist the merged resume/LinkedIn sections that have no column
+    of their own (education, work experience, role matches, beyond-work copy)
+    inside journey_data, so render-on-read healing, the owner view and the
+    resume export keep them. Before this, every re-render from DB lost them."""
+    j = dict(profile_data.get("journey_data", {}) or {})
+    j["_sections"] = {
+        "education_data":  profile_data.get("education_data", []) or [],
+        "work_experience": profile_data.get("work_experience", []) or [],
+        "role_matches":    profile_data.get("role_matches", []) or [],
+        "beyond_work":     profile_data.get("beyond_work", {}) or {},
+        "cert_descriptions": profile_data.get("cert_descriptions", {}) or {},
+        "achievement_descriptions": profile_data.get("achievement_descriptions", {}) or {},
+    }
+    return j
+
+
 def _profile_data_from_db(existing: StudentProfile, fresh: dict = None) -> dict:
     """Rebuild the renderer's profile_data dict from stored DB columns.
     `fresh` (optional) supplies LMS passthrough sections computed during a
@@ -354,6 +371,10 @@ def _profile_data_from_db(existing: StudentProfile, fresh: dict = None) -> dict:
     Shared by: _safe_regenerate's data-loss path, render-on-read healing,
     and the owner ATS view."""
     fresh = fresh or {}
+    stored = ((existing.journey_data or {}).get("_sections") or {}) if isinstance(existing.journey_data, dict) else {}
+    def _pick(key, default):
+        v = fresh.get(key)
+        return v if v else (stored.get(key) or default)
     return {
         "professional_summary":  existing.professional_summary or "",
         "skills_data":           existing.skills_data or {},
@@ -366,14 +387,17 @@ def _profile_data_from_db(existing: StudentProfile, fresh: dict = None) -> dict:
         "certifications_data":   existing.certifications_data or [],
         "ats_keywords":          existing.ats_keywords or [],
         "headline":              existing.student_headline or "Professional",
-        "education_data":        fresh.get("education_data", []),
-        "work_experience":       fresh.get("work_experience", []),
-        "role_matches":          fresh.get("role_matches", []),
+        "education_data": _pick("education_data", []),
+        "work_experience": _pick("work_experience", []),
+        "role_matches": _pick("role_matches", []),
         "ats_data":              fresh.get("ats_data", {}),
         "top_achievements":      fresh.get("top_achievements", []),
         "case_study_highlights": fresh.get("case_study_highlights", []),
         "test_highlights":       fresh.get("test_highlights", []),
         "data_sources":          fresh.get("data_sources", ["lms"]),
+        "beyond_work":           stored.get("beyond_work") or {},
+        "cert_descriptions":     stored.get("cert_descriptions") or {},
+        "achievement_descriptions": stored.get("achievement_descriptions") or {},
     }
 
 
@@ -783,7 +807,7 @@ async def _full_generate(student_id: int, existing: StudentProfile, db: Session)
         existing.professional_summary    = profile_data.get("professional_summary", "")
         existing.skills_data             = profile_data.get("skills_data", {})
         existing.performance_data        = profile_data.get("performance_data", {})
-        existing.journey_data            = profile_data.get("journey_data", {})
+        existing.journey_data            = _journey_with_sections(profile_data)
         existing.personality_data        = profile_data.get("personality_data", {})
         existing.case_studies_data       = profile_data.get("case_studies_data", [])
         existing.testgen_data            = profile_data.get("testgen_data", {})
@@ -944,7 +968,7 @@ async def _safe_regenerate(
         existing.professional_summary    = profile_data.get("professional_summary", "")
         existing.skills_data             = profile_data.get("skills_data", {})
         existing.performance_data        = profile_data.get("performance_data", {})
-        existing.journey_data            = profile_data.get("journey_data", {})
+        existing.journey_data            = _journey_with_sections(profile_data)
         existing.personality_data        = profile_data.get("personality_data", {})
         existing.case_studies_data       = profile_data.get("case_studies_data", [])
         existing.testgen_data            = profile_data.get("testgen_data", {})
