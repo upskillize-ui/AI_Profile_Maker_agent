@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # v12.9 — exported template version; stamped into the rendered HTML head as
 # <!-- piq:tpl=... --> so ops can tell which template produced a stored page.
-TEMPLATE_VERSION = "13.0.0"  # v13: dynamic sections, Petrol & Coral design, no placeholders, 50% floor
+TEMPLATE_VERSION = "13.1.0"  # v13.1: dynamic sections on the v12 navy/gold design, no placeholders, 50% floor
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 
@@ -373,14 +373,14 @@ def _compute_perf_snapshot(ranked: Dict[str, List[Dict]], punctuality: Dict,
                 present.append((axis_key, axis_label, max(0.0, min(100.0, punct_val)), tab_id, 0, "", True))
 
     n = len(present)
-    cx, cy, max_r = 165.0, 165.0, 100.0
+    cx, cy, max_r = 180.0, 145.0, 100.0
     axes_out, poly, rings = [], [], []
     for i, (akey, label, sc, tab_id, count, count_label, scored) in enumerate(present):
         ang = math.radians(-90 + i * (360.0 / max(n, 1)))
         frac = max(0.0, min(100.0, sc)) / 100.0
         vx, vy = round(cx + math.cos(ang) * max_r * frac, 1), round(cy + math.sin(ang) * max_r * frac, 1)
         ex, ey = round(cx + math.cos(ang) * max_r, 1), round(cy + math.sin(ang) * max_r, 1)
-        lx, ly = round(cx + math.cos(ang) * (max_r + 24), 1), round(cy + math.sin(ang) * (max_r + 24), 1)
+        lx, ly = round(cx + math.cos(ang) * (max_r + 22), 1), round(cy + math.sin(ang) * (max_r + 22), 1)
         cohort = real_cohort.get(label.lower()) or real_cohort.get(akey)
         axes_out.append({"key": akey, "label": label, "score": int(round(sc)), "scored": scored,
                          "count": count, "count_label": count_label, "tab_id": tab_id,

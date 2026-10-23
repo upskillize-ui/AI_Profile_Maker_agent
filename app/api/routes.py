@@ -1019,6 +1019,7 @@ async def get_profile_readiness(
 
 @router.get("/profile/me")
 async def get_my_profile(
+    with_ats: bool = False,
     student=Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
@@ -1037,16 +1038,19 @@ async def get_my_profile(
             "message": "No profile generated yet. Click 'Generate My AI Profile' to create one.",
         }
 
-    # v5.3 — OWNER ATS: computed fresh on every owner read (cheap: DB
-    # collection + pure-CPU merge/score, both off the event loop; no AI).
-    # Never breaks /profile/me — any failure degrades to ats: None.
+    # v13.1 PERF — the LMS page calls this on every mount just to get the
+    # stored HTML. The old code ran a FULL LMS collection (5-30s against the
+    # remote DB) on every call only to compute ATS, which nothing on that
+    # page reads. ATS is now opt-in (?with_ats=1); the default path is a
+    # single primary-key read and returns in milliseconds.
     ats = None
-    try:
-        student_data = await asyncio.to_thread(_collect_all_sync, db, student.id)
-        ats = await asyncio.to_thread(_ats_from_student_data, student_data)
-    except Exception:
-        logger.exception("Owner ATS computation failed for student %s", student.id)
-        ats = None
+    if with_ats:
+        try:
+            student_data = await asyncio.to_thread(_collect_all_sync, db, student.id)
+            ats = await asyncio.to_thread(_ats_from_student_data, student_data)
+        except Exception:
+            logger.exception("Owner ATS computation failed for student %s", student.id)
+            ats = None
 
     return {
         "ats":  ats,
