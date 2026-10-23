@@ -1345,20 +1345,9 @@ async def get_profile_by_share_token(
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
-@router.get("/profile/share/{token}/resume.docx")
-@pretty_router.get("/p/{token}/resume.docx")
-async def download_resume_docx(
-    token: str,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    if not token or len(token) < 3:
-        raise HTTPException(404, _ERR_NOT_FOUND)
-    profile = db.query(StudentProfile).filter_by(share_token=token).first()
-    if not profile or profile.status != ProfileStatus.COMPLETED:
-        raise HTTPException(404, _ERR_NOT_FOUND)
-    rate_limit(f"resume:{request.client.host if request.client else 'x'}", limit=30, window_seconds=3600)
-
+async def _resume_response(db: Session, profile: StudentProfile) -> Response:
+    """Build the Word resume for a COMPLETED profile (shared by the public
+    token route and the authenticated owner route)."""
     try:
         student_data = await asyncio.to_thread(_collect_all_sync, db, profile.student_id)
         profile_data = _profile_data_from_db(profile, fresh={
@@ -1385,6 +1374,39 @@ async def download_resume_docx(
         content=data, media_type=_DOCX_MIME,
         headers={"Content-Disposition": f'attachment; filename="{fname}"', **_NO_STORE},
     )
+
+
+@router.get("/profile/share/{token}/resume.docx")
+@pretty_router.get("/p/{token}/resume.docx")
+async def download_resume_docx(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Public (token-gated): the 'Download as resume' button on the share page."""
+    if not token or len(token) < 3:
+        raise HTTPException(404, _ERR_NOT_FOUND)
+    profile = db.query(StudentProfile).filter_by(share_token=token).first()
+    if not profile or profile.status != ProfileStatus.COMPLETED:
+        raise HTTPException(404, _ERR_NOT_FOUND)
+    rate_limit(f"resume:{request.client.host if request.client else 'x'}", limit=30, window_seconds=3600)
+    return await _resume_response(db, profile)
+
+
+@router.get("/profile/me/resume.docx")
+async def download_my_resume_docx(
+    student=Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Owner (Bearer): the 'Download Resume (Word)' button inside the LMS.
+    Works even before a share link exists."""
+    if student is None:
+        raise HTTPException(401, "Authentication required. Please log in and try again.")
+    profile = db.query(StudentProfile).filter_by(student_id=student.id).first()
+    if not profile or profile.status != ProfileStatus.COMPLETED:
+        raise HTTPException(404, "Generate your profile first, then download the resume.")
+    rate_limit(f"resume-me:{student.id}", limit=20, window_seconds=3600)
+    return await _resume_response(db, profile)
 
 
 # =========================================================================
