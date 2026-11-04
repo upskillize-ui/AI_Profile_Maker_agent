@@ -1482,20 +1482,9 @@ def _compose_og_card(name: str, headline: str, photo_url: str) -> bytes:
     img  = Image.new("RGB", (1200, 630), _OG_NAVY)
     draw = ImageDraw.Draw(img)
 
-    # ── Student photo (best-effort; every failure → initial fallback) ──
-    photo = None
-    try:
-        if (photo_url or "").startswith("http"):
-            import httpx
-            with httpx.Client(timeout=5, follow_redirects=True) as client:
-                resp = client.get(photo_url)
-            ctype = resp.headers.get("content-type", "") or ""
-            if (resp.status_code == 200
-                    and ctype.lower().startswith("image/")
-                    and len(resp.content) < 5 * 1024 * 1024):
-                photo = Image.open(BytesIO(resp.content)).convert("RGB")
-    except Exception:
-        photo = None
+    # Block unknown hosts; oversize photos and redirects fall back to initials.
+    from app.security.photo_fetch import fetch_profile_image
+    photo = fetch_profile_image(photo_url)
 
     px, py, d = 100, 165, 300      # photo circle: top-left + diameter
     if photo is not None:
