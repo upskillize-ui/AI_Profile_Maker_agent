@@ -518,6 +518,18 @@ Return this exact JSON shape:
   ]
 }}"""
 
+        # Reuse identical verified polish output; never cache failures.
+        # Including model + full prompt makes the key change when inputs change.
+        import hashlib
+        from app.services.cache_service import CacheService
+        prompt_hash = hashlib.sha256(
+            (MODEL_PRIMARY + "\n" + system + "\n" + user_prompt).encode("utf-8")
+        ).hexdigest()
+        cache_key = "profile:polish:v3:" + prompt_hash
+        cached = CacheService.get(cache_key)
+        if isinstance(cached, dict) and cached.get("ai_polished") is True:
+            return cached
+
         raw_response = self._call_claude(system, user_prompt)
         if not raw_response:
             return None
@@ -533,7 +545,7 @@ Return this exact JSON shape:
                 f"{len(parsed.get('experience', []))} experience entries, "
                 f"{len(parsed.get('beyond_work', {}).get('hobby_cards', []))} hobbies"
             )
-            return {
+            result = {
                 "polished_projects": parsed.get("projects", []),
                 "polished_experience": parsed.get("experience", []),
                 "skills_grouped": parsed.get("skills_grouped", {}),
@@ -544,6 +556,8 @@ Return this exact JSON shape:
                 "achievements": parsed.get("achievements", []) or [],
                 "ai_polished": True,
             }
+            CacheService.set(cache_key, result, ttl=7 * 86400)
+            return result
         except (json.JSONDecodeError, KeyError) as e:
             logger.warning(f"AI Polisher: failed to parse response: {e}")
             return None
