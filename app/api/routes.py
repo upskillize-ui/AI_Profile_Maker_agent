@@ -96,7 +96,12 @@ settings = get_settings()
 
 # SECURITY: share/corporate pages contain email + phone. Never let browsers or
 # shared proxies cache them.
-_NO_STORE = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+_NO_STORE = {
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Robots-Tag": "noindex, nofollow, noarchive",
+}
 logger   = logging.getLogger(__name__)
 
 # ─── Configurable public domain ──────────────────────────────────────────
@@ -609,27 +614,30 @@ def _corporate_url(student_id: int) -> str:
 
 def _mint_share_token(name: str = "", serial: Optional[int] = None,
                       db: Optional[Session] = None, exclude_id: Optional[int] = None) -> str:
-    """v13 — readable share token = the student's name only, e.g.
-    `ranjana-kumari` → lms.upskillize.com/p/ranjana-kumari. When another
-    profile already owns that slug the next free numeric suffix is used
-    (ranjana-kumari1, ranjana-kumari2, …). Old `<name>-NNNN` and 32-char
-    random tokens stay valid (the lookup is exact-match on the column).
-    Column width is 64."""
-    base = slugify(name or "")[:56].strip("-")
-    if not base:
-        return secrets.token_urlsafe(24)
-    if db is None:
-        return base
-    candidate, n = base, 0
-    while True:
-        q = db.query(StudentProfile.id).filter(StudentProfile.share_token == candidate)
-        if exclude_id is not None:
-            q = q.filter(StudentProfile.id != exclude_id)
-        if not q.first():
-            return candidate
-        n += 1
-        candidate = f"{base}{n}"
+    """Create an opaque, cryptographically random 192-bit share capability.
 
+    Keep arguments for compatibility; names and sequential identifiers
+    must not become public-access credentials.
+    """
+    for _ in range(8):
+        candidate = "piq_" + secrets.token_urlsafe(24)
+        if db is None:
+            return candidate
+        query = db.query(StudentProfile.id).filter(StudentProfile.share_token == candidate)
+        if exclude_id is not None:
+            query = query.filter(StudentProfile.id != exclude_id)
+        if not query.first():
+            return candidate
+    raise RuntimeError("Unable to mint unique profile share token")
+
+
+def _has_legacy_name_token(profile: StudentProfile) -> bool:
+    """Detect a predictable legacy token so it can be rotated on Share."""
+    token = (profile.share_token or "").strip()
+    base = slugify(profile.student_name or "")[:56].strip("-")
+    if not base or not token:
+        return False
+    return bool(token == base or re.fullmatch(re.escape(base) + r"[0-9]+", token))
 
 def _profile_response(profile: StudentProfile) -> dict:
     """Standard shape returned to the student after generate/toggle/create."""
@@ -1265,7 +1273,9 @@ async def create_share_link(
     # v13: mint when missing, and upgrade legacy `<name>-NNNN` tokens to the
     # clean name-only form the first time the student shares again.
     _legacy = bool(profile.share_token) and re.fullmatch(r"[a-z0-9-]+-\d{4}", profile.share_token or "") is not None
-    if profile.share_token is None or _legacy:
+    # Rotate guessable links only when their owner explicitly requests Share.
+    rotated_weak_link = bool(_legacy or _has_legacy_name_token(profile))
+    if profile.share_token is None or rotated_weak_link:
         old = profile.share_token
         token = _mint_share_token(profile.student_name or getattr(student, "name", "") or "",
                                   profile.id, db=db, exclude_id=profile.id)
@@ -1275,7 +1285,11 @@ async def create_share_link(
             CacheService.invalidate_profile(old)
 
     return {
-        "message":   "Share link ready. Anyone with this URL can view your profile.",
+        "message":   (
+            "Your old share link was replaced for security. Share this new link; the old link no longer works."
+            if rotated_weak_link else
+            "Share link ready. Anyone with this URL can view your profile."
+        ),
         "share_url": _share_url(profile.share_token),
     }
 
@@ -1563,7 +1577,7 @@ async def get_share_card(
     return Response(
         content=png,
         media_type="image/png",
-        headers={"Cache-Control": "public, max-age=86400"},
+        headers={**_NO_STORE},
     )
 
 
