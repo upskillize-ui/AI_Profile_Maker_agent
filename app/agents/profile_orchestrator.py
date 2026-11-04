@@ -628,7 +628,10 @@ class ProfileOrchestrator:
                 return False
             host = u.hostname.lower()
             allow = [h.strip().lower() for h in os.environ.get("RESUME_HOST_ALLOWLIST", "").split(",") if h.strip()]
-            if allow and not any(host == h or host.endswith("." + h) for h in allow):
+            strict = os.environ.get("PROFILE_STRICT_RESUME_HOSTS", "false").lower() == "true"
+            if strict and not allow:
+                return False
+            if allow and host not in allow:
                 return False
             infos = await asyncio.to_thread(socket.getaddrinfo, host, u.port or (443 if u.scheme == "https" else 80))
             for info in infos:
@@ -674,7 +677,7 @@ class ProfileOrchestrator:
                 for base in unique_bases:
                     urls_to_try.append(base + rel)
 
-            logger.info(f"Resume download attempts: {len(urls_to_try)} URLs to try for path '{url}'")
+            logger.info("Resume URL candidates: %d", len(urls_to_try))
 
             # SECURITY: validate EVERY request, including redirect hops.
             async def _ssrf_guard(request):
@@ -688,40 +691,51 @@ class ProfileOrchestrator:
                 headers={"User-Agent": "Mozilla/5.0 ProfileAgent/1.0"},
                 event_hooks={"request": [_ssrf_guard]},
             ) as client:
-                resp = None
-                successful_url = None
+                max_bytes = max(64 * 1024, min(
+                    int(os.environ.get("PROFILE_MAX_RESUME_BYTES", 6 * 1024 * 1024)),
+                    12 * 1024 * 1024,
+                ))
+                pdf_bytes = None
                 for try_url in urls_to_try:
                     try:
-                        logger.info(f"Trying resume URL: {try_url}")
-                        r = await client.get(try_url)
-                        if r.status_code == 200 and len(r.content) > 100:
-                            if r.content[:4] == b"%PDF":
-                                resp = r
-                                successful_url = try_url
+                        logger.info("Trying approved resume host")
+                        async with client.stream("GET", try_url) as response:
+                            if response.status_code != 200:
+                                continue
+                            declared = response.headers.get("content-length", "")
+                            if declared.isdecimal() and int(declared) > max_bytes:
+                                continue
+                            chunks, size = [], 0
+                            async for chunk in response.aiter_bytes():
+                                size += len(chunk)
+                                if size > max_bytes:
+                                    raise ValueError("Resume exceeds size limit")
+                                chunks.append(chunk)
+                            payload = b"".join(chunks)
+                            if len(payload) > 100 and payload.startswith(b"%PDF"):
+                                pdf_bytes = payload
                                 break
-                            else:
-                                logger.info(f"  Got 200 but not a PDF (first bytes: {r.content[:10]})")
-                        else:
-                            logger.info(f"  Returned HTTP {r.status_code}")
-                    except Exception as e:
-                        logger.info(f"  Failed: {e}")
+                    except Exception as exc:
+                        logger.info("Resume attempt failed: %s", type(exc).__name__)
                         continue
-
-                if not resp:
-                    logger.warning(f"Resume download failed: tried {len(urls_to_try)} URLs, none worked. Original path: {url}")
+                if pdf_bytes is None:
+                    logger.warning("Resume unavailable or exceeded size limit")
                     return ""
 
-                logger.info(f"Resume downloaded successfully from: {successful_url} ({len(resp.content)} bytes)")
-
+                logger.info("Resume downloaded: %d bytes", len(pdf_bytes))
                 import tempfile
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-                    f.write(resp.content)
+                    f.write(pdf_bytes)
                     tmp_path = f.name
 
                 try:
                     try:
                         from PyPDF2 import PdfReader
                         reader = PdfReader(tmp_path)
+                        max_pages = max(1, min(int(os.environ.get("PROFILE_MAX_RESUME_PAGES", 30)), 100))
+                        if len(reader.pages) > max_pages:
+                            logger.warning("Resume exceeds page limit")
+                            return ""
                         text = "\n".join(page.extract_text() or "" for page in reader.pages)
                         if text.strip():
                             logger.info(f"Resume extracted: {len(text)} chars via PyPDF2")
