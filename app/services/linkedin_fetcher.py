@@ -11,6 +11,8 @@ Priority: LinkedIn PDF > LinkedIn scrape > LMS profile fields
 """
 
 import re
+import asyncio
+import os
 import logging
 import httpx
 from typing import Dict, Any, Optional
@@ -31,7 +33,10 @@ class LinkedInFetcher:
 
         # Strategy 1: Try fetching public LinkedIn page directly
         try:
-            profile_data = await self._fetch_public_profile(linkedin_url, username)
+            profile_data = await asyncio.wait_for(
+                self._fetch_public_profile(linkedin_url, username),
+                timeout=max(0.5, min(float(os.getenv("PROFILE_LINKEDIN_DIRECT_SECONDS", "3")), 15.0)),
+            )
             if profile_data and profile_data.get("_source") != "empty" and profile_data.get("headline"):
                 return profile_data
         except Exception as e:
@@ -39,7 +44,10 @@ class LinkedInFetcher:
 
         # Strategy 2: Try Bing's cached version (Google blocks too, Bing sometimes works)
         try:
-            cached_data = await self._fetch_via_search_cache(username)
+            cached_data = await asyncio.wait_for(
+                self._fetch_via_search_cache(username),
+                timeout=max(0.5, min(float(os.getenv("PROFILE_LINKEDIN_SEARCH_SECONDS", "2")), 15.0)),
+            )
             if cached_data and cached_data.get("headline"):
                 return cached_data
         except Exception as e:
